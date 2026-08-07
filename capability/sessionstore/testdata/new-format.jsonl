@@ -1,0 +1,2 @@
+{"id":"m1","session_id":"new-format","role":"user","text":"hello","created_at":"2026-06-01T01:02:03Z"}
+{"id":"m2","session_id":"new-format","role":"assistant","text":"world","created_at":"2026-06-01T01:02:04Z","tool_calls":[{"tool":"bash","kind":"error","detail":"exit 1"}],"tool_call_count":3}

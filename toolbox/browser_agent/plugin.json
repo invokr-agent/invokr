@@ -1,0 +1,17 @@
+{
+  "name": "browser_agent",
+  "description": "Control a dedicated Playwright browser profile. Supports opening pages, clicking accessible elements, filling fields, pressing keys, reading page content, and returning an accessibility-style snapshot.",
+  "example": "{\"name\":\"browser_agent\",\"arguments\":{\"action\":\"click\",\"role\":\"button\",\"name\":\"Sign in\"}}",
+  "namespace": "browser",
+  "policy": {
+    "tiers": ["browser_automation"],
+    "approval": "auto_or_sensitive_ask"
+  },
+  "capabilities": {
+    "reads_workspace": false,
+    "writes_workspace": false,
+    "network": true,
+    "executes_code": true
+  },
+  "daemon": true
+}

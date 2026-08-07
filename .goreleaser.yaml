@@ -1,0 +1,77 @@
+version: 2
+
+project_name: invokr-agent
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  # linux/amd64 and both darwin archs: modernc.org/sqlite is pure Go, so these
+  # cross-compile CGO-free from a single build host.
+  - id: invokr-agent
+    main: .
+    binary: invokr-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: linux
+        goarch: arm64
+    ldflags: &ldflags
+      - -s -w
+      - -X github.com/antonikliment/invokr/platform/version.Version={{.Version}}
+      - -X github.com/antonikliment/invokr/platform/version.Commit={{.ShortCommit}}
+      - -X github.com/antonikliment/invokr/platform/version.Date={{.Date}}
+
+  # linux/arm64 needs CGO: github.com/zerfoo/zerfoo's (and its ztensor dep's)
+  # optional CUDA support resolves dlopen/dlsym via a //go:linkname into
+  # runtime.dlopen on linux/arm64 when CGO_ENABLED=0, and that runtime symbol
+  # does not exist in this Go toolchain — the build fails at link time (not a
+  # runtime issue; CUDA is never actually used by Invokr). CGO_ENABLED=1
+  # routes zerfoo through its real cgo dlopen path instead, which links fine.
+  # Requires an aarch64 cross toolchain on the build host
+  # (`apt-get install gcc-aarch64-linux-gnu` on Debian/Ubuntu).
+  - id: invokr-agent-linux-arm64
+    main: .
+    binary: invokr-agent
+    env:
+      - CGO_ENABLED=1
+      - CC=aarch64-linux-gnu-gcc
+    goos:
+      - linux
+    goarch:
+      - arm64
+    ldflags: *ldflags
+
+archives:
+  - ids:
+      - invokr-agent
+      - invokr-agent-linux-arm64
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - LICENSE*
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+release:
+  # Owner/repo intentionally left unset: goreleaser infers it from the git
+  # remote, and the final public-repo location is undecided (see #178).
+  draft: false

@@ -1,0 +1,23 @@
+name: sandbox-containment
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  sandbox-containment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache: true
+      # Ubuntu 24.04 runners block unprivileged user namespaces via AppArmor.
+      # No fallback: an incapable runner must fail this required lane.
+      - run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      - run: sudo apt-get update && sudo apt-get install -y python3-venv util-linux procps curl iproute2
+      - run: go mod download
+      - run: make containment
