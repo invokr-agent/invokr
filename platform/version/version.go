@@ -1,4 +1,4 @@
-// Package version holds the build-time identity of the invokr-agent binary.
+// Package version holds the build-time identity of the invokr binary.
 // Version, Commit, and Date are overridden via -ldflags -X on release builds
 // (see .goreleaser.yaml and the Makefile's install target); a `go run`/
 // `go build` without ldflags keeps the "dev" defaults below.
@@ -15,5 +15,5 @@ var (
 	Date = "unknown"
 )
 
-// String renders the one-line version string shown by `invokr-agent --version`.
+// String renders the one-line version string shown by `invokr --version`.
 func String() string { return fmt.Sprintf("%s (commit %s, built %s)", Version, Commit, Date) }

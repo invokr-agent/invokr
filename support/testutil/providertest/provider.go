@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -22,22 +21,12 @@ type Server struct {
 	embeddingRequests  []EmbeddingRequest
 	errors             []string
 	contextWindow      int
-	embeddings         [][]float64
-	summary            string
 }
 
 type Option func(*Server)
 
 func WithContextWindow(tokens int) Option {
 	return func(s *Server) { s.contextWindow = tokens }
-}
-
-func WithEmbeddings(vectors ...[]float64) Option {
-	return func(s *Server) { s.embeddings = vectors }
-}
-
-func WithSummaryJSON(summary string) Option {
-	return func(s *Server) { s.summary = summary }
 }
 
 type CompletionStep struct {
@@ -386,9 +375,6 @@ func (s *Server) nextCompletionStep(req CompletionRequest) (CompletionStep, bool
 		}
 		return step, true
 	}
-	if s.summary != "" {
-		return CompletionStep{Content: s.summary}, true
-	}
 	s.errors = append(s.errors, fmt.Sprintf("unexpected completion call %d", index+1))
 	return CompletionStep{}, false
 }
@@ -408,20 +394,14 @@ func (s *Server) handleEmbeddings(w http.ResponseWriter, r *http.Request) {
 
 	s.mu.Lock()
 	s.embeddingRequests = append(s.embeddingRequests, req)
-	vectors := append([][]float64(nil), s.embeddings...)
 	s.mu.Unlock()
-	if len(vectors) < len(req.Input) {
-		for len(vectors) < len(req.Input) {
-			vectors = append(vectors, []float64{1, 0})
-		}
-	}
 
 	data := make([]map[string]any, 0, len(req.Input))
 	for i := range req.Input {
 		data = append(data, map[string]any{
 			"object":    "embedding",
 			"index":     i,
-			"embedding": vectors[i],
+			"embedding": []float64{1, 0},
 		})
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -558,14 +538,4 @@ func openAIStreamChunk(chunk CompletionStreamChunk) map[string]any {
 		"model":   "fixture-model",
 		"choices": []map[string]any{choice},
 	}
-}
-
-func MessagesContain(messages []ChatMessage, needle string) bool {
-	for _, msg := range messages {
-		b, _ := json.Marshal(msg)
-		if strings.Contains(string(b), needle) {
-			return true
-		}
-	}
-	return false
 }

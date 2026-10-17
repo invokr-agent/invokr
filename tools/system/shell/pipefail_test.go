@@ -15,8 +15,14 @@ func TestShellPipelineStatusCannotHideFailure(t *testing.T) {
 		want int
 	}{
 		{"false | cat", 1},
+		{"false | cat; echo NEXT-RAN", 1},
+		{"false | head -n 1; rm -f missing", 1},
+		{"false; echo NEXT-RAN", 1},
+		{"false || true; echo NEXT-RAN", 0},
+		{"false | false || true; echo NEXT-RAN", 0},
 		{"printf ok | cat", 0},
 		{"yes | head -n 1", 0},
+		{"yes | head -n 1; echo NEXT-RAN", 0},
 		{"seq 1 200000 | head -n 1", 0},
 		{"false | yes | head -n 1", 1},
 		{"exit 141", 141},

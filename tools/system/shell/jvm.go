@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/invokr-ai/invokr/config"
 )
 
 // escapedLinkTargets returns the absolute targets of the symlinks directly
@@ -57,7 +59,7 @@ func jvmSupportDirs(isJVM bool) []string {
 		return nil
 	}
 	dirs := commandDirs("java")
-	if home := strings.TrimSpace(os.Getenv("JAVA_HOME")); home != "" {
+	if home := config.Env("JAVA_HOME"); home != "" {
 		dirs = append(dirs, home)
 	}
 	return append(dirs, "/etc/ssl")
@@ -126,8 +128,8 @@ func jvmCacheDirs(isJVM bool) []string {
 // org.gradle.daemon.registry.base moves that registry into the per-workspace
 // shared tmp dir so concurrent sessions cannot stop each other's daemons.
 func jvmEnv(isJVM bool, registry string, env []string) []string {
-	home, err := os.UserHomeDir()
-	if !isJVM || err != nil {
+	home := userHomeDir()
+	if !isJVM || home == "" {
 		return env
 	}
 	option := "-Duser.home=" + home
@@ -146,7 +148,7 @@ func jvmEnv(isJVM bool, registry string, env []string) []string {
 // gradleUserHome names the directory gradle keeps its caches and native
 // libraries in: $GRADLE_USER_HOME, else ~/.gradle.
 func gradleUserHome() string {
-	if home := strings.TrimSpace(os.Getenv("GRADLE_USER_HOME")); home != "" {
+	if home := config.Env("GRADLE_USER_HOME"); home != "" {
 		return home
 	}
 	return userHomeDir(".gradle")

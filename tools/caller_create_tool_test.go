@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools/core"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestNewCaller_CreateToolMakesToolImmediatelyCallable(t *testing.T) {
 		core.CallerDeps{
 			App:        testAppConfigFromEnv(t),
 			Dispatcher: dispatcher,
-			Approver:   approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+			Approver:   testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 		},
 		zap.NewNop(),
 	)

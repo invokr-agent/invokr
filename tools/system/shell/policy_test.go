@@ -373,7 +373,7 @@ func TestShellDescriptionIsShort(t *testing.T) {
 	// (#508); measured 872 on a sandboxed host.
 	// 920→930 2026-09-10: the 920 cap missed the unsandboxed-CI variant;
 	// measured 925 on an unsandboxed host (CI, golang:1.26 image).
-	if desc := shellDescription(testAllowed, t.TempDir()); len(desc) > 930 {
+	if desc := shellDescription(testAllowed, t.TempDir(), false); len(desc) > 930 {
 		t.Fatalf("description is %d chars; the contract is bash, it should not enumerate shapes: %s", len(desc), desc)
 	}
 }
@@ -680,7 +680,7 @@ func TestPolicyBuildToolPrefixStaysNarrow(t *testing.T) {
 // The escape hatch for a line the allowlist parser refuses is only useful if
 // the model is told about it (#428).
 func TestShellDescriptionNamesScriptEscapeHatch(t *testing.T) {
-	desc := shellDescription(testAllowed, t.TempDir())
+	desc := shellDescription(testAllowed, t.TempDir(), false)
 	if !strings.Contains(desc, "bash /tmp/") {
 		t.Fatalf("description does not surface the script escape hatch: %s", desc)
 	}

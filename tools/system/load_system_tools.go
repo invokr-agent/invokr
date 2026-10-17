@@ -22,7 +22,6 @@ import (
 	"github.com/invokr-ai/invokr/tools/system/skill"
 	"github.com/invokr-ai/invokr/tools/system/tmux"
 	"github.com/invokr-ai/invokr/tools/system/todo"
-	"github.com/invokr-ai/invokr/tools/system/tool_search"
 	"github.com/invokr-ai/invokr/tools/system/toolbox"
 	"github.com/invokr-ai/invokr/tools/system/web_fetch"
 	"github.com/invokr-ai/invokr/tools/system/web_search"
@@ -44,9 +43,7 @@ func LoadSystemTools(
 	if deps.Policy != nil && deps.Policy.Mode() == "yolo" {
 		wsp = wsp.Unrestricted()
 	}
-	if searchable, ok := caller.(core.SearchableRegistry); ok {
-		tool_search.RegisterToolSearchTool(searchable, deps)
-	}
+
 	// One advertised edit mechanism: edit. apply_patch stays registered
 	// but deferred behind tool_search unless the allowlist names it — a model
 	// that needs multi-file patches can discover it, without diluting tool

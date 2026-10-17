@@ -12,7 +12,7 @@ Shift+Tab cycles these modes; `/mode manual|auto|plan` selects one directly.
 | Mode | Behavior |
 | --- | --- |
 | Manual | Existing configured tool approvals and standing rules. |
-| Auto | Native workspace edits, native reads, and demonstrably confined execution run without prompting. Network and local Git commits are allowed. Unconfined execution and protected edits require approval. |
+| Auto | Native workspace edits, native reads, and demonstrably confined execution run without prompting. Network and local Git commits are allowed. Unconfined execution, opaque interpreter or script calls, and protected edits require approval. |
 | Plan | Inspection, clarification, and planning. Shell/Python verification requires read-only sources with separate writable scratch/cache. Network asks; source writes and recognized publishing are denied. |
 | YOLO | CLI-only `--yolo`; skips Invokr approval, namespace, Docker relaunch, and workspace restrictions. Explicit standing denials still apply. Fixed until restart, with a pinned TUI warning and a startup stderr warning. |
 

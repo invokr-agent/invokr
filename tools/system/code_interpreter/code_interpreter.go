@@ -5,6 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
@@ -16,13 +24,6 @@ import (
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/core/sandbox"
 	"github.com/invokr-ai/invokr/tools/system/workspace"
-	"net/http"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"slices"
-	"strings"
-	"time"
 )
 
 type Args struct {
@@ -172,7 +173,7 @@ func (s *Service) Prepare(args Args) (prepared, error) {
 		return prepared{}, err
 	}
 	timeoutMS := mathutil.ClampInt(args.TimeoutMS, min(s.cfg.DefaultTimeoutMS, s.cfg.MaxTimeoutMS), s.cfg.MaxTimeoutMS)
-	codeHash := core.HashHex(args.Code)
+	codeHash := strutil.HashHex(args.Code)
 	sessionDir := filepath.Join(s.cfg.SessionDir, codeHash[:12])
 	return prepared{args: args, cfg: s.cfg, codeHash: codeHash, sessionDir: sessionDir, inputDir: filepath.Join(sessionDir, "inputs"), artifactDir: filepath.Join(sessionDir, "artifacts"), inputs: inputs, outputs: outputs, roots: s.workspace.Roots(), timeoutMS: timeoutMS, tiers: metadataTiers(s.cfg), advisories: advisories}, nil
 }
@@ -211,11 +212,7 @@ func (s *Service) audit(ctx context.Context, p prepared, result Result, outcome 
 		details["image"] = p.cfg.ContainerImage
 		action = "code_interpreter_container"
 	}
-	auditErr := ""
-	if err != nil {
-		auditErr = err.Error()
-	}
-	s.dispatcher.Dispatch(ctx, events.Event{Type: events.EventAudit, Audit: &events.AuditPayload{Action: action, Tool: constants.CodeInterpreterToolName, Paths: paths, Outcome: outcome, Error: auditErr, Details: details}})
+	core.DispatchAudit(ctx, s.dispatcher, &events.AuditPayload{Action: action, Tool: constants.CodeInterpreterToolName, Paths: paths, Outcome: outcome, Details: details}, err)
 }
 
 // metadataTiers lists read_workspace because both backends mount the
@@ -430,13 +427,16 @@ func preflightAdvisories(code string, cfg config.CodeInterpreterConfig) []string
 	return found
 }
 
+// containerEngines are the supported container CLIs, in auto-detection order.
+var containerEngines = []string{"docker", "podman"}
+
 func preferContainerBackend(cfg config.CodeInterpreterConfig) config.CodeInterpreterConfig {
 	if strings.TrimSpace(cfg.Backend) != "" {
 		return cfg
 	}
 	// LookPath rejects the empty name, so an unset ContainerEngine falls
 	// through to the defaults without a check of its own.
-	for _, engine := range []string{strings.TrimSpace(cfg.ContainerEngine), "docker", "podman"} {
+	for _, engine := range append([]string{strings.TrimSpace(cfg.ContainerEngine)}, containerEngines...) {
 		if _, err := exec.LookPath(engine); err == nil {
 			cfg.Backend = constants.CodeInterpreterBackendContainer
 			cfg.ContainerEngine = engine
@@ -645,7 +645,7 @@ func trimOutput(text string, maxBytes int) string {
 
 func BuildContainerArgv(p prepared) ([]string, error) {
 	engine := cmp.Or(strings.TrimSpace(p.cfg.ContainerEngine), "docker")
-	if engine != "docker" && engine != "podman" {
+	if !slices.Contains(containerEngines, engine) {
 		return nil, fmt.Errorf("unsupported container engine %q", engine)
 	}
 	if strings.TrimSpace(p.cfg.ContainerImage) == "" {

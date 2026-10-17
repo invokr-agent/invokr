@@ -1,11 +1,13 @@
 package agentui
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/surface/ui"
 	toolcore "github.com/invokr-ai/invokr/tools/core"
 
@@ -30,10 +32,7 @@ var toolRenderers = map[string]blockRenderer{
 }
 
 func rendererFor(name string) blockRenderer {
-	if r, ok := toolRenderers[name]; ok {
-		return r
-	}
-	return genericRenderer{}
+	return cmp.Or(toolRenderers[name], blockRenderer(genericRenderer{}))
 }
 
 // renderSettledBlock renders a finished (done/failed) tool block through the
@@ -52,9 +51,8 @@ type genericRenderer struct{}
 
 func (genericRenderer) Summary(m message, width int) string {
 	line := settledToolLine(m, width)
-	tail, hidden := tailLines(m.toolOutput, 0)
-	if n := len(tail) + hidden; n > 0 {
-		line += "\n" + foldIndicator(n, width)
+	if text := strings.TrimRight(m.toolOutput, "\n"); text != "" {
+		line += "\n" + foldIndicator(strings.Count(text, "\n")+1, width)
 	}
 	return line
 }
@@ -160,9 +158,7 @@ func gitReadParts(output string) (stat, diff, plain string) {
 	if err != nil {
 		// Result filters (tokf) may wrap the envelope in decoration lines;
 		// retry on the first JSON object found in the text.
-		if i := strings.IndexByte(output, '{'); i >= 0 {
-			err = json.NewDecoder(strings.NewReader(output[i:])).Decode(&res)
-		}
+		err = json.Unmarshal([]byte(strutil.ExtractJSONObject(output)), &res)
 	}
 	if err != nil {
 		return "", "", output
@@ -228,9 +224,7 @@ func tailLines(text string, n int) ([]string, int) {
 		return nil, 0
 	}
 	lines := strings.Split(text, "\n")
-	if len(lines) <= n {
-		return lines, 0
-	}
+	n = min(n, len(lines))
 	return lines[len(lines)-n:], len(lines) - n
 }
 
@@ -245,8 +239,7 @@ func withOutputBlock(line, output string, width, maxLines int) string {
 	if output = strings.TrimRight(output, "\n"); output == "" {
 		return line
 	}
-	lines := cappedLines(output, width, maxLines, func(s string) string { return ui.Invokr.Muted.Render(s) })
-	return line + "\n" + strings.Join(lines, "\n")
+	return line + "\n" + strings.Join(cappedLines(output, width, maxLines, func(s string) string { return ui.Invokr.Muted.Render(s) }), "\n")
 }
 
 // cappedLines indents and styles each line of text, truncating to the pane

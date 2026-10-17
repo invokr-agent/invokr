@@ -1,8 +1,6 @@
 package agentui
 
 import (
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"slices"
 
@@ -70,12 +68,5 @@ func savePrefs(path string, p prefs) {
 	if path == "" {
 		return
 	}
-	data, err := json.Marshal(p)
-	if err != nil {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return
-	}
-	_ = fsutil.WriteFileAtomic(path, data, 0o600)
+	_ = fsutil.SaveJSON(path, p)
 }

@@ -22,21 +22,15 @@ func testRoot(t *testing.T) *cobra.Command {
 	return root
 }
 
-func TestGroupCommandsResolveAliases(t *testing.T) {
+func TestGroupCommandsResolve(t *testing.T) {
 	root := testRoot(t)
 	for _, tc := range []struct {
 		args []string
 		want string
 	}{
-		{[]string{"history"}, "sessions"},
-		{[]string{"session"}, "sessions"},
 		{[]string{"bot", "serve"}, "serve"},
 		{[]string{"provider", "set-key"}, "set-key"},
-		{[]string{"job", "list"}, "list"},
-		{[]string{"init"}, "setup"},
-		{[]string{"run"}, "exec"},
-		{[]string{"reindex"}, "index"},
-		{[]string{"config", "profile"}, "profiles"},
+		{[]string{"skills", "rm"}, "rm"},
 	} {
 		found, _, err := root.Find(tc.args)
 		if err != nil {
@@ -58,7 +52,8 @@ func TestGroupCommandsResolveAliases(t *testing.T) {
 func TestRetiredSpellingsDoNotResolve(t *testing.T) {
 	root := testRoot(t)
 	for _, args := range [][]string{
-		{"chat"}, {"exec", "resume"},
+		{"chat"}, {"exec", "resume"}, {"history"}, {"session"}, {"job"}, {"init"}, {"run"}, {"reindex"},
+		{"providers"}, {"config", "profile"}, {"config", "switch"}, {"jobs", "remove"}, {"jobs", "delete"}, {"skills", "remove"},
 	} {
 		// Find consumes the words it recognizes and hands back the rest. A
 		// retired spelling must survive as an unconsumed argument — that is

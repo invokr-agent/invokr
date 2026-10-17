@@ -3,10 +3,12 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/mcp"
@@ -50,13 +52,18 @@ func fakeHTTPMCP(t *testing.T, auth *string) *httptest.Server {
 				t.Error("tools/list before initialized")
 			}
 			result = map[string]any{"tools": []map[string]any{{"name": "echo", "description": "Echo text", "inputSchema": map[string]any{"type": "object"}}}}
+			if req.Params.(map[string]any)["cursor"] == nil {
+				result = map[string]any{"tools": []any{}, "nextCursor": "echo-page"}
+			} else if req.Params.(map[string]any)["cursor"] != "echo-page" {
+				t.Error("discovery did not forward opaque cursor")
+			}
 		case "tools/call":
 			var params struct {
 				Arguments map[string]any `json:"arguments"`
 			}
 			data, _ := json.Marshal(req.Params)
 			_ = json.Unmarshal(data, &params)
-			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "echo: " + fmt.Sprint(params.Arguments["text"])}}}
+			result = map[string]any{"isError": params.Arguments["fail"] == true, "content": []map[string]any{{"type": "text", "text": "echo: " + fmt.Sprint(params.Arguments["text"])}}}
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.Header().Set("Mcp-Session-Id", "session-1")
@@ -106,7 +113,7 @@ func TestMCPHTTPApprovalRequiredByDefault(t *testing.T) {
 	srv := fakeHTTPMCP(t, nil)
 	defer srv.Close()
 	caller := httpCaller(t, config.MCPServerConfig{URL: srv.URL, Enabled: true},
-		approval.StaticApprover{Decision: approval.Decision{Approved: false}})
+		testutil.StaticApprover{Decision: approval.Decision{Approved: false}})
 	waitForMCPTool(t, caller, "mcp_remote_echo")
 	_, err := caller.HandleCall(context.Background(), &core.ToolCall{Name: "mcp_remote_echo", Arguments: json.RawMessage(`{}`)})
 	if err == nil || !strings.Contains(err.Error(), "approval denied") {
@@ -129,5 +136,18 @@ func TestMCPHTTPRejectsCommandAndURLTogether(t *testing.T) {
 	_, err := caller.HandleCall(context.Background(), &core.ToolCall{Name: "mcp_remote_error", Arguments: json.RawMessage(`{}`)})
 	if err == nil || !strings.Contains(err.Error(), "both command and url") {
 		t.Fatalf("expected command+url rejection, got %v", err)
+	}
+}
+
+func TestMCPHTTPToolErrorPreservesFlaggedResult(t *testing.T) {
+	srv := fakeHTTPMCP(t, nil)
+	defer srv.Close()
+	caller := httpCaller(t, config.MCPServerConfig{URL: srv.URL, Enabled: true, DefaultToolsApprovalMode: constants.ApprovalPolicyAuto}, nil)
+	defer caller.Close()
+	waitForMCPTool(t, caller, "mcp_remote_echo")
+	out, err := caller.HandleCall(context.Background(), &core.ToolCall{Name: "mcp_remote_echo", Arguments: json.RawMessage(`{"text":"operation failed","fail":true}`)})
+	var toolErr *core.ToolError
+	if !errors.As(err, &toolErr) || toolErr.Code != "mcp_tool_error" || toolErr.Payload != "echo: operation failed" || out != toolErr.Payload {
+		t.Fatalf("result=%q error=%v; want flagged MCP failure with preserved text", out, err)
 	}
 }

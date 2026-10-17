@@ -22,7 +22,7 @@ func TestD04_RetrievalIndexLifecycle(t *testing.T) {
 	mustWrite(t, filepath.Join(markdown.ProjectDirFor(home.state.MemoryDir, home.workspace), "MEMORY.md"), "- d04-memory-52\n")
 	mustWrite(t, filepath.Join(filepath.Dir(home.workspace), "outside", "secret.md"), "outside-index-canary-88\n")
 
-	refresh := providertest.NativeToolCallStep("d04-refresh", "retrieval", map[string]any{
+	refresh := managedToolStep("d04-refresh", "retrieval", map[string]any{
 		"query": "d04-refresh-99", "scope": "project_docs", "max_results": 1,
 	})
 	var mu sync.Mutex
@@ -35,12 +35,12 @@ func TestD04_RetrievalIndexLifecycle(t *testing.T) {
 		refreshErr = os.WriteFile(doc, []byte("d04-project-41\nd04-refresh-99\n"), 0o600)
 	}
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("d04-doc", "retrieval", map[string]any{"query": "d04-project-41", "scope": "project_docs", "max_results": 1}),
-		providertest.NativeToolCallStep("d04-memory", "retrieval", map[string]any{"query": "d04-memory-52", "scope": "memory", "max_results": 1}),
-		providertest.NativeToolCallStep("d04-combined", "retrieval", map[string]any{"query": "d04", "scope": "project_docs_and_memory", "max_results": 2}),
-		providertest.NativeToolCallStep("d04-repeat", "retrieval", map[string]any{"query": "d04-project-41", "scope": "project_docs", "max_results": 1}),
+		managedToolStep("d04-doc", "retrieval", map[string]any{"query": "d04-project-41", "scope": "project_docs", "max_results": 1}),
+		managedToolStep("d04-memory", "retrieval", map[string]any{"query": "d04-memory-52", "scope": "memory", "max_results": 1}),
+		managedToolStep("d04-combined", "retrieval", map[string]any{"query": "d04", "scope": "project_docs_and_memory", "max_results": 2}),
+		managedToolStep("d04-repeat", "retrieval", map[string]any{"query": "d04-project-41", "scope": "project_docs", "max_results": 1}),
 		refresh,
-		providertest.NativeToolCallStep("d04-outside", "retrieval", map[string]any{"query": "outside-index-canary-88", "scope": "project_docs", "max_results": 1}),
+		managedToolStep("d04-outside", "retrieval", map[string]any{"query": "outside-index-canary-88", "scope": "project_docs", "max_results": 1}),
 		providertest.ReplyStep("done"),
 	)
 	defer provider.Close()

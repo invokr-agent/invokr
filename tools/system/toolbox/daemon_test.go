@@ -3,6 +3,7 @@ package toolbox
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -11,6 +12,28 @@ import (
 	"testing"
 	"time"
 )
+
+func TestDaemonCancelBlockedWrite(t *testing.T) {
+	dp, err := startDaemon(1024, func() (*exec.Cmd, func(), error) {
+		return exec.Command("sleep", "30"), nil, nil
+	}, os.Environ())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dp.cmd.Process.Kill(); <-dp.done }()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := invokeDaemon(ctx, dp, bytes.Repeat([]byte("x"), 1<<20)); result <- err }()
+	select {
+	case err := <-result:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("want deadline error, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancellation did not interrupt blocked stdin")
+	}
+}
 
 // TestEvictDaemon_OnlyEvictsMatchingPointer verifies that evictDaemon does not
 // kill or delete a daemon that was already replaced by a concurrent restart.

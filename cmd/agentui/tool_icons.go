@@ -15,10 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// toolPreviewMax bounds the one-line primary-arg preview. Single knob for width.
 const toolPreviewMax = 48
 
-// verbWidth keeps the verb column fixed so the preview/duration columns don't jitter.
 const verbWidth = 9
 
 // Nerd Font glyphs (Font Awesome / Devicon codepoints). Single-width in a Nerd Font.
@@ -36,8 +34,6 @@ type toolGlyph struct {
 	verb string
 }
 
-// toolGlyphs maps a tool name to its icon + short verb. Unknown tools fall back
-// to iconDefault + the raw name. mcp_* tools are matched by prefix in glyphFor.
 var toolGlyphs = map[string]toolGlyph{
 	"shell":            {"", "shell"},    // terminal
 	"file_search":      {"", "search"},   // search
@@ -63,22 +59,23 @@ func glyphFor(name string) toolGlyph {
 	return toolGlyph{iconDefault, cmp.Or(name, "tool")}
 }
 
-// primaryArgKeys lists, per tool, the argument keys to prefer for the preview.
 var primaryArgKeys = map[string][]string{
+	"read": {"paths", "path"}, "edit": {"path"}, "web_fetch": {"url"}, "tools": {"name", "names", "action"},
 	"shell": {"command"}, "file_search": {"query", "pattern", "path"}, "web_search": {"query"}, "memory": {"query", "content", "operation"},
 	"recall": {"query"}, "code_interpreter": {"code"}, "retrieval": {"query"}, "session_search": {"query"},
 	"delegate_task": {"task", "prompt"}, "load_skill": {"name", "skill"}, "create_tool": {"name"}, "tool_search": {"query"},
 }
 
-// primaryArg extracts a short, scannable preview of the call's main argument.
-func primaryArg(name, argsJSON string) string {
+func primaryArg(name, argsJSON string) string { return primaryArgLimit(name, argsJSON, toolPreviewMax) }
+
+func primaryArgLimit(name, argsJSON string, limit int) string {
 	argsJSON = strings.TrimSpace(argsJSON)
 	if argsJSON == "" {
 		return ""
 	}
 	var fields map[string]any
 	if err := json.Unmarshal([]byte(argsJSON), &fields); err != nil {
-		return truncatePreview(strings.Join(strings.Fields(argsJSON), " "))
+		return truncatePreview(strings.Join(strings.Fields(argsJSON), " "), limit)
 	}
 
 	val := ""
@@ -94,11 +91,13 @@ func primaryArg(name, argsJSON string) string {
 		parts := toolcore.MapSlice(rest, stringifyArg)
 		val = strings.TrimSpace(val + " " + strings.Join(parts, " "))
 	}
-	return truncatePreview(strings.Join(strings.Fields(val), " "))
+	return truncatePreview(strings.Join(strings.Fields(val), " "), limit)
 }
 
 func stringifyArg(v any) string {
-	switch v.(type) {
+	switch v := v.(type) {
+	case []any:
+		return strings.Join(toolcore.MapSlice(v, stringifyArg), ", ")
 	case string, float64, bool:
 		return fmt.Sprint(v)
 	}
@@ -117,21 +116,17 @@ func firstStringField(fields map[string]any) string {
 	return ""
 }
 
-// truncatePreview keeps the tail for path-like values, the head otherwise.
-func truncatePreview(s string) string {
+func truncatePreview(s string, limit int) string {
 	r := []rune(s)
-	if len(r) <= toolPreviewMax {
+	if len(r) <= limit {
 		return s
 	}
 	if strings.Contains(s, "/") {
-		return "..." + string(r[len(r)-(toolPreviewMax-3):])
+		return "..." + string(r[len(r)-(limit-3):])
 	}
-	return string(r[:toolPreviewMax-3]) + "..."
+	return string(r[:limit-3]) + "..."
 }
 
-// renderToolLine formats a single tool line for the plain (streaming) renderer,
-// which has no pane to align against. lead is prepended (a glyph, or the
-// spinner frame in the TUI).
 func renderToolLine(lead, name, preview, trailing string, state toolStatus) string {
 	return renderToolLineWidth(lead, name, preview, trailing, state, 0)
 }
@@ -162,8 +157,6 @@ func renderToolLineWidth(lead, name, preview, trailing string, state toolStatus,
 	return line
 }
 
-// statusStyle colors the leading glyph by outcome — the design's one signal that
-// scanning a column of tool calls is supposed to read from.
 func statusStyle(state toolStatus) lipgloss.Style {
 	switch state {
 	case toolDone:
@@ -175,8 +168,6 @@ func statusStyle(state toolStatus) lipgloss.Style {
 	}
 }
 
-// metaStyle keeps the trailing metadata muted unless the call failed, where the
-// "failed" word carries the outcome.
 func metaStyle(state toolStatus) lipgloss.Style {
 	if state == toolFailed {
 		return ui.Invokr.Danger

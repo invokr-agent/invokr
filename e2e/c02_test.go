@@ -15,9 +15,8 @@ import (
 	"github.com/invokr-ai/invokr/support/testutil/providertest"
 )
 
-// TestC02_ProgressiveToolDisclosure verifies that a deferred MCP tool cannot be
-// called until tool_search (include_schema) has disclosed it, and that the
-// disclosure does not persist across sessions. The MCP server is this test
+// TestC02_ProgressiveToolDisclosure verifies that native schema bytes stay
+// fixed while a deferred MCP tool becomes callable after discovery. The server is this test
 // binary re-invoked in fake-server mode (see TestFakeMCPServerE2E).
 func TestC02_ProgressiveToolDisclosure(t *testing.T) {
 	t.Setenv("INVOKR_FAKE_MCP", "1")
@@ -29,9 +28,10 @@ func TestC02_ProgressiveToolDisclosure(t *testing.T) {
 	}
 
 	provider := providertest.NewScripted(t,
+		providertest.NativeToolCallStep("c02-patch", "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Add File: core.txt\n+core\n*** End Patch\n", "dry_run": true}),
 		providertest.NativeToolCallStep("c02-direct", "mcp_fixture_echo", map[string]any{"text": "early"}),
-		providertest.NativeToolCallStep("c02-search", "tool_search", map[string]any{"query": "mcp_fixture_echo", "include_schema": true}),
-		providertest.NativeToolCallStep("c02-call", "mcp_fixture_echo", map[string]any{"text": "schema-check"}),
+		providertest.NativeToolCallStep("c02-search", "tools", map[string]any{"action": "enable", "names": []string{"mcp_fixture_echo"}}),
+		providertest.NativeToolCallStep("c02-call", "tools", map[string]any{"action": "run", "name": "mcp_fixture_echo", "arguments": map[string]any{"text": "schema-check"}}),
 		providertest.ReplyStep("done"),
 	)
 	defer provider.Close()
@@ -42,27 +42,30 @@ func TestC02_ProgressiveToolDisclosure(t *testing.T) {
 		waitForSessionTool(t, s, "mcp_fixture_echo")
 	})
 
-	// The tool starts deferred: its schema is absent from the first request and
-	// the direct call loads it rather than failing (#480). The post-disclosure
-	// call succeeds and echoes back.
-	for _, f := range got.failureKinds() {
-		if f.Tool == "mcp_fixture_echo" {
-			t.Fatalf("MCP call failed: %#v", got.failureKinds())
-		}
+	// Direct optional invocation is rejected, then explicit enable/run succeeds.
+	if failures := got.failureKinds(); len(failures) != 1 || failures[0].Tool != "mcp_fixture_echo" {
+		t.Fatalf("failures: %+v", failures)
 	}
 	requests := provider.Snapshot().CompletionRequests
-	if first := fmt.Sprintf("%v", requests[0].Tools); strings.Contains(first, "mcp_fixture_echo") {
-		t.Fatalf("deferred MCP tool shipped its schema on the first turn: %s", first)
+	if !strings.Contains(toolResults(requests), "core.txt") {
+		t.Fatal("protected patch did not execute directly")
 	}
-	if next := fmt.Sprintf("%v", requests[1].Tools); !strings.Contains(next, "mcp_fixture_echo") {
-		t.Fatalf("direct call did not load the deferred MCP schema: %s", next)
+	first, err := json.Marshal(requests[0].Tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, req := range requests[1:] {
+		next, err := json.Marshal(req.Tools)
+		if err != nil || string(next) != string(first) {
+			t.Fatalf("request %d changed tools after discovery: %v", i+1, err)
+		}
 	}
 	if !requestsContain(provider.Snapshot().CompletionRequests, "echo: schema-check") {
 		t.Fatalf("post-disclosure MCP call did not return the echoed result")
 	}
 
-	// A fresh runtime on the same home has not loaded the schema, so a direct
-	// call is rejected again — disclosure is per-session, not persisted.
+	// A fresh runtime on the same home can still load the deferred tool on its
+	// first direct call; the schema is present in its frozen request array.
 	provider2 := providertest.NewScripted(t,
 		providertest.NativeToolCallStep("c02-fresh", "mcp_fixture_echo", map[string]any{"text": "again"}),
 		providertest.ReplyStep("done"),
@@ -73,13 +76,22 @@ func TestC02_ProgressiveToolDisclosure(t *testing.T) {
 	got2 := runInProcWhen(t, home2, provider2.URL(), "call directly again", grantAll, func(s runtime.Services) {
 		waitForSessionTool(t, s, "mcp_fixture_echo")
 	})
-	for _, f := range got2.failureKinds() {
-		if f.Tool == "mcp_fixture_echo" {
-			t.Fatalf("fresh-session MCP call failed: %#v", got2.failureKinds())
-		}
+	if failures := got2.failureKinds(); len(failures) != 1 || failures[0].Tool != "mcp_fixture_echo" {
+		t.Fatalf("fresh session must start disabled: %+v", failures)
 	}
-	if first := fmt.Sprintf("%v", provider2.Snapshot().CompletionRequests[0].Tools); strings.Contains(first, "mcp_fixture_echo") {
-		t.Fatalf("fresh session started with the MCP schema already loaded: %s", first)
+	freshRequests := provider2.Snapshot().CompletionRequests
+	fresh, err := json.Marshal(freshRequests[0].Tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(fresh), `"name":"mcp_fixture_echo"`) {
+		t.Fatal("optional MCP schema entered native array")
+	}
+	for i, req := range freshRequests[1:] {
+		next, err := json.Marshal(req.Tools)
+		if err != nil || string(next) != string(fresh) {
+			t.Fatalf("fresh session request %d changed tools: %v", i+1, err)
+		}
 	}
 }
 

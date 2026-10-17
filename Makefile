@@ -3,6 +3,7 @@
 INSTALL_DIR ?= $(HOME)/.local/bin
 
 CUSTOM_LINT ?= ./custom-golangci-lint
+LINT_GOTOOLCHAIN ?= go1.26.3
 
 # Built from tools/customlint (a separate module) with plain `go build`, so it
 # resolves through GOPROXY / the module cache. `golangci-lint custom` is not
@@ -53,23 +54,23 @@ e2e-report:
 
 lint:
 	@if [ -x $(CUSTOM_LINT) ]; then \
-		$(CUSTOM_LINT) run; \
+		GOTOOLCHAIN=$(LINT_GOTOOLCHAIN) $(CUSTOM_LINT) run; \
 	else \
-		golangci-lint run ./...; \
+		GOTOOLCHAIN=$(LINT_GOTOOLCHAIN) golangci-lint run ./...; \
 	fi
 
 lint-ci: custom-golangci-lint
-	$(CUSTOM_LINT) run
+	GOTOOLCHAIN=$(LINT_GOTOOLCHAIN) $(CUSTOM_LINT) run
 
 verify: test lint
 
-# install builds invokr-agent with version info baked in via -ldflags and
+# install builds invokr with version info baked in via -ldflags and
 # copies it to INSTALL_DIR (default ~/.local/bin).
 install:
-	go build -ldflags "-X github.com/antonikliment/invokr/platform/version.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X github.com/antonikliment/invokr/platform/version.Commit=$$(git rev-parse --short HEAD 2>/dev/null || echo none) -X github.com/antonikliment/invokr/platform/version.Date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o invokr-agent .
+	go build -ldflags "-X $$(go list -m)/platform/version.Version=$$(git describe --tags --always --dirty 2>/dev/null || echo dev) -X $$(go list -m)/platform/version.Commit=$$(git rev-parse --short HEAD 2>/dev/null || echo none) -X $$(go list -m)/platform/version.Date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o invokr .
 	mkdir -p $(INSTALL_DIR)
-	cp invokr-agent $(INSTALL_DIR)/invokr-agent
-	@echo "installed $(INSTALL_DIR)/invokr-agent"
+	cp invokr $(INSTALL_DIR)/invokr
+	@echo "installed $(INSTALL_DIR)/invokr"
 
 # dev builds from source and installs it as `invokr-dev` (INSTALL_DIR, default
 # ~/.local/bin) with the commit and build date stamped into the TUI banner.

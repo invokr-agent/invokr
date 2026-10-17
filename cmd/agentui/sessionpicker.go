@@ -3,11 +3,13 @@ package agentui
 import (
 	"context"
 	"fmt"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
 	"image/color"
 	"io"
 	"strings"
 	"time"
+
+	"github.com/invokr-ai/invokr/support/fsutil"
+	toolcore "github.com/invokr-ai/invokr/tools/core"
 
 	"github.com/antonikliment/tuikit"
 	"github.com/invokr-ai/invokr/capability/sessionstore"
@@ -15,7 +17,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/charmbracelet/x/term"
 )
 
 // ErrPickCanceled reports that the user dismissed the picker without choosing.
@@ -192,7 +193,7 @@ func PickSession(ctx context.Context, store *sessionstore.Store, purge func(stri
 	if len(sessions) == 0 {
 		return "", fmt.Errorf("no sessions found")
 	}
-	if !isTerminal(in) {
+	if !fsutil.IsTerminal(in) {
 		return "", fmt.Errorf("cannot show the session picker without a terminal; pass --resume=<session-id>")
 	}
 
@@ -327,10 +328,4 @@ func visibleWindow(lines []string, cursor, height int) []string {
 	}
 	offset := min(max(0, cursor-height/2), len(lines)-height)
 	return lines[offset : offset+height]
-}
-
-// isTerminal reports whether r is an interactive terminal.
-func isTerminal(r io.Reader) bool {
-	fd, ok := r.(interface{ Fd() uintptr })
-	return ok && term.IsTerminal(fd.Fd())
 }

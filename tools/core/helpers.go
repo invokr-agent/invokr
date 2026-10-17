@@ -30,15 +30,6 @@ func Outcome(err error) string {
 	return "completed"
 }
 
-// FirstNonEmpty returns the first value whose trimmed form is non-empty,
-// returned verbatim, or "" if none qualify. Re-exported from support/strutil
-// so tool packages keep a single import for the common helpers.
-func FirstNonEmpty(values ...string) string { return strutil.FirstNonEmpty(values...) }
-
-// FirstNonEmptyTrimmed behaves like FirstNonEmpty but returns the chosen value
-// with surrounding whitespace trimmed.
-func FirstNonEmptyTrimmed(values ...string) string { return strutil.FirstNonEmptyTrimmed(values...) }
-
 // CanonicalArgsJSON normalizes tool-call arguments so semantically identical
 // calls that differ only in whitespace or key ordering produce the same string.
 // Invalid JSON falls back to the raw bytes. It is the canonicalization behind
@@ -48,26 +39,14 @@ func CanonicalArgsJSON(raw []byte) string {
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return string(raw)
 	}
-	canon, err := json.Marshal(v)
-	if err != nil {
-		return string(raw)
-	}
+	canon, _ := json.Marshal(v) // A decoded JSON tree contains only encodable values.
 	return string(canon)
 }
 
 // CallHash is the stable identity of a tool call (name + canonical arguments).
 func CallHash(name string, args []byte) string {
-	return HashHex(name + "\x00" + CanonicalArgsJSON(args))
+	return strutil.HashHex(name + "\x00" + CanonicalArgsJSON(args))
 }
-
-// HashHex returns the hex-encoded SHA-256 digest of s. Re-exported from
-// support/strutil.
-func HashHex(s string) string { return strutil.HashHex(s) }
-
-// HashHexTrimmed returns the hex-encoded SHA-256 digest of the trimmed s. It is
-// used where cache keys/audit hashes must be insensitive to surrounding
-// whitespace.
-func HashHexTrimmed(s string) string { return strutil.HashHexTrimmed(s) }
 
 // WithEnvValue returns a copy of env with key set to value, replacing an
 // existing KEY=value entry or appending a new one. The input slice is never
@@ -173,4 +152,13 @@ func MapSlice[T, R any](in []T, f func(T) R) []R {
 		out = append(out, f(item))
 	}
 	return out
+}
+
+// StripCR drops the carriage return a CRLF line keeps after splitting on "\n".
+func StripCR(s string) string { return strings.TrimSuffix(s, "\r") }
+
+// EqualBy compares lines after norm: the rungs of the edit and apply_patch
+// fuzzy-match ladders.
+func EqualBy(norm func(string) string) func(a, b string) bool {
+	return func(a, b string) bool { return norm(a) == norm(b) }
 }

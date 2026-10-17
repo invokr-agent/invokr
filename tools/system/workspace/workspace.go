@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -392,26 +393,58 @@ func GitDirs(workspaceRoot string) []string {
 		return nil
 	}
 	pointer := filepath.Join(workspaceRoot, ".git")
-	info, err := os.Stat(pointer)
-	if err != nil || info.IsDir() {
+	info, err := os.Lstat(pointer)
+	if err != nil || !info.Mode().IsRegular() {
 		return nil
 	}
 	data, err := os.ReadFile(pointer)
 	if err != nil {
 		return nil
 	}
-	target := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(string(data)), "gitdir:"))
-	if target == "" {
+	target, ok := strings.CutPrefix(strings.TrimSpace(string(data)), "gitdir:")
+	if !ok || strings.TrimSpace(target) == "" {
 		return nil
 	}
+	target = strings.TrimSpace(target)
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(workspaceRoot, target)
+	}
+	target, err = filepath.EvalSymlinks(target)
+	if err != nil || !gitDirPointsBack(workspaceRoot, target) {
+		return nil
 	}
 	dirs := []string{target}
 	// The shared repository is the .git two levels up from
 	// <main>/.git/worktrees/<name>; anything else is a layout we don't know.
-	if shared := filepath.Dir(filepath.Dir(target)); filepath.Base(shared) == ".git" {
-		dirs = append(dirs, shared)
+	if shared := filepath.Dir(filepath.Dir(target)); filepath.Base(shared) == ".git" && filepath.Base(filepath.Dir(target)) == "worktrees" {
+		dirs = []string{shared, target} // Mount parent before child so the child stays visible.
 	}
 	return dirs
+}
+
+// A real linked worktree points back via <gitdir>/gitdir; an absorbed
+// submodule via core.worktree in <gitdir>/config. Workspace-controlled .git
+// text alone cannot authorize an external mount.
+func gitDirPointsBack(workspaceRoot, target string) bool {
+	root, err := filepath.EvalSymlinks(workspaceRoot)
+	if err != nil {
+		return false
+	}
+	if back, err := os.ReadFile(filepath.Join(target, "gitdir")); err == nil {
+		return resolvesTo(target, strings.TrimSpace(string(back)), filepath.Join(root, ".git"))
+	}
+	// Git parses quoting and escapes in core.worktree.
+	value, err := exec.Command("git", "config", "--null", "--file", filepath.Join(target, "config"), "--get", "core.worktree").Output()
+	return err == nil && resolvesTo(target, strings.TrimSuffix(string(value), "\x00"), root)
+}
+
+func resolvesTo(base, path, want string) bool {
+	if path == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(base, path)
+	}
+	resolved, err := filepath.EvalSymlinks(path)
+	return err == nil && resolved == want
 }

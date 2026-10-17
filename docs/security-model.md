@@ -22,6 +22,31 @@ documented non-boundaries. This page is the mechanics.
 They are independent. Losing one does not disable the others, but only
 sandboxing survives a bad approval.
 
+## Execution boundaries at a glance
+
+Approval authorizes an operation; it does not restrict the approved process.
+These are source-level contracts, not a claim that containment has been tested
+on the current host. Paths and overrides below link to the detailed policy.
+
+| Execution path | Writable roots | Network | Credentials / environment | Process lifetime | Approval and unavailable-host behavior |
+| --- | --- | --- | --- | --- | --- |
+| [Shell with namespaces](#shell) | Workspace write roots, private temporary storage, selected build caches and linked Git dirs; read-only roots remain sealed | Host network for network tier or `allow_network_commands`; otherwise private network namespace | Filtered environment by default; `env_passthrough` adds named values; `isolate_env: false` inherits host env for ordinary commands; routed scripts always force the filtered env | Foreground calls use timeout/process-tree cancellation; explicit persistent work may outlive a call | Shell tiers still apply. Allowed ordinary commands fall back to host execution if namespaces are unavailable; interpreters/scripts refuse without explicit opt-out. Plan verification forbids host fallback. |
+| [Shell host fallback / YOLO](#shell) | Host user permissions; path/tier checks are not OS confinement | Host network, even if policy rejects network commands | YOLO inherits full host env; ordinary fallback filters by configuration, and routed scripts force a filtered env | Same execution owner, without namespace containment | YOLO bypasses approvals and namespaces. Namespace failure is not permission to widen the allowlist. |
+| [Toolbox namespace process or daemon](#toolbox-tools) | Declared workspace access (`WritesWorkspace` read-write, `ReadsWorkspace` read-only), sandbox temporary storage | Private unless `Network` declared; `allow_hosts` scopes DNS only | Filtered by default, plus `toolbox.env`; daemon environment is captured at startup | One-shot call has execution timeout; daemons persist across calls until eviction/shutdown. Cancellation closes daemon pipes and terminates its process group. | Manifest capabilities/tiers and approval policy apply. Unsupported hosts refuse unless `allow_unsandboxed` / `INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1`; opt-out runs with host privileges. |
+| [MCP stdio](#mcp-servers) | Host user permissions; no workspace sandbox | Host network | Full inherited host environment, including secrets | Persistent subprocess, evicted on request failure or runtime cleanup; cancellation closes pipes and terminates the process group | Disabled until configured; tool calls ask by default. Server startup/discovery is not gated by per-call approval. No namespace isolation on any host. |
+| [MCP HTTP](#mcp-servers) | Remote server's permissions, outside Invokr's control | Remote endpoint; HTTPS except loopback | Configured `headers_env` values; no full environment transfer | Persistent client/session; calls use context deadlines | Same per-server tool-call approvals. Remote server isolation/lifetime is unverified and operator-managed. Redirects are rejected; response messages are limited to 8 MiB. |
+| [Whole-agent Docker/podman](#whole-agent-docker-sandbox) | Container filesystem plus read-write mounts of selected workspace and Invokr home | Engine default network; loopback provider URL can be mapped to host gateway | `INVOKR_*`, `OPENAI_API_KEY`, terminal variables; mounted config/memory may contain credentials | Attached container uses `--init` and `--rm`; outer process waits for container exit | Tool approvals remain active unless overridden. Missing engine/setup fails startup. Auto-building image requires Linux; other hosts need a supplied image and engine. Inner toolbox namespace isolation is disabled, so the outer container is the boundary. |
+
+The implementation anchors are [shell execution](../tools/system/shell/exec.go),
+[toolbox daemon lifecycle](../tools/system/toolbox/daemon.go),
+[MCP transport](../tools/system/mcp/mcp.go), and
+[container launch/environment](../capability/docker_sandbox/relaunch.go).
+For container/process Python execution, see [`code_interpreter`](#code_interpreter).
+Native file tools use workspace path policy rather than subprocess isolation.
+A green portable test job with `INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1` does not
+establish confinement; use the separate [containment gate](#mandatory-containment-checks)
+on a supported host.
+
 ## Approval tiers
 
 A tier is a plain string attached to an approval request. The ones in the tree:
@@ -48,6 +73,10 @@ comma-joined.
 Tools also declare an approval *policy* — `auto`, `ask`, or `deny`
 (`constants/approval.go`) — which is what decides whether a request is raised
 before the tier is ever consulted.
+
+In Auto mode, `ask` still auto-approves a sandbox-confined call. A toolbox
+manifest that must not run unattended uses `ask_once` (prompt until a standing
+grant covers the call; blocked in Plan) or `always_ask` (prompt every call; grants ignored).
 
 ### In the TUI
 
@@ -87,7 +116,8 @@ list is approved only if *every* component tier is allowed.
 `apply_patch` raises an approval on every real apply (only a clean dry run is
 auto-approved), so a non-interactive run that edits files needs
 `--allow write_workspace`; without it every patch is denied. The same applies to
-scheduled jobs, which auto-deny unless the job's approval policy is `allow`.
+scheduled jobs, which auto-deny unless added with `jobs add --allow <tier>`
+(same tier matcher as `exec`) or `--allow-all`.
 
 ### What `--allow-all` gives away
 
@@ -213,12 +243,14 @@ Defaults:
 silent auto-approvals. `shell.enabled: false` (or `INVOKR_SHELL_DISABLED=true`)
 removes the tool entirely.
 
-**Where the sandbox is available, it is the boundary for `shell`**: every line
-runs in a user+mount+PID namespace with the workspace read-write, a shared
-per-workspace `/tmp`, and no network unless the line is network tier. **Without
-the sandbox, or under `--yolo`, an approved command runs unconfined on the
-host**, and the allowlist limits only *which* binaries, not what they may then
-do.
+**Where the sandbox is available, it is the boundary for `shell`**: lines
+outside `--yolo` run in a user+mount+PID namespace. Configured workspace roots,
+per-workspace `/tmp`, selected build caches, and linked Git directories can be
+writable. Network-tier lines and lines run with `allow_network_commands` retain
+the host network; other lines have no network. **Without the sandbox, or under
+`--yolo`, allowed commands run unconfined on the host**. Routed interpreters and
+scripts are refused on an unsupported host unless the operator opts out with
+`INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1`.
 
 ## Toolbox tools
 
@@ -348,7 +380,11 @@ Consequently:
   descriptions are model-visible untrusted text delivered by a third party.
   `default_tools_approval_mode: "auto"` disables that prompt — per server, and
   it is your call.
-- `enabled_tools` / `disabled_tools` narrow the surface per server.
+- `enabled_tools` / `disabled_tools` narrow the surface per server. Discovery
+  follows `tools/list` cursors before applying these filters. A repeated cursor,
+  more than 32 pages or 4,096 tools, a response over 8 MiB, or a request failure
+  aborts discovery without publishing a partial tool list. The 30-second
+  discovery context covers the whole page sequence.
 - HTTP credentials are named by `headers_env` (header name → env var name) and
   read from the environment at connect time. They are never stored in the
   config file in plaintext.
@@ -391,7 +427,7 @@ nested `unshare` fails in an unprivileged container. See ADR 0005.
 
 ## Other surfaces worth knowing about
 
-- **Chat transports** (`chat serve`) fail closed. An empty allowlist admits
+- **Chat transports** (`bot serve`) fail closed. An empty allowlist admits
   nobody, and a transport refuses to start without one unless `allow_all: true`
   is set explicitly. Approvals over chat are inline buttons (Telegram) or
   `YES <id>` / `NO <id>` replies (Signal).

@@ -46,8 +46,8 @@ func TestCopyHelpersProtectMutableDefaults(t *testing.T) {
 	}
 }
 
-func TestEagerSchemaToolsIncludesTmux(t *testing.T) {
-	if !slices.Contains(EagerSchemaTools, "tmux") {
-		t.Fatalf("EagerSchemaTools %v missing tmux (#541)", EagerSchemaTools)
+func TestManagedCoreIncludesManager(t *testing.T) {
+	if !slices.Contains(ManagedCoreTools, "tools") {
+		t.Fatal("manager missing from protected core")
 	}
 }

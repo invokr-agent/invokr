@@ -28,9 +28,8 @@ func benchChatModel(n int) *model {
 	return m
 }
 
-// BenchmarkChatLogView measures one frame of the chat-log render path (the
-// full transcript re-render syncChatViewport performs), idle and with a
-// streaming tail mutating between frames. I4's numbers; see the plan doc.
+// BenchmarkChatLogView measures one windowed transcript frame, idle and with
+// a streaming tail mutating between frames.
 func BenchmarkChatLogView(b *testing.B) {
 	for _, n := range []int{200, 1000, 5000} {
 		b.Run(fmt.Sprintf("idle_%d", n), func(b *testing.B) {

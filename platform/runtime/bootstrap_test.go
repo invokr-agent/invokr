@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -124,61 +125,10 @@ func TestNewProviderDoesNotProbeModelsSynchronously(t *testing.T) {
 	}
 }
 
-type testModelTarget struct {
-	model   string
-	set     chan string
-	pending bool
-}
-
-func (t *testModelTarget) Model() string { return t.model }
-func (t *testModelTarget) QueueModelIfIdle(model string) bool {
-	if t.pending {
-		return false
-	}
-	t.pending = true
-	t.set <- model
-	return true
-}
-
-func TestResolveModelLaterCachesFallback(t *testing.T) {
-	srv := modelsServer([]string{"fallback"})
-	defer srv.Close()
-	selected := &atomic.Pointer[string]{}
-	configured := "missing"
-	selected.Store(&configured)
-	target := &testModelTarget{model: configured, set: make(chan string, 1)}
-	resolveModelLater(context.Background(), clients.NewClient(srv.URL), configured, zap.NewNop(), selected, target)
-	select {
-	case got := <-target.set:
-		if got != "fallback" || *selected.Load() != "fallback" {
-			t.Fatalf("resolved target=%q cached=%q", got, *selected.Load())
-		}
-	case <-time.After(time.Second):
-		t.Fatal("deferred model resolution did not complete")
-	}
-}
-
-func TestResolveModelLaterSkipsWhenModelQueueIsOccupied(t *testing.T) {
-	srv := modelsServer([]string{"fallback"})
-	defer srv.Close()
-	selected := &atomic.Pointer[string]{}
-	configured := "missing"
-	selected.Store(&configured)
-	target := &testModelTarget{model: configured, set: make(chan string, 1), pending: true}
-	resolveModelLater(context.Background(), clients.NewClient(srv.URL), configured, zap.NewNop(), selected, target)
-	select {
-	case got := <-target.set:
-		t.Fatalf("expected no model switch while a user switch is pending, got %q", got)
-	case <-time.After(200 * time.Millisecond):
-	}
-	if target.model != configured {
-		t.Fatalf("target.model = %q, want unchanged %q", target.model, configured)
-	}
-}
-
 func TestBootstrapInitializesMemoryAndCleanupIsSafe(t *testing.T) {
 	root := t.TempDir()
 	app := config.AppConfig{
+		Provider: config.ProviderConfig{Model: "test-model"},
 		Memory: config.MemoryConfig{
 			Dir: filepath.Join(root),
 		},
@@ -240,6 +190,7 @@ func TestBootstrapUsesProviderContextWindowMetadata(t *testing.T) {
 	app := config.AppConfig{
 		Provider: config.ProviderConfig{
 			BaseURL: server.URL,
+			Model:   "test-model",
 		},
 		Memory: config.MemoryConfig{
 			Dir: filepath.Join(root),
@@ -398,5 +349,15 @@ func TestNewProviderModelFlagBeatsProfilePin(t *testing.T) {
 	defer func() { _ = provider.Close() }()
 	if got.Provider.Model != "flag-model" {
 		t.Fatalf("model = %q, want flag-model", got.Provider.Model)
+	}
+}
+
+func TestBootstrapFailsWithoutAnyModel(t *testing.T) {
+	srv := modelsServer(nil)
+	defer srv.Close()
+	root := t.TempDir()
+	app := config.AppConfig{Provider: config.ProviderConfig{BaseURL: srv.URL}, Memory: config.MemoryConfig{Dir: root}}
+	if _, err := Bootstrap(app, Options{}); err == nil || !strings.Contains(err.Error(), "no model configured") {
+		t.Fatalf("Bootstrap() error = %v, want no-model error", err)
 	}
 }

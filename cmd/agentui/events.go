@@ -2,7 +2,9 @@ package agentui
 
 import (
 	"context"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
@@ -68,5 +70,20 @@ func isToolEvent(ev events.Event) bool {
 		return ev.Tool != nil
 	default:
 		return false
+	}
+}
+
+func (m *model) trackCompaction(ev events.Event) {
+	if ev.Type != events.EventNotice || ev.Notice == nil {
+		return
+	}
+	switch {
+	case ev.Notice.Text == "context compaction in progress":
+		m.compactingAt = ev.Timestamp
+		if m.compactingAt.IsZero() {
+			m.compactingAt = time.Now()
+		}
+	case ev.Notice.Text == "context compaction complete", strings.HasPrefix(ev.Notice.Text, "context summarization failed;"):
+		m.compactingAt = time.Time{}
 	}
 }

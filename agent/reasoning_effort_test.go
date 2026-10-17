@@ -69,6 +69,11 @@ func TestGatewayBudgetsLlamaCppToolResults(t *testing.T) {
 		{"user default", clients.ReasoningLlamaCpp, false, []inference.Message{inference.UserMessage("hi")}, 0},
 		{"normal result", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", "BUILD OK")}, 1024},
 		{"failed result", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", `{"error":"edit failed"}`)}, 2048},
+		{"signal result", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", "[exit code -1]")}, 2048},
+		{"timeout result", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", "[exit code -1]\n[timed out]")}, 2048},
+		{"timeout marker", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", "[timed out]")}, 2048},
+		{"JSON timeout", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", `{"exit_code":0,"timed_out":true}`)}, 2048},
+		{"successful exit", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", "[exit code 0]")}, 1024},
 		{"large result", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", strings.Repeat("x", 8192))}, 2048},
 		{"batch failure", clients.ReasoningLlamaCpp, false, []inference.Message{inference.ToolMessage("1", "[exit code 1]"), inference.ToolMessage("2", "BUILD OK")}, 2048},
 		{"no tools", clients.ReasoningLlamaCpp, true, []inference.Message{inference.ToolMessage("1", "BUILD OK")}, 0},
@@ -79,9 +84,8 @@ func TestGatewayBudgetsLlamaCppToolResults(t *testing.T) {
 			pc := NewProviderContext(0, "test")
 			pc.ApplyMetadata("test", clients.ProviderMetadata{Reasoning: tc.kind})
 			caller := &tools.Caller{}
-			caller.RegisterNative(core.ToolSpec{Name: "demo", Parameters: map[string]any{"type": "object"}},
+			caller.RegisterNative(core.ToolSpec{Name: "read", Parameters: map[string]any{"type": "object"}},
 				func(context.Context, *core.ToolCall) (string, error) { return "ok", nil })
-			caller.MarkSchemasLoaded("s1", []string{"demo"})
 			gateway := &OpenAIModelGateway{
 				provider: provider, model: "test", settings: config.AgentConfig{NPredict: 4096},
 				tools: caller, syntax: syntax.NewTaggedJSONSyntax(), codec: OpenAINativeToolCodec{}, logger: zap.NewNop(),

@@ -18,16 +18,18 @@ invocation: `invokr sessions` is the history view,
 ```bash
 invokr agent                 # interactive TUI (default)
 invokr --resume              # pick a session from a menu, then resume it in the TUI
-invokr agent --resume <id>   # resume a specific stored session in the TUI
+invokr --resume <id>         # resume a specific stored session in the TUI
+invokr --last                # resume the most recent session in this directory
 invokr exec "prompt"         # one-shot, non-interactive; --json emits a JSONL ledger
 invokr exec --last "prompt"  # continue the most recent session (or --resume <id>)
-invokr sessions              # history view; add search/show to drill in, --json to script it
+invokr sessions              # history view; search/show/rm to drill in, --json to script it
 invokr bot serve             # run Telegram/Signal chat transports
-invokr jobs                  # scheduled-job store: add/list/rm/purge/run
-invokr index                 # build the retrieval tool's workspace index
+invokr jobs                  # scheduled-job store: add/list/rm/purge/run (add takes --allow <tier>)
+invokr index                 # build the retrieval tool's workspace index; `index status` reports it
 invokr doctor                # diagnose provider, model, sandbox, interpreters, MCP
-invokr provider              # install verified model-provider binaries; set-key stores credentials
-invokr config                # print effective config (secrets redacted); profiles/use switch providers
+invokr provider              # list/install verified model-provider binaries; set-key stores credentials
+invokr config                # print effective config (secrets redacted); profiles/use switch profiles
+invokr version               # same as --version
 invokr setup                 # first-run configuration
 ```
 
@@ -37,7 +39,8 @@ invokr setup                 # first-run configuration
 default. Opt in
 with `--allow <tier>` (repeatable; `--allow read-only` covers the read-only
 tiers) or `--allow-all` (approves everything — unattended arbitrary tool
-execution).
+execution). Neither combines with `--mode`. `jobs add` takes the same
+`--allow <tier>`/`--allow-all` flags.
 
 In the TUI, batched approvals collect in a queue rendered as
 `approval queue (N pending)`. Keys: `a` approve / `d` deny the selected item,
@@ -61,7 +64,7 @@ auto-approval persistent — see the security model page.
 Common environment overrides:
 
 - `INVOKR_BASE_URL=http://localhost:8080`
-- `INVOKR_MODEL=gpt-4o-mini`
+- `INVOKR_MODEL=<model>` (unset: the first model the server lists)
 - `INVOKR_PROVIDER_API_KEY=...` or `OPENAI_API_KEY=...`
 - `INVOKR_MEMORY_DIR=/path/to/markdown-memory`
 - `INVOKR_TOOLBOX_DIR=/path/to/toolbox`
@@ -79,6 +82,10 @@ Common environment overrides:
   past the keep window collapses in one pass — rewriting history every turn
   would invalidate the prompt-prefix cache every turn. `0` ages on every pass;
   any other value must be at least the keep window.
+- `INVOKR_CORE_TOOLS=schedule,delegate_task` (config `tools.core`): add
+  optional tools to the protected core, so their full schemas ship from the
+  first turn and the model calls them directly, with no `tools` enable/run
+  step. They cannot be disabled in-session.
 - `INVOKR_TOOLS=read_file,apply_patch,shell` (or `--tools`): advertise only
   these tools to the model. Everything is still registered and loaded; a
   narrower list just cuts tool-selection dilution, which small models are
@@ -159,7 +166,7 @@ may target a custom agent defined in `~/.invokr/agents/<name>.md`:
 ---
 name: reviewer
 description: Read-only reviewer.
-model: gpt-4o-mini      # optional; inherits parent model if omitted
+model: qwen3-coder      # optional; inherits parent model if omitted
 max_turns: 4            # optional
 tools:                  # optional allowlist; omit for the full tool set
   - read_file

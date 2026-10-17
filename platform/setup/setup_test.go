@@ -209,7 +209,7 @@ func TestDefaultPathsUsesInvokrHome(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	t.Setenv("INVOKR_HOME", home)
 
-	paths := DefaultPaths()
+	paths := PathsFor(config.DefaultConfigDir())
 
 	if paths.HomeDir != home {
 		t.Fatalf("expected default paths under INVOKR_HOME %q, got %q", home, paths.HomeDir)

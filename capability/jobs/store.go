@@ -33,10 +33,14 @@ var ErrDuplicateName = errors.New("duplicate job name")
 
 // Job represents a scheduled job record.
 type Job struct {
-	ID, Name, Schedule, Prompt, ApprovalPolicy string
-	CreatedAt                                  time.Time
-	LastRunAt                                  *time.Time
-	LastStatus                                 *string
+	ID             string     `json:"id"`
+	Name           string     `json:"name"`
+	Schedule       string     `json:"schedule"`
+	Prompt         string     `json:"prompt"`
+	ApprovalPolicy string     `json:"approval_policy"`
+	CreatedAt      time.Time  `json:"created_at"`
+	LastRunAt      *time.Time `json:"last_run_at"`
+	LastStatus     *string    `json:"last_status"`
 }
 
 // Store provides persistence for scheduled jobs.
@@ -144,10 +148,11 @@ func (s *Store) getBy(ctx context.Context, column, value string) (Job, error) {
 	return j, nil
 }
 
-// Update sets an existing job's schedule and prompt in-place, preserving its
-// id, name, and history (last_run_at/last_status).
-func (s *Store) Update(ctx context.Context, id, schedule, prompt string) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE jobs SET schedule = ?, prompt = ? WHERE id = ?`, schedule, prompt, id)
+// UpdateDenyJob changes schedule and prompt only while the job remains deny-only.
+// This prevents a concurrent policy change from turning a tool-approved edit into
+// an edit of a privileged job.
+func (s *Store) UpdateDenyJob(ctx context.Context, id, schedule, prompt string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE jobs SET schedule = ?, prompt = ? WHERE id = ? AND approval_policy = 'deny'`, schedule, prompt, id)
 	if err != nil {
 		return fmt.Errorf("update job: %w", err)
 	}

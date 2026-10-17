@@ -10,6 +10,7 @@ import (
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/todo"
+	"github.com/invokr-ai/invokr/tools/system/tool_search"
 	"github.com/invokr-ai/invokr/tools/system/workspace"
 	"slices"
 	"strings"
@@ -30,7 +31,15 @@ func NewSession(agentDeps SessionDeps, settings config.AppConfig) (*Session, err
 	if sessionID == "" {
 		sessionID = uuid.NewString()
 	}
+	if manager, ok := toolCaller.(interface{ StartToolSession(string) error }); ok {
+		if err := manager.StartToolSession(sessionID); err != nil {
+			return nil, err
+		}
+	}
 	settings = settings.WithDefaults()
+	if err := settings.Agent.ValidateModelOptions(); err != nil {
+		return nil, err
+	}
 	providerContext, backgroundContext := sessionContexts(agentDeps, settings)
 
 	// The builder is constructed before the gateway but needs the gateway's
@@ -79,7 +88,8 @@ func NewSession(agentDeps SessionDeps, settings config.AppConfig) (*Session, err
 			windowSize: int64(settings.Provider.ContextWindowTokens), providerContext: providerContext, backgroundContext: backgroundContext,
 			warningPercent: settings.Agent.ContextWarningPercent, compactPercent: settings.Agent.ContextCompactPercent,
 			gateway: gateway, events: eventDispatcher, logger: logger, parentSessionID: agentDeps.ParentSessionID,
-			writesWorkspace: func(name string) bool { return toolCapabilities[name].WritesWorkspace },
+			writesWorkspace: func(name string) bool { return name == "tools" || toolCapabilities[name].WritesWorkspace },
+			toolState:       func() string { return toolStateReminder(toolCaller, sessionID) },
 			spill:           processor.gate.spill, workspaceRoot: workspace.NewWorkspacePolicy(settings.Workspace).Root,
 			todo: func() string {
 				if slices.ContainsFunc(toolCaller.PromptSpecs(sessionID), func(spec core.ToolSpec) bool { return spec.Name == "todo" }) {
@@ -87,14 +97,12 @@ func NewSession(agentDeps SessionDeps, settings config.AppConfig) (*Session, err
 				}
 				return ""
 			},
-			resultKeepTurns: settings.Agent.ToolResultKeepTurns, resultAgeTurns: settings.Agent.ToolResultAgeTurns,
 		},
 		providerContext: providerContext, provider: agentDeps.Provider,
 		backgroundContext: backgroundContext, spend: spend, toolCaps: toolCapabilities,
 	}
 	providerContext.SetModel(settings.Provider.Model)
 	runner.refreshProviderMetadata(settings.Provider.Model)
-	gateway.logSchemaSizes(sessionID)
 	return &Session{sessionID: sessionID, runner: runner, tools: toolCaller, prompts: promptBuilder}, nil
 }
 
@@ -150,7 +158,31 @@ func (s *Session) Send(ctx context.Context, message string) (turn.AgentResponse,
 }
 
 func (s *Session) ToolSpecs() []core.ToolSpec {
-	return s.runner.turnProcessor.tools.PromptSpecs(s.sessionID)
+	if catalog, ok := s.tools.(interface{ AvailableSpecs() []core.ToolSpec }); ok {
+		return catalog.AvailableSpecs()
+	}
+	return s.tools.PromptSpecs(s.sessionID)
+}
+
+// ListTools reads the same session state used by the model's tools manager.
+func (s *Session) ListTools(ctx context.Context) ([]tool_search.Listing, error) {
+	manager, ok := s.tools.(interface {
+		ToolListings(context.Context, string) ([]tool_search.Listing, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("tool management unavailable")
+	}
+	return manager.ToolListings(ctx, s.sessionID)
+}
+
+func (s *Session) SetToolEnabled(ctx context.Context, name string, enabled bool) error {
+	manager, ok := s.tools.(interface {
+		SetToolEnabled(context.Context, string, string, bool) error
+	})
+	if !ok {
+		return fmt.Errorf("tool management unavailable")
+	}
+	return manager.SetToolEnabled(ctx, s.sessionID, name, enabled)
 }
 
 func (s *Session) ResumeTranscript(transcript []turn.TranscriptMessage) error {
@@ -169,6 +201,9 @@ func (s *Session) ResumeTranscript(transcript []turn.TranscriptMessage) error {
 	defer s.runner.mu.Unlock()
 	if len(s.runner.messages) != 0 {
 		return fmt.Errorf("agent: cannot resume a session with active history")
+	}
+	if reminder := toolStateReminder(s.tools, s.sessionID); reminder != "" {
+		messages = append(messages, inference.UserMessage(reminder))
 	}
 	s.runner.messages = messages
 	return nil
@@ -220,11 +255,6 @@ func (s *Session) SetModel(name string) { s.runner.pendingModel.Store(&name) }
 // (/profile). Concurrent-safe; the builder applies it at the next Build.
 func (s *Session) SetSystemPrompt(prompt string) { s.prompts.SetBasePrompt(prompt) }
 
-// QueueModelIfIdle queues a fallback only when no user switch is pending.
-func (s *Session) QueueModelIfIdle(name string) bool {
-	return s.runner.pendingModel.CompareAndSwap(nil, &name)
-}
-
 func (s *Session) Model() string {
 	if sw, ok := s.runner.modelGateway.(modelSwitcherGateway); ok {
 		return sw.Model()
@@ -271,4 +301,11 @@ func (s *Session) ReasoningEffort() clients.ReasoningState {
 	templateOK = templateOK || (thinkingOK && kind.DisablesThinking(state.Level))
 	state.Supported = kind.Accepts(state.Level) && (kind != clients.ReasoningLlamaCpp || templateOK)
 	return state
+}
+
+func toolStateReminder(caller core.ToolCaller, id string) string {
+	if manager, ok := caller.(interface{ ToolStateReminder(string) string }); ok {
+		return manager.ToolStateReminder(id)
+	}
+	return ""
 }

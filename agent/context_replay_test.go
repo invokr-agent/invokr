@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/events"
 	turnpkg "github.com/invokr-ai/invokr/platform/turn"
 
@@ -29,7 +28,7 @@ import (
 // change on its own — M3's score SD is ≈1.7 and compactions/run is confounded
 // with run length — while the synthetic harness is not faithful enough to
 // predict real behaviour. Built for #559, kept as the general instrument: any
-// future change to aging, retention or compaction can be measured here first,
+// future change to retention or compaction can be measured here first,
 // and TestMarathonReplayCompactionRate is a cheap guard against a change that
 // silently raises the post-compaction floor.
 //
@@ -98,7 +97,9 @@ var replayFixtures = []string{"m3-pre558.json", "m3-head558.json", "m3-fixc.json
 // It is a pinned measurement, not a target: a change that moves it is not
 // necessarily wrong, but it is never accidental, and the first question about
 // any such change is whether the post-compaction floor moved.
-var replayBaseline = map[string]int{"m3-pre558.json": 1, "m3-head558.json": 1, "m3-fixc.json": 1}
+// Removing aging retains full results until compaction: the former explicit
+// 5/8-turn replay setting produced 1/1/1; without it the counts are 3/4/3.
+var replayBaseline = map[string]int{"m3-pre558.json": 3, "m3-head558.json": 4, "m3-fixc.json": 3}
 
 func loadReplayRun(t *testing.T, name string) replayRun {
 	t.Helper()
@@ -129,7 +130,7 @@ func filler(lead string, n int) string {
 }
 
 // replayArguments rebuilds a call's arguments at the recorded byte length: the
-// real path (pinning and aging key off it) plus padding standing in for the
+// real path (compaction metadata keys off it) plus padding standing in for the
 // edit bodies and shell commands that made up the rest.
 func replayArguments(call replayCall, id string) string {
 	head := fmt.Sprintf(`{"path":%q,"id":%q,"pad":"`, call.Path, id)
@@ -205,7 +206,6 @@ func replayBudget(counts *replayCounts, window int64) *contextBudget {
 		windowSize: window, events: countReplayNotices(counts), logger: zap.NewNop(),
 		gateway:         &pinRunGateway{summary: strings.Repeat("s", replaySummaryBytes)},
 		writesWorkspace: func(name string) bool { return name == "edit_file" || name == "apply_patch" },
-		resultKeepTurns: constants.ToolResultKeepTurns, resultAgeTurns: constants.ToolResultAgeTurns,
 	}
 }
 
@@ -227,7 +227,7 @@ func replayCompactions(t *testing.T, run replayRun, window int64, scale float64)
 		budget := replayBudget(&counts, window)
 		messages, state := replayPrefix(), contextWindowState{}
 		for _, turn := range replayMessages(segment) {
-			messages, state = budget.Prepare(context.Background(), "s", append(messages, turn...), state, nil)
+			messages, state = budget.Prepare(context.Background(), "s", append(messages, turn...), state)
 			state = replayUsage(state, messages, scale)
 		}
 	}
@@ -248,7 +248,7 @@ func replayCallCount(run replayRun) int {
 }
 
 // TestMarathonReplayCompactionRate is the regression guard: how often current
-// code compacts on three real transcripts. A change to aging, retention or
+// code compacts on three real transcripts. A change to retention or
 // compaction that raises the post-compaction floor shows up here as a higher
 // count, cheaply and deterministically, which is what neither the bench nor
 // the synthetic harness delivers.
@@ -311,7 +311,7 @@ func segmentRatios(t *testing.T, segment replaySegment) []float64 {
 	messages, state := replayPrefix(), contextWindowState{}
 	var ratios []float64
 	for index, turn := range replayMessages(segment) {
-		messages, state = budget.Prepare(context.Background(), "s", append(messages, turn...), state, nil)
+		messages, state = budget.Prepare(context.Background(), "s", append(messages, turn...), state)
 		if index >= len(segment.Tokens) || (index > 0 && segment.Tokens[index] < segment.Tokens[index-1]) {
 			break
 		}

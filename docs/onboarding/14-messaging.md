@@ -17,8 +17,12 @@ transports (Listen loops) ──fan-in──▶ Router.Serve ──route──�
 - **chatWorker**: an inbox (cap 8 — overflow answers "busy — try again
   shortly"), a 5-minute idle timeout, and its own agent session + approval
   broker from `Services.NewChatSession`. The session ID is persisted in
-  `messaging.db` (`chat_sessions` table) so a chat resumes the same session
-  across restarts.
+  `messaging.json`, an atomically replaced JSON chat-to-session map owned by
+  `surface/messaging/store.go`. When a worker is recreated, the router loads the
+  stored transcript and calls `ResumeTranscript` before admitting messages.
+  Missing transcripts are allowed for IDs saved before the first turn; other
+  load/resume failures close the new session. Curated memory recall remains
+  separate from transcript text and its persisted execution ledger.
 - **Per message**: a typing indicator keeps refreshing while the turn runs,
   approvals are drained concurrently (2-minute timeout ⇒ deny), panics are
   recovered and reported as "Internal error".

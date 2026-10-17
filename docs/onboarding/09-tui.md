@@ -54,6 +54,11 @@ runtime `CommandService` — asynchronously via a `tea.Cmd`. Others act on the
 session directly (`/model`, `/compact`, `/context`, `/approvals`,
 `/progress`, `/retry`, `/clear`, `/logs`, `/tools`).
 
+Interactive `/clear` starts a fresh session and TUI, resetting conversation,
+execution history, and session-only approval grants. Saved sessions, long-term
+memory, and permanent grants remain. Finish the active turn and approvals first.
+The new session uses startup model/reasoning settings; saved UI preferences remain.
+
 ## Approval queue panel
 
 While `approvalQueue.Len() > 0`, key handling switches to the queue: `↑/↓/j/k`

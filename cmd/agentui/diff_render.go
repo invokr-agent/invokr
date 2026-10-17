@@ -1,6 +1,7 @@
 package agentui
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/antonikliment/tuikit"
@@ -38,20 +39,20 @@ func parsePatchSections(patch string) []patchSection {
 	current := -1
 	inHunk := false
 	for _, line := range strings.Split(patch, "\n") {
-		switch {
-		case strings.HasPrefix(line, "*** Add File: "):
-			sections = append(sections, patchSection{path: strings.TrimSpace(strings.TrimPrefix(line, "*** Add File: "))})
-			current, inHunk = len(sections)-1, true
-		case strings.HasPrefix(line, "*** Update File: "):
-			sections = append(sections, patchSection{path: strings.TrimSpace(strings.TrimPrefix(line, "*** Update File: "))})
-			current, inHunk = len(sections)-1, false
-		case strings.HasPrefix(line, "*** Delete File: "):
-			sections = append(sections, patchSection{path: strings.TrimSpace(strings.TrimPrefix(line, "*** Delete File: ")), deleted: true})
-			current, inHunk = -1, false
-		case strings.HasPrefix(line, "***"):
-			current, inHunk = -1, false
-		case current >= 0:
-			appendPatchLine(&sections[current], line, &inHunk)
+		header, isHeader := strings.CutPrefix(line, "*** ")
+		if !isHeader && !strings.HasPrefix(line, "***") {
+			if current >= 0 {
+				appendPatchLine(&sections[current], line, &inHunk)
+			}
+			continue
+		}
+		current, inHunk = -1, false
+		// Add starts in a hunk (every line is new); Update waits for @@; Delete has no body.
+		if action, path, ok := strings.Cut(header, " File: "); ok && slices.Contains([]string{"Add", "Update", "Delete"}, action) {
+			sections = append(sections, patchSection{path: strings.TrimSpace(path), deleted: action == "Delete"})
+			if action != "Delete" {
+				current, inHunk = len(sections)-1, action == "Add"
+			}
 		}
 	}
 	return sections
@@ -97,46 +98,15 @@ func diffViewFor(s patchSection) *tuikit.DiffView {
 // resetDiffViews drops the memo so a palette or syntax-theme change repaints.
 func resetDiffViews() { clear(diffViewMemo) }
 
-// parseUnifiedDiffSections reconstructs per-file before/after fragments from a
-// unified diff (git diff / git show output). Returns nil when the text has no
-// "diff --git" file headers. Header lines before the first file (git show's
-// commit message) and per-file metadata (index, mode, ---/+++) are skipped;
-// hunk lines share appendPatchLine with the apply_patch parser.
-func parseUnifiedDiffSections(diff string) []patchSection {
-	var sections []patchSection
-	current := -1
-	inHunk := false
-	for _, line := range strings.Split(diff, "\n") {
-		switch {
-		case strings.HasPrefix(line, "diff --git "):
-			sections = append(sections, patchSection{path: unifiedDiffPath(line)})
-			current, inHunk = len(sections)-1, false
-		case current < 0:
-			continue
-		case strings.HasPrefix(line, "deleted file mode"):
-			sections[current].deleted = true
-		case strings.HasPrefix(line, "@@"), inHunk && !strings.HasPrefix(line, "\\"):
-			appendPatchLine(&sections[current], line, &inHunk)
-		}
-	}
-	return sections
-}
-
-// unifiedDiffPath extracts the b-side path from a "diff --git a/x b/x" header.
-// ponytail: splits on " b/", so a path containing that substring mis-parses;
-// quoting/renames fall back to the raw header tail.
-func unifiedDiffPath(header string) string {
-	rest := strings.TrimPrefix(header, "diff --git ")
-	if _, after, ok := strings.Cut(rest, " b/"); ok {
-		return after
-	}
-	return rest
-}
-
 // renderGitDiff renders unified git diff output through DiffView, falling back
 // to the plain colorized block when it does not parse or is too large.
 func renderGitDiff(diff string, width, maxLines int) string {
-	return renderDiffSections(parseUnifiedDiffSections(diff), diff, width, maxLines)
+	files := tuikit.ParseUnifiedDiff(diff)
+	sections := make([]patchSection, len(files))
+	for i, file := range files {
+		sections[i] = patchSection{path: file.Path, before: file.Before, after: file.After, deleted: file.Deleted}
+	}
+	return renderDiffSections(sections, diff, width, maxLines)
 }
 
 // renderPatchDiff renders an applied patch under its tool line. maxLines caps

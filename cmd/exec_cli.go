@@ -4,18 +4,17 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/capability/sessionstore"
 	"github.com/invokr-ai/invokr/cmd/execwire"
 	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/runtime"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"io"
 	"os"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -37,9 +36,8 @@ func NewExecCmd(services ServicesProvider, appConfig *config.AppConfig) *cobra.C
 	opts := execOptions{}
 	cmd := &cobra.Command{
 		Use:     "exec [prompt|-]",
-		Aliases: []string{"run"},
 		Short:   "Run the agent non-interactively",
-		Long:    "The same agent as the TUI, without a terminal: one prompt in, one\nanswer out, exit code 0. Reads the prompt from the argument, or from\nstdin when it is '-' or absent.\n\nTool approvals auto-DENY here, because nobody is watching. Opt in per\ntier with --allow, or to everything with --allow-all.\n\n--resume/--last continue a stored session, spelled the same as on the\ninteractive agent.",
+		Long:    "The same agent as the TUI, without a terminal: one prompt in, one\nanswer out, exit code 0. Reads the prompt from the argument, or from\nstdin when it is '-' or absent.\n\nTool approvals auto-DENY here, because nobody is watching. Opt in per\ntier with --allow, or to everything with --allow-all; neither combines\nwith --mode.\n\n--resume <id>/--last continue a stored session, spelled the same as on\nthe interactive agent.",
 		Example: "  invokr exec \"list the failing tests\"\n  git diff | invokr exec -                       # prompt on stdin\n  invokr exec --json \"...\" | jq .                # JSONL event ledger\n  invokr exec --allow read-only \"...\"            # let it read the workspace\n  invokr exec --last \"and now write the fix\"     # continue the last session",
 		GroupID: groupRun,
 		Args:    cobra.MaximumNArgs(1),
@@ -159,7 +157,7 @@ func runExecPrompt(ctx context.Context, s runtime.Services, out io.Writer, errOu
 	if opts.allowAll {
 		_, _ = fmt.Fprintln(errOut, newRenderer(errOut).danger("WARNING: --allow-all enables unattended arbitrary tool execution"))
 	}
-	stopApprovals := serveExecApprovals(s.Approvals, s.Grants, newExecApprovalPolicy(opts))
+	stopApprovals := serveExecApprovals(s.Approvals, s.Grants, approval.NewTierPolicy(opts.allowAll, opts.allowTiers))
 	defer stopApprovals()
 	if opts.schemaPath != "" {
 		schemaBytes, err := os.ReadFile(opts.schemaPath)
@@ -230,14 +228,20 @@ func completeExecResponse(out io.Writer, sessionID string, model string, resp tu
 }
 
 func execPrompt(in io.Reader, args []string) (string, error) {
+	prompt := ""
 	if len(args) == 0 || args[0] == "-" {
 		data, err := io.ReadAll(in)
 		if err != nil {
 			return "", err
 		}
-		return strings.TrimSpace(string(data)), nil
+		prompt = string(data)
+	} else {
+		prompt = args[0]
 	}
-	return strings.TrimSpace(args[0]), nil
+	if prompt = strings.TrimSpace(prompt); prompt == "" {
+		return "", errors.New("no prompt: pass one as an argument or on stdin")
+	}
+	return prompt, nil
 }
 
 func registerExecEvents(bus events.Bus, out io.Writer, errOut io.Writer, sessionID string, jsonOutput bool) func() {
@@ -362,40 +366,11 @@ func logExecWarn(logger *zap.Logger, message string, err error) {
 	}
 }
 
-type execApprovalPolicy struct {
-	allowAll bool
-	tiers    map[string]bool
-}
-
-func newExecApprovalPolicy(opts execOptions) execApprovalPolicy {
-	policy := execApprovalPolicy{allowAll: opts.allowAll, tiers: make(map[string]bool)}
-	for _, tier := range opts.allowTiers {
-		tier = strings.TrimSpace(tier)
-		if tier == "read-only" {
-			policy.tiers[constants.ShellTierReadonly] = true
-			policy.tiers[constants.CodeInterpreterTierReadWorkspace] = true
-		} else if tier != "" {
-			policy.tiers[tier] = true
-		}
-	}
-	return policy
-}
-
-func (p execApprovalPolicy) approves(req approval.Request) bool {
-	if p.allowAll {
-		return true
-	}
-	if strings.TrimSpace(req.Tier) == "" {
-		return false
-	}
-	return !slices.ContainsFunc(strings.Split(req.Tier, ","), func(tier string) bool { return !p.tiers[strings.TrimSpace(tier)] })
-}
-
 // serveExecApprovals answers approval requests non-interactively. Standing
 // rules are consulted first: a grant or denial the user already made applies
 // here just as it does in the TUI, otherwise it would silently do nothing
 // outside it. The default without a matching rule stays deny-all.
-func serveExecApprovals(broker *approval.Broker, grants *approval.Store, policy execApprovalPolicy) func() {
+func serveExecApprovals(broker *approval.Broker, grants *approval.Store, policy approval.TierPolicy) func() {
 	return approval.Drain(broker, func(req approval.Request) approval.Decision {
 		if req.PolicyChecked && broker.Policy != nil && broker.Policy.Mode() != approval.Manual {
 			return approval.Decision{Reason: "operation requires interactive approval in " + string(broker.Policy.Mode()) + " mode"}
@@ -403,7 +378,7 @@ func serveExecApprovals(broker *approval.Broker, grants *approval.Store, policy 
 		if decision, ok := grants.Decide(req); ok {
 			return decision
 		}
-		approved := policy.approves(req)
+		approved := policy.Approves(req)
 		reason := approval.DenyReason(req)
 		if approved {
 			reason = "approved by exec policy"

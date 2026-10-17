@@ -10,8 +10,9 @@ Package: `config/`. The single source of truth is `config.AppConfig`.
    fine).
 3. **Environment** — `withEnv()`: every knob has a `INVOKR_*` var (plus
    `OPENAI_API_KEY`); parsing is forgiving (bad values keep the fallback).
-4. **Flags** — Cobra binds persistent flags (`--base-url`, `--model`,
-   `--log-*`, `--sandbox`, `--context-window-tokens`) directly onto the
+4. **Flags** — Cobra binds global flags (`--base-url`, `--model`,
+   `--log-*`) and the agent/exec-only session flags (`--sandbox`,
+   `--context-window-tokens`, `--tools`, `--mode`, …) directly onto the
    resolved struct in `cmd/root.go`.
 
 `InvokrHomeDir()` resolves `~/.invokr`, honoring `INVOKR_HOME` — use it

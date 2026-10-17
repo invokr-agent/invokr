@@ -5,10 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/strutil"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
@@ -28,13 +29,7 @@ type Memory struct {
 	user, project *Document
 }
 
-func ResolveMemoryDir() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(homeDir, constants.InvokrHomeDirName), nil
-}
+func ResolveMemoryDir() (string, error) { return config.UserInvokrHomeDir() }
 
 func NewMemory(cfg Config) (*Memory, error) {
 	dir := strings.TrimSpace(cfg.Dir)

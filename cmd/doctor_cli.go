@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,6 +32,11 @@ import (
 // remedy telling the user what to actually do about it.
 type checkResult struct{ name, status, detail, remedy string }
 
+// MarshalJSON backs `doctor --json`; the fields stay unexported.
+func (c checkResult) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]string{"name": c.name, "status": c.status, "detail": c.detail, "remedy": c.remedy})
+}
+
 func ok(name, detail string) checkResult { return checkResult{name, "ok", detail, ""} }
 
 // NewDoctorCmd builds `invokr doctor`. It deliberately never constructs the
@@ -38,7 +44,7 @@ func ok(name, detail string) checkResult { return checkResult{name, "ok", detail
 // exists to explain *why* bootstrap would fail, so it may only read config and
 // probe the environment directly.
 func NewDoctorCmd(app *config.AppConfig) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:          "doctor",
 		Short:        "Check why the agent will not start, without starting it",
 		Long:         "Probes the provider endpoint, the configured model, state directories,\nthe sandbox and container engine, crontab, toolbox interpreters, memory\nmodels and MCP servers. Each non-ok line carries a remedy. Exits\nnonzero only when a check FAILs; WARN is informational.\n\nIt never builds the runtime, so it still works in exactly the broken\nenvironments that make every other command fail.",
@@ -47,9 +53,16 @@ func NewDoctorCmd(app *config.AppConfig) *cobra.Command {
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return renderChecks(cmd.OutOrStdout(), runChecks(cmd.Context(), app.WithDefaults()))
+			results := runChecks(cmd.Context(), app.WithDefaults())
+			err := emit(cmd, results, func() error { return renderChecks(cmd.OutOrStdout(), results) })
+			if err == nil && slices.ContainsFunc(results, func(r checkResult) bool { return r.status == "fail" }) {
+				return errors.New("doctor: a check failed") // --json keeps the exit code
+			}
+			return err
 		},
 	}
+	addJSONFlag(cmd)
+	return cmd
 }
 
 func runChecks(ctx context.Context, cfg config.AppConfig) []checkResult {
@@ -132,6 +145,8 @@ func checkProvider(ctx context.Context, p config.ProviderConfig) ([]string, chec
 
 func checkModel(model string, served []string) checkResult {
 	switch {
+	case model == "" && len(served) > 0:
+		return ok("model", "no model set; will use "+served[0])
 	case len(served) == 0:
 		return checkResult{"model", "warn", "cannot verify " + model + ": no model list from the provider", "fix the provider check above, then re-run invokr doctor"}
 	case !slices.Contains(served, model):

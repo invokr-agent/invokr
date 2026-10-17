@@ -11,7 +11,7 @@ type keyMap struct {
 	ScrollUp, ScrollDown, ToggleHints, Interrupt             key.Binding
 	Redraw, EOF, CycleMode                                   key.Binding
 	FocusTranscript, FoldToggle, FoldPrev, FoldNext, Palette key.Binding
-	Settings                                                 key.Binding
+	Settings, Recorded                                       key.Binding
 }
 
 func defaultKeyMap(showViewSwitch bool) keyMap {
@@ -59,11 +59,12 @@ func defaultKeyMap(showViewSwitch bool) keyMap {
 		// The thinking indicator and every running tool line offer "esc" as the
 		// way out of a turn in flight; before this it was only ctrl+c.
 		Interrupt: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "interrupt turn")),
-		// ctrl+x and ctrl+o: free of both the app keymap and bubbles/textarea's
+		// alt+x and ctrl+o: free of both the app keymap and bubbles/textarea's
 		// editing keys (unlike ctrl+t/f/b/n/p, which the textarea binds).
-		FocusTranscript: key.NewBinding(key.WithKeys("ctrl+x"), key.WithHelp("ctrl+x", "fold tool blocks")),
+		FocusTranscript: key.NewBinding(key.WithKeys("alt+x"), key.WithHelp("alt+x", "browse details")),
 		Settings:        key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "settings")),
-		FoldToggle:      key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "toggle fold")),
+		Recorded:        key.NewBinding(key.WithKeys("alt+r"), key.WithHelp("alt+r", "recorded calls")),
+		FoldToggle:      key.NewBinding(key.WithKeys("enter", "space"), key.WithHelp("enter", "expand/collapse")),
 		FoldPrev:        key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "prev block")),
 		FoldNext:        key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "next block")),
 		// readline staples: ctrl+l redraws a garbled screen, and ctrl+d on an
@@ -78,7 +79,7 @@ func defaultKeyMap(showViewSwitch bool) keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	bindings := []key.Binding{k.Submit, k.Newline, k.Help}
+	bindings := []key.Binding{k.Submit, k.Newline, k.Recorded, k.FocusTranscript, k.Help}
 	if k.SwitchView.Enabled() {
 		bindings = append(bindings, k.SwitchView)
 	}
@@ -91,6 +92,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		primary = append(primary, k.SwitchView)
 	}
 	return [][]key.Binding{
-		primary, {k.PageUp, k.PageDn, k.Home, k.End, k.Up, k.Down}, {k.ScrollUp, k.ScrollDown, k.ToggleHints, k.Interrupt}, {k.FocusTranscript, k.Palette, k.Settings},
+		primary, {k.PageUp, k.PageDn, k.Home, k.End, k.Up, k.Down}, {k.ScrollUp, k.ScrollDown, k.ToggleHints, k.Interrupt}, {k.FocusTranscript, k.Palette, k.Settings, k.Recorded},
 	}
 }

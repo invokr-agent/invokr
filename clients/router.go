@@ -51,7 +51,6 @@ func (s RouterSpec) ActiveProfile() (string, bool) {
 	return id, err == nil && id != ""
 }
 
-// resolveActive reports the profile ID requests route to.
 func (s RouterSpec) resolveActive() (string, error) {
 	if s.Active != "" {
 		if _, ok := s.Profiles[s.Active]; !ok {
@@ -68,7 +67,6 @@ func (s RouterSpec) resolveActive() (string, error) {
 	return "", nil
 }
 
-// routerConfig maps the host spec onto the router's configuration.
 func (s RouterSpec) routerConfig() routercfg.Config {
 	cfg := routercfg.Config{
 		Version: routercfg.Version, Registry: registryTrust(), Providers: make(map[string]routercfg.Provider, len(s.Providers)),
@@ -133,8 +131,7 @@ type routerDriver struct {
 
 	mu sync.Mutex
 	// cfg is the configuration currently applied to the router.
-	cfg routercfg.Config
-	// derived maps a requested model to the profile registered for it.
+	cfg     routercfg.Config
 	derived map[string]string
 }
 
@@ -170,8 +167,6 @@ func newRouterDriver(spec RouterSpec, httpClient *http.Client, stall time.Durati
 	}, nil
 }
 
-// profileFor resolves the profile serving model, registering one against the
-// active provider when the configured table does not already cover it.
 func (d *routerDriver) profileFor(ctx context.Context, model string) (string, error) {
 	if model == "" || model == d.activeModel {
 		if d.activeModel == "" {
@@ -204,11 +199,7 @@ func cloneRouterConfig(cfg routercfg.Config) routercfg.Config {
 }
 
 func (d *routerDriver) Chat(ctx context.Context, req inference.Request) (*inference.Response, error) {
-	profile, err := d.profileFor(ctx, req.Model)
-	if err != nil {
-		return nil, err
-	}
-	return d.router.Chat(ctx, profile, req, nil)
+	return d.ChatStream(ctx, req, nil)
 }
 
 func (d *routerDriver) ChatStream(ctx context.Context, req inference.Request, onEvent func(inference.Event) error) (*inference.Response, error) {

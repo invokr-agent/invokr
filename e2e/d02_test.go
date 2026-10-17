@@ -51,8 +51,8 @@ func TestD02_ToolboxSandboxCapabilityMatrix(t *testing.T) {
 	loads := make([]providertest.CompletionToolCall, 0, len(probes))
 	for _, probe := range probes {
 		d02WritePlugin(t, home.state.ToolboxDir, probe)
-		loads = append(loads, providertest.CompletionToolCall{ID: "load-" + probe.name, Type: "function", Function: providertest.CompletionToolFunction{Name: "tool_search", Arguments: map[string]any{"query": probe.name, "include_schema": true}}})
-		calls = append(calls, providertest.CompletionToolCall{ID: probe.name, Type: "function", Function: providertest.CompletionToolFunction{Name: probe.name, Arguments: map[string]any{}}})
+		loads = append(loads, providertest.CompletionToolCall{ID: "load-" + probe.name, Type: "function", Function: providertest.CompletionToolFunction{Name: "tools", Arguments: map[string]any{"action": "enable", "names": []string{probe.name}}}})
+		calls = append(calls, providertest.CompletionToolCall{ID: probe.name, Type: "function", Function: providertest.CompletionToolFunction{Name: "tools", Arguments: map[string]any{"action": "run", "name": probe.name, "arguments": map[string]any{}}}})
 	}
 	provider := providertest.NewScripted(t, providertest.CompletionStep{ToolCalls: loads}, providertest.CompletionStep{ToolCalls: calls}, providertest.ReplyStep("d02 done"))
 	defer provider.Close()

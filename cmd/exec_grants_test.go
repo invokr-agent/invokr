@@ -27,7 +27,7 @@ func grantedStore(t *testing.T) *approval.Store {
 // that used to be the only grant reader does not exist.
 func TestServeExecApprovalsHonorsStandingGrants(t *testing.T) {
 	broker := approval.NewBroker()
-	stop := serveExecApprovals(broker, grantedStore(t), newExecApprovalPolicy(execOptions{}))
+	stop := serveExecApprovals(broker, grantedStore(t), approval.NewTierPolicy(false, nil))
 	defer stop()
 
 	decision, err := broker.RequestApproval(context.Background(),

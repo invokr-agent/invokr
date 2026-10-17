@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/invokr-ai/invokr/support/strutil"
 	toolcore "github.com/invokr-ai/invokr/tools/core"
 
 	"go.uber.org/zap"
@@ -69,8 +70,8 @@ func (c *CommandService) toolCommands() []CustomCommand {
 			continue
 		}
 		seen[command.Name] = spec.Name
-		usage := toolcore.FirstNonEmptyTrimmed(command.Usage, "/"+command.Name+" [key=value…]")
-		summary := toolcore.FirstNonEmptyTrimmed(command.Summary, "run the "+spec.Name+" tool")
+		usage := strutil.FirstNonEmptyTrimmed(command.Usage, "/"+command.Name+" [key=value…]")
+		summary := strutil.FirstNonEmptyTrimmed(command.Summary, "run the "+spec.Name+" tool")
 		out = append(out, CustomCommand{Name: command.Name, Usage: usage, Summary: summary, Kind: KindTool})
 	}
 	return out
@@ -91,7 +92,7 @@ func (c *CommandService) skillCommands(ctx context.Context) []CustomCommand {
 		name := SkillCommandPrefix + spec.Name
 		out = append(out, CustomCommand{
 			Name: name, Usage: "/" + name + " [task…]", Kind: KindSkill,
-			Summary: toolcore.FirstNonEmptyTrimmed(spec.Description, "run the "+spec.Name+" skill"),
+			Summary: strutil.FirstNonEmptyTrimmed(spec.Description, "run the "+spec.Name+" skill"),
 		})
 	}
 	return out

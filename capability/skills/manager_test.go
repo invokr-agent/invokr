@@ -203,6 +203,11 @@ description: Keep answers short.
 Be concise.
 `)
 
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(root, old, old); err != nil {
+		t.Fatal(err)
+	}
+
 	manager := NewManagerFromConfig(config.AppConfig{
 		Skills: config.SkillsConfig{Dir: root},
 	}, zap.NewNop())
@@ -225,14 +230,6 @@ Changed instructions.
 		t.Fatal(err)
 	}
 
-	// Editing a SKILL.md in place does not bump the skills dir mtime, so the
-	// gate keeps the cache until the dir itself changes (as install/remove
-	// do); simulate that bump, then Specs rescans. The directory stays the
-	// skill's name even though the frontmatter now says "changed".
-	future := time.Now().Add(2 * time.Second)
-	if err := os.Chtimes(root, future, future); err != nil {
-		t.Fatal(err)
-	}
 	specs, err = manager.Specs(context.Background())
 	if err != nil {
 		t.Fatalf("Specs() after file change error = %v", err)
@@ -325,5 +322,26 @@ func TestFilesystemManagerDirectoryOrdering(t *testing.T) {
 		if specs[i].Name != want || specs[i].Description != want {
 			t.Fatalf("spec[%d]=%+v, want %s", i, specs[i], want)
 		}
+	}
+}
+
+func TestFilesystemManagerExplicitInvalidateRefreshesBody(t *testing.T) {
+	root := t.TempDir()
+	path := writeSkill(t, root, "brief", "---\ndescription: Brief.\n---\nOld body.")
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(root, old, old); err != nil {
+		t.Fatal(err)
+	}
+	manager := NewManagerFromConfig(config.AppConfig{Skills: config.SkillsConfig{Dir: root}}, zap.NewNop()).(*FilesystemManager)
+	if _, err := manager.Load(context.Background(), "brief"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("---\ndescription: Brief.\n---\nNew body."), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager.Invalidate()
+	skill, err := manager.Load(context.Background(), "brief")
+	if err != nil || skill.Instructions != "New body." {
+		t.Fatalf("stale skill after invalidation: %+v %v", skill, err)
 	}
 }

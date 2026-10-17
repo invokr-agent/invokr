@@ -10,7 +10,7 @@ func TestNotFoundPrefersMarkdownOverCSVPrefix(t *testing.T) {
 	lines[82] = "\tif lines[2] != `2,\"say \"\"hi\"\"\"` {"
 	lines[113] = "\tif lines[2] != \"| 1 | a | 2026-09-08 | work |  |\" {"
 	old := "\tif lines[2] != `| 1 | a | 2026-09-08 | work |  |` {"
-	_, _, err := applyOps(strings.Join(lines, "\n"), editArgs{Edits: []editOp{{Old: old, New: "replacement"}}}, "table_test.go", "\n")
+	_, _, err := applyOriginalOps(strings.Join(lines, "\n"), editArgs{Edits: []editOp{{Old: old, New: "replacement"}}}, "table_test.go", "\n")
 	if err == nil || !strings.Contains(err.Error(), "starts at line 114") {
 		t.Fatalf("expected Markdown candidate at line 114: %v", err)
 	}
@@ -28,17 +28,17 @@ func TestNotFoundDifferencePrecedesContext(t *testing.T) {
 	}
 }
 
-func TestBatchNotFoundExplainsInvalidatedAnchor(t *testing.T) {
+func TestBatchRejectsOverlappingOriginalAnchors(t *testing.T) {
 	for _, old := range []string{"alpha = 1", "alpha  = 1"} {
 		t.Run(old, func(t *testing.T) {
-			_, _, err := applyOps("alpha = 1\nbeta\n", editArgs{Edits: []editOp{
+			_, _, err := applyOriginalOps("alpha = 1\nbeta\n", editArgs{Edits: []editOp{
 				{Old: "alpha = 1", New: "ALPHA = 2"},
 				{Old: old, New: "other"},
 			}}, "f.go", "\n")
 			if err == nil {
 				t.Fatal("expected invalidated anchor error")
 			}
-			for _, want := range []string{"edits[1]", "earlier edit", "No changes were written", "Merge"} {
+			for _, want := range []string{"overlapping edits", "No changes were written", "merge"} {
 				if !strings.Contains(err.Error(), want) {
 					t.Fatalf("missing %q: %v", want, err)
 				}

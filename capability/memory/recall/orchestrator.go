@@ -116,14 +116,15 @@ func (o *Orchestrator) appendPinned(ctx context.Context, req core.Query, hits []
 		seen[RecordKey(hit.Record)] = struct{}{}
 	}
 	for _, rec := range records {
-		hits = appendUniqueHit(req, hits, seen, core.Hit{Record: rec})
+		hits = AppendUniqueHit(req.Limit, hits, seen, core.Hit{Record: rec})
 	}
 	return hits, nil
 }
 
-func appendUniqueHit(req core.Query, hits []core.Hit, seen map[string]struct{}, hit core.Hit) []core.Hit {
+// AppendUniqueHit appends an unseen record within limit; nonpositive limits are unlimited.
+func AppendUniqueHit(limit int, hits []core.Hit, seen map[string]struct{}, hit core.Hit) []core.Hit {
 	key := RecordKey(hit.Record)
-	if _, ok := seen[key]; ok || (req.Limit > 0 && len(hits) >= req.Limit) {
+	if _, ok := seen[key]; ok || (limit > 0 && len(hits) >= limit) {
 		return hits
 	}
 	seen[key] = struct{}{}

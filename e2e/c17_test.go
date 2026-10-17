@@ -42,8 +42,8 @@ func TestC17_OrphanedMarkupAndMaxTurns(t *testing.T) {
 
 	t.Run("max turns degrades to best effort", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			providertest.NativeToolCallStep("c17-a", "tool_search", map[string]any{"query": "tool_search", "include_schema": true}),
-			providertest.NativeToolCallStep("c17-b", "tool_search", map[string]any{"query": "tool_search", "include_schema": true}),
+			providertest.NativeToolCallStep("c17-a", "tools", map[string]any{"action": "search", "query": "tool_search", "include_schema": true}),
+			providertest.NativeToolCallStep("c17-b", "tools", map[string]any{"action": "search", "query": "tool_search", "include_schema": true}),
 			providertest.ReplyStep("best effort answer"),
 		)
 		defer provider.Close()

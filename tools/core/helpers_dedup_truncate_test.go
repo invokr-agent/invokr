@@ -1,6 +1,10 @@
 package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/invokr-ai/invokr/support/strutil"
+)
 
 func TestDedupPreserveOrder(t *testing.T) {
 	cases := []struct {
@@ -53,10 +57,10 @@ func TestTruncateRunes(t *testing.T) {
 }
 
 func TestFirstNonEmpty(t *testing.T) {
-	if got := FirstNonEmpty("", "  ", "value", "other"); got != "value" {
+	if got := strutil.FirstNonEmpty("", "  ", "value", "other"); got != "value" {
 		t.Fatalf("FirstNonEmpty = %q, want %q", got, "value")
 	}
-	if got := FirstNonEmpty("", ""); got != "" {
+	if got := strutil.FirstNonEmpty("", ""); got != "" {
 		t.Fatalf("FirstNonEmpty = %q, want empty", got)
 	}
 }

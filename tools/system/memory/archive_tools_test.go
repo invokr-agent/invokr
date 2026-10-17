@@ -9,6 +9,7 @@ import (
 	"github.com/invokr-ai/invokr/capability/approval"
 	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -67,7 +68,7 @@ func TestRecallArchiveIsApprovalGated(t *testing.T) {
 	reg := newCaptureRegistrar()
 	manager := &fakeMemoryManager{archived: []memorycore.Record{{ID: "a1", Content: "old"}}}
 
-	registerArchiveTool(reg, manager, approval.StaticApprover{Decision: approval.Decision{Approved: false}})
+	registerArchiveTool(reg, manager, testutil.StaticApprover{Decision: approval.Decision{Approved: false}})
 
 	spec, ok := reg.specs["recall_archive"]
 	if !ok {
@@ -87,7 +88,7 @@ func TestRecallArchiveIsApprovalGated(t *testing.T) {
 
 	// With approval granted the call proceeds.
 	reg2 := newCaptureRegistrar()
-	registerArchiveTool(reg2, manager, approval.StaticApprover{Decision: approval.Decision{Approved: true}})
+	registerArchiveTool(reg2, manager, testutil.StaticApprover{Decision: approval.Decision{Approved: true}})
 	if _, err := reg2.handlers["recall_archive"](context.Background(), call); err != nil {
 		t.Fatalf("approved recall_archive failed: %v", err)
 	}

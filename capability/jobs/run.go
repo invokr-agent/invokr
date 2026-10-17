@@ -24,13 +24,20 @@ type RunOptions struct {
 // stays free of runtime dependencies (platform/runtime imports jobs, not the
 // other way around).
 func Run(ctx context.Context, session turn.Session, broker *approval.Broker, store *Store, job Job, opts RunOptions) error {
-	stop := drainApprovals(broker, job.ApprovalPolicy == "allow")
+	stop := drainApprovals(broker, approval.ParsePolicy(job.ApprovalPolicy))
 	defer stop()
 
 	resp, err := session.Send(ctx, job.Prompt)
 	if err != nil {
 		RecordStatus(store, job.ID, "error: "+err.Error(), opts.Logger)
 		return err
+	}
+	for _, failure := range resp.ToolFailures {
+		if failure.Kind == turn.OutcomeKindDenied {
+			status := fmt.Sprintf("denied: %s: %s", failure.Tool, failure.Detail)
+			RecordStatus(store, job.ID, status, opts.Logger)
+			return fmt.Errorf("jobs: %s: %s", job.Name, status)
+		}
 	}
 	if opts.FailOnToolError && len(resp.ToolFailures) > 0 {
 		status := fmt.Sprintf("error: %d tool failure(s)", len(resp.ToolFailures))
@@ -54,14 +61,13 @@ func RecordStatus(store *Store, jobID, status string, logger *zap.Logger) {
 }
 
 // drainApprovals drains the approval broker's request channel, deciding each
-// pending request according to the approved flag. It returns a stop function
-// that cancels the goroutine.
-func drainApprovals(broker *approval.Broker, approved bool) func() {
-	reason := "job policy deny"
-	if approved {
-		reason = "job policy allow"
-	}
-	return approval.Drain(broker, func(approval.Request) approval.Decision {
-		return approval.Decision{Approved: approved, Reason: reason}
+// pending request by the job's tier policy. It returns a stop function that
+// cancels the goroutine.
+func drainApprovals(broker *approval.Broker, policy approval.TierPolicy) func() {
+	return approval.Drain(broker, func(req approval.Request) approval.Decision {
+		if policy.Approves(req) {
+			return approval.Decision{Approved: true, Reason: "job policy allow"}
+		}
+		return approval.Decision{Reason: "job policy deny"}
 	})
 }

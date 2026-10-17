@@ -52,12 +52,12 @@ func TestR11b_ConcurrentMemoryWrites(t *testing.T) {
 	beforeSessions := countSessions(t, home)
 
 	providerA := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("r11b-a", "memory", map[string]any{"action": "save", "content": "r11-proc-a-fact"}),
+		managedToolStep("r11b-a", "memory", map[string]any{"action": "save", "content": "r11-proc-a-fact"}),
 		providertest.ReplyStep("saved a"),
 	)
 	defer providerA.Close()
 	providerB := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("r11b-b", "memory", map[string]any{"action": "save", "content": "r11-proc-b-fact"}),
+		managedToolStep("r11b-b", "memory", map[string]any{"action": "save", "content": "r11-proc-b-fact"}),
 		providertest.ReplyStep("saved b"),
 	)
 	defer providerB.Close()

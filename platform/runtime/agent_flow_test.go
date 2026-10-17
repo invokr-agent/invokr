@@ -26,7 +26,7 @@ func TestRuntime_AgentToolLoopScenarios(t *testing.T) {
 		{
 			name: "tagged tool call",
 			steps: []providertest.CompletionStep{
-				providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
+				providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
 				providertest.ReplyStep("done"),
 			},
 			wantMessage:   "done",
@@ -36,7 +36,7 @@ func TestRuntime_AgentToolLoopScenarios(t *testing.T) {
 		{
 			name: "native tool call preserves call id",
 			steps: []providertest.CompletionStep{
-				providertest.NativeToolCallStep("call_search_1", "tool_search", `{"query":"tool_search","include_schema":true}`),
+				providertest.NativeToolCallStep("call_search_1", "tools", `{"query":"tools","action":"search"}`),
 				providertest.ReplyStep("native done"),
 			},
 			wantMessage:   "native done",
@@ -75,8 +75,8 @@ func TestRuntime_AgentToolLoopScenarios(t *testing.T) {
 				return app
 			},
 			steps: []providertest.CompletionStep{
-				providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
-				providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
+				providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
+				providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
 				providertest.ReplyStep("best effort answer"),
 			},
 			// The step limit ends this run, so the answer carries the banner.
@@ -86,9 +86,9 @@ func TestRuntime_AgentToolLoopScenarios(t *testing.T) {
 		{
 			name: "repeated identical tool call nudges model",
 			steps: []providertest.CompletionStep{
-				providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
-				providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
-				providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
+				providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
+				providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
+				providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
 				providertest.ReplyStep("changed approach"),
 			},
 			wantMessage:   "changed approach",
@@ -109,8 +109,8 @@ func TestRuntime_AgentToolLoopScenarios(t *testing.T) {
 			name: "parallel native tool calls both feed back",
 			steps: []providertest.CompletionStep{
 				{ToolCalls: []providertest.CompletionToolCall{
-					{ID: "call_a", Type: "function", Function: providertest.CompletionToolFunction{Name: "tool_search", Arguments: `{"query":"alpha","include_schema":true}`}},
-					{ID: "call_b", Type: "function", Function: providertest.CompletionToolFunction{Name: "tool_search", Arguments: `{"query":"beta","include_schema":true}`}},
+					{ID: "call_a", Type: "function", Function: providertest.CompletionToolFunction{Name: "tools", Arguments: `{"query":"alpha","action":"search"}`}},
+					{ID: "call_b", Type: "function", Function: providertest.CompletionToolFunction{Name: "tools", Arguments: `{"query":"beta","action":"search"}`}},
 				}},
 				providertest.ReplyStep("parallel done"),
 			},
@@ -158,7 +158,7 @@ func TestRuntime_AgentToolLoopScenarios(t *testing.T) {
 
 func TestRuntime_EmitsAgentAndToolEvents(t *testing.T) {
 	provider := providertest.NewScripted(t,
-		providertest.ToolCallStep("tool_search", `{"query":"tool_search","include_schema":true}`),
+		providertest.ToolCallStep("tools", `{"query":"tools","action":"search"}`),
 		providertest.ReplyStep("done"),
 	)
 	defer provider.Close()
@@ -207,7 +207,7 @@ func TestRuntime_EmitsAgentAndToolEvents(t *testing.T) {
 			t.Fatalf("event %d session id = %q, want %q", i, ev.SessionID, sessionID)
 		}
 	}
-	if got[2].Tool == nil || got[2].Tool.Name != "tool_search" {
+	if got[2].Tool == nil || got[2].Tool.Name != "tools" {
 		t.Fatalf("tool started payload = %#v", got[2])
 	}
 	if got[3].Tool == nil || got[3].Tool.OutputBytes == 0 {

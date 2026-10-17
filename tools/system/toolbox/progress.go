@@ -45,7 +45,7 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 		}
 		w.tool.dispatcher.Dispatch(w.ctx, events.Event{
 			Type: events.EventToolProgress, Timestamp: time.Now(), SessionID: core.SessionIDFromContext(w.ctx),
-			Tool: &events.ToolPayload{Name: w.tool.Name, Progress: text},
+			Tool: &events.ToolPayload{ID: core.ToolCallIDFromContext(w.ctx), Name: w.tool.Name, Progress: text},
 		})
 	}
 	if len(w.buf) > progressLineCap {

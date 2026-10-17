@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/capability/sessionstore"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/runtime"
 	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-ai/invokr/tools/core"
 
 	"go.uber.org/zap"
 )
@@ -157,6 +159,12 @@ func (r *Router) newWorker(ctx context.Context, key string, t Transport, chatID 
 	if err != nil {
 		return nil, fmt.Errorf("new chat session: %w", err)
 	}
+	if err := r.restoreTranscript(ctx, sess, storedID); err != nil {
+		if closer, ok := sess.(interface{ Close() }); ok {
+			closer.Close()
+		}
+		return nil, fmt.Errorf("restore chat transcript: %w", err)
+	}
 	if storedID == "" {
 		if err := r.store.SetSessionID(ctx, key, sess.SessionID()); err != nil {
 			r.services.Logger.Warn("failed to persist session ID", zap.String("key", key), zap.Error(err))
@@ -165,6 +173,27 @@ func (r *Router) newWorker(ctx context.Context, key string, t Transport, chatID 
 	return &chatWorker{
 		key: key, chatID: chatID, transport: t, session: sess, inbox: make(chan Inbound, workerInboxCap), approvals: broker,
 	}, nil
+}
+
+// Restore before admitting messages; a stored ID can precede its first persisted turn.
+func (r *Router) restoreTranscript(ctx context.Context, session turn.IdentifiedSession, id string) error {
+	if id == "" {
+		return nil
+	}
+	stored, err := sessionstore.New(r.app.Memory.Dir, r.services.Logger).Load(ctx, id)
+	if errors.Is(err, sessionstore.ErrSessionNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	resumer, ok := session.(turn.TranscriptResumer)
+	if !ok {
+		return fmt.Errorf("session does not support transcript resume")
+	}
+	return resumer.ResumeTranscript(core.MapSlice(stored, func(item sessionstore.Message) turn.TranscriptMessage {
+		return turn.TranscriptMessage{Role: item.Role, Text: item.Text, ToolCalls: item.ToolCalls, ToolCallCount: item.ToolCallCount, ExecutionEvidence: item.ExecutionEvidence}
+	}))
 }
 
 func (w *chatWorker) run(ctx context.Context, r *Router) {

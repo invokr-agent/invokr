@@ -4,7 +4,6 @@ import "time"
 
 const (
 	DefaultProviderBaseURL = "http://localhost:8080"
-	DefaultProviderModel   = "gpt-4o-mini"
 	// DefaultAnthropicModel seeds the Anthropic profile a fresh setup writes.
 	// Haiku is the cheap, fast tier, which suits a default someone lands on
 	// without choosing it. It is a starting point, not a pin: "invokr config
@@ -46,17 +45,6 @@ const (
 	// already pages itself with offset/limit continuation markers — spilling
 	// its pages to a file read back with read_file would be circular.
 	ToolResultStrategyCap = "cap"
-	// ToolResultKeepTurns is how many assistant turns a tool result stays
-	// verbatim before the aging pass stubs it (#480). Five rather than three:
-	// a read-then-plan-then-edit workflow re-reads what a 3-turn window
-	// elides, and 10 of 18 edit misses in marathon M1 were on files collapsed
-	// one to three turns earlier.
-	ToolResultKeepTurns = 5
-	// ToolResultAgeTurns is how old (in assistant turns) an eligible result must
-	// get before the aging pass fires at all. Between triggers history is left
-	// untouched so the provider's prompt-prefix cache survives; when it fires,
-	// every result past ToolResultKeepTurns is collapsed in one batch (#480).
-	ToolResultAgeTurns = 8
 	// SpillDirName is the Invokr-home subdirectory holding spilled tool
 	// results; it is appended to the workspace extra roots so read_file can
 	// page spill files.

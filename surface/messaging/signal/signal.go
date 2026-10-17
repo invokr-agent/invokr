@@ -32,14 +32,9 @@ type Client struct {
 	preAckLines    [][]byte
 	mu             sync.Mutex
 	nextID         atomic.Int64
-	pending        sync.Map // map[request ID]*pendingApproval
+	pending        sync.Map // map[request ID]*messaging.PendingApproval
 	pendingRPC     sync.Map // map[int64]chan rpcResult
 	dialer         func(network, address string) (net.Conn, error)
-}
-
-type pendingApproval struct {
-	chatID   string
-	decision chan bool
 }
 
 // New dials the UNIX socket and sends subscribeReceive.
@@ -67,7 +62,6 @@ func newWithDialer(socketPath string, allowedNumbers []string, allowAll bool, di
 	return c, nil
 }
 
-// Name returns "signal".
 func (c *Client) Name() string { return "signal" }
 
 // Allowed reports whether the number is on the allowlist (fail closed).
@@ -77,9 +71,7 @@ func (c *Client) Allowed(chatID string) bool {
 
 // Listen reads JSON-RPC notifications from the socket.
 func (c *Client) Listen(ctx context.Context) (<-chan messaging.Inbound, error) {
-	out := make(chan messaging.Inbound, 32)
-	go c.readLoop(ctx, out)
-	return out, nil
+	return messaging.StartListen(ctx, c.readLoop)
 }
 
 func (c *Client) readLoop(ctx context.Context, out chan<- messaging.Inbound) {
@@ -229,7 +221,7 @@ func (c *Client) handleApprovalReply(source, text string) bool {
 		return false
 	}
 	select {
-	case pending.decision <- approved:
+	case pending.Decision <- approved:
 	default:
 	}
 	return true
@@ -251,18 +243,18 @@ func parseApprovalReply(text string) (bool, string, bool) {
 	return verb == "YES", requestID, true
 }
 
-func (c *Client) pendingForReply(source, requestID string) *pendingApproval {
+func (c *Client) pendingForReply(source, requestID string) *messaging.PendingApproval {
 	if requestID != "" {
 		value, ok := c.pending.Load(requestID)
-		if !ok || value.(*pendingApproval).chatID != source {
+		if !ok || value.(*messaging.PendingApproval).ChatID != source {
 			return nil
 		}
-		return value.(*pendingApproval)
+		return value.(*messaging.PendingApproval)
 	}
-	var match *pendingApproval
+	var match *messaging.PendingApproval
 	c.pending.Range(func(_, value any) bool {
-		pending := value.(*pendingApproval)
-		if pending.chatID != source {
+		pending := value.(*messaging.PendingApproval)
+		if pending.ChatID != source {
 			return true
 		}
 		if match != nil {
@@ -298,26 +290,9 @@ func (c *Client) SetTyping(ctx context.Context, chatID string, active bool) erro
 
 // AskApproval sends the text prompt and blocks for a YES/NO reply or ctx expiry.
 func (c *Client) AskApproval(ctx context.Context, chatID string, req messaging.ApprovalRequest) (bool, error) {
-	req.ID = strings.TrimSpace(req.ID)
-	if req.ID == "" {
-		return false, fmt.Errorf("signal: approval request ID is required")
-	}
-	pending := &pendingApproval{chatID: chatID, decision: make(chan bool, 1)}
-	if _, loaded := c.pending.LoadOrStore(req.ID, pending); loaded {
-		return false, fmt.Errorf("signal: duplicate approval request ID %q", req.ID)
-	}
-	defer c.pending.Delete(req.ID)
-
-	prompt := buildApprovalPrompt(req)
-	if err := c.Send(ctx, chatID, prompt); err != nil {
-		return false, err
-	}
-	select {
-	case approved := <-pending.decision:
-		return approved, nil
-	case <-ctx.Done():
-		return false, ctx.Err()
-	}
+	return messaging.AwaitApproval(ctx, &c.pending, c.Name(), chatID, req, func(req messaging.ApprovalRequest) error {
+		return c.Send(ctx, chatID, buildApprovalPrompt(req))
+	})
 }
 
 func buildApprovalPrompt(req messaging.ApprovalRequest) string {

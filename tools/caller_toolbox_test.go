@@ -309,7 +309,7 @@ func TestReadFileToolIsCallableWithoutSchemaSearch(t *testing.T) {
 		core.CallerDeps{App: config.AppConfig{Toolbox: config.ToolboxConfig{Dir: "../toolbox", AllowUnsandboxed: true}}},
 		zap.NewNop(),
 	)
-	if !slices.ContainsFunc(caller.CallableSpecs("new-session"), func(spec core.ToolSpec) bool {
+	if !slices.ContainsFunc(caller.StableSpecs(), func(spec core.ToolSpec) bool {
 		return spec.Name == "read"
 	}) {
 		t.Fatal("expected read to be immediately callable")

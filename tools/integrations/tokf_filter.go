@@ -3,11 +3,13 @@ package integrations
 import (
 	"bytes"
 	"context"
-	"github.com/invokr-ai/invokr/tools/core"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
 
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
@@ -25,7 +27,7 @@ func ResultFilterForConfig(cfg config.ToolboxConfig, logger *zap.Logger) core.Re
 		return core.NoopResultFilter{}
 	}
 
-	bin := core.FirstNonEmpty(cfg.TokfBin, constants.DefaultTokfBin)
+	bin := strutil.FirstNonEmpty(cfg.TokfBin, constants.DefaultTokfBin)
 	if bin == constants.DefaultTokfBin && runningFromGoTestBinary() {
 		logger.Debug("tokf result filtering disabled in go test binary")
 		return core.NoopResultFilter{}
@@ -49,16 +51,16 @@ func NewTokfResultFilter(cfg config.ToolboxConfig, logger *zap.Logger) *TokfResu
 		helperBin = "github.com/invokr-ai/invokr"
 	}
 
-	return &TokfResultFilter{bin: core.FirstNonEmpty(cfg.TokfBin, constants.DefaultTokfBin), home: cfg.TokfHome, helperBin: helperBin, logger: logger}
+	return &TokfResultFilter{bin: strutil.FirstNonEmpty(cfg.TokfBin, constants.DefaultTokfBin), home: cfg.TokfHome, helperBin: helperBin, logger: logger}
 }
 
 func (f *TokfResultFilter) FilterToolResult(ctx context.Context, meta core.ToolResultMeta, input string) (string, error) {
-	args := []string{"run", core.FirstNonEmpty(f.helperBin, "github.com/invokr-ai/invokr"), "tokf-filter-stdin", "--tool", meta.ToolName, "--source", meta.Source}
+	args := []string{"run", strutil.FirstNonEmpty(f.helperBin, "github.com/invokr-ai/invokr"), "tokf-filter-stdin", "--tool", meta.ToolName, "--source", meta.Source}
 	if strings.TrimSpace(meta.Runtime) != "" {
 		args = append(args, "--runtime", meta.Runtime)
 	}
 
-	cmd := exec.CommandContext(ctx, core.FirstNonEmpty(f.bin, constants.DefaultTokfBin), args...)
+	cmd := exec.CommandContext(ctx, strutil.FirstNonEmpty(f.bin, constants.DefaultTokfBin), args...)
 	core.ConfigureProcessGroup(cmd)
 	cmd.Env = tokfEnv(os.Environ(), f.home)
 	cmd.Stdin = strings.NewReader(input)
@@ -83,7 +85,7 @@ func runningFromGoTestBinary() bool {
 }
 
 func lookupTokfBin(bin string) (string, error) {
-	bin = core.FirstNonEmpty(bin, constants.DefaultTokfBin)
+	bin = strutil.FirstNonEmpty(bin, constants.DefaultTokfBin)
 	resolvedBin, err := exec.LookPath(bin)
 	if err != nil {
 		return "", err

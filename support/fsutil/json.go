@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 )
 
 // ReadJSON decodes the JSON file at path into T. The bool reports whether the
@@ -34,6 +35,19 @@ func WriteJSON(path string, v any, perm os.FileMode) error {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), perm)
+}
+
+// SaveJSON atomically replaces path with v as indented JSON at 0600, creating
+// the parent directory at 0700 first.
+func SaveJSON(path string, v any) error {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	return WriteFileAtomic(path, append(data, '\n'), 0o600)
 }
 
 // Exists reports whether path exists. A stat failure other than "not exist" is

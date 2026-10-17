@@ -25,7 +25,7 @@ func TestC09_TmuxToolLifecycle(t *testing.T) {
 	}
 	// Phase 1: open a session; the scripted model then replies.
 	prov1 := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c09-open", "tmux", map[string]any{"action": "open", "command": "echo tmux-canary-58"}),
+		managedToolStep("c09-open", "tmux", map[string]any{"action": "open", "command": "echo tmux-canary-58"}),
 		providertest.ReplyStep("opened"),
 	)
 	defer prov1.Close()
@@ -35,8 +35,8 @@ func TestC09_TmuxToolLifecycle(t *testing.T) {
 	})
 
 	r1 := runInProc(t, home, prov1.URL(), "open a tmux session", grantAll)
-	if r1.Resp.ToolCallCount != 1 {
-		t.Fatalf("phase 1: tool_call_count = %d, want 1", r1.Resp.ToolCallCount)
+	if r1.Resp.ToolCallCount != 2 {
+		t.Fatalf("phase 1: tool_call_count = %d, want 2", r1.Resp.ToolCallCount)
 	}
 	if len(r1.Approvals) != 1 {
 		t.Fatalf("phase 1: want 1 approval for open, got %d", len(r1.Approvals))
@@ -52,19 +52,19 @@ func TestC09_TmuxToolLifecycle(t *testing.T) {
 
 	// Phase 2: full lifecycle with the real session name.
 	prov2 := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c09-read", "tmux", map[string]any{"action": "read", "session": sess, "wait_ms": 300}),
-		providertest.NativeToolCallStep("c09-list", "tmux", map[string]any{"action": "list"}),
-		providertest.NativeToolCallStep("c09-kill", "tmux", map[string]any{"action": "kill", "session": sess}),
-		providertest.NativeToolCallStep("c09-open-cat", "tmux", map[string]any{"action": "open", "command": "cat"}),
-		providertest.NativeToolCallStep("c09-open-cat2", "tmux", map[string]any{"action": "open", "command": "cat"}),
-		providertest.NativeToolCallStep("c09-miss", "tmux", map[string]any{"action": "read", "session": "definitely-missing"}),
+		managedToolStep("c09-read", "tmux", map[string]any{"action": "read", "session": sess, "wait_ms": 300}),
+		managedToolStep("c09-list", "tmux", map[string]any{"action": "list"}),
+		managedToolStep("c09-kill", "tmux", map[string]any{"action": "kill", "session": sess}),
+		managedToolStep("c09-open-cat", "tmux", map[string]any{"action": "open", "command": "cat"}),
+		managedToolStep("c09-open-cat2", "tmux", map[string]any{"action": "open", "command": "cat"}),
+		managedToolStep("c09-miss", "tmux", map[string]any{"action": "read", "session": "definitely-missing"}),
 		providertest.ReplyStep("done"),
 	)
 	defer prov2.Close()
 
 	r2 := runInProc(t, home, prov2.URL(), "exercise tmux lifecycle", denyAll)
-	if r2.Resp.ToolCallCount != 6 {
-		t.Fatalf("phase 2: tool_call_count = %d, want 6", r2.Resp.ToolCallCount)
+	if r2.Resp.ToolCallCount != 12 {
+		t.Fatalf("phase 2: tool_call_count = %d, want 12", r2.Resp.ToolCallCount)
 	}
 	// Exactly one approval: the first open-cat. The identical retry is
 	// suppressed by the request-local denial cache.

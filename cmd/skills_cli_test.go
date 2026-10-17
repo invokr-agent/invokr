@@ -91,9 +91,9 @@ func TestSkillsInstallListRemove(t *testing.T) {
 		t.Fatalf("list output: %q", out)
 	}
 
-	out, err = runSkills(t, app, "remove", "alpha")
+	out, err = runSkills(t, app, "rm", "alpha")
 	if err != nil {
-		t.Fatalf("remove: %v", err)
+		t.Fatalf("rm: %v", err)
 	}
 	if !strings.Contains(out, "skill alpha removed") {
 		t.Fatalf("remove output: %q", out)

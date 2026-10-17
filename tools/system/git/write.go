@@ -12,6 +12,7 @@ import (
 )
 
 type writeArgs struct {
+	argv    []string
 	Op      string   `json:"op" enum:"add,commit,branch_create,checkout,stash" desc:"Write operation to run."`
 	Paths   []string `json:"paths,omitempty" desc:"add: paths to stage."`
 	Message string   `json:"message,omitempty" desc:"commit: commit message; stash push: stash message."`
@@ -19,7 +20,7 @@ type writeArgs struct {
 	StashOp string   `json:"stash_op,omitempty" enum:"push,pop" desc:"stash: push (default) or pop."`
 }
 
-const writeDescription = "Run a safe git write operation: add (stage paths), commit, branch_create, checkout (switch branch/commit), stash (push/pop). Always asks for approval. Push, pull, rebase, reset and other history-rewriting commands are not available here — use the shell tool."
+const writeDescription = "Modify git: add stages paths; commit records staged changes; branch_create creates a branch; checkout switches branch/commit; stash pushes/pops. Requires approval. For push, pull, rebase, reset or other operations, use shell."
 
 func registerWriteTool(c core.NativeRegistrar, deps core.CallerDeps, root string) {
 	core.Register(c, core.Tool[writeArgs]{
@@ -30,15 +31,12 @@ func registerWriteTool(c core.NativeRegistrar, deps core.CallerDeps, root string
 			Metadata:   core.WriteWorkspaceAskMetadata("system", core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true}),
 		},
 		Prepare: func(_ context.Context, args writeArgs) (writeArgs, error) {
-			_, err := writeArgv(args)
+			var err error
+			args.argv, err = writeArgv(args)
 			return args, err
 		},
 		Approve: func(_ context.Context, args writeArgs) core.ApprovalDecision {
-			argv, err := writeArgv(args)
-			if err != nil {
-				return core.Deny(err.Error())
-			}
-			display := "git " + strings.Join(argv, " ")
+			display := "git " + strings.Join(args.argv, " ")
 			return core.Ask(approval.Request{
 				Confined: sandbox.Available(), Writes: true,
 				Tool: writeToolName, Reason: "git_write modifies the repository", Tier: "write_workspace",
@@ -48,11 +46,7 @@ func registerWriteTool(c core.NativeRegistrar, deps core.CallerDeps, root string
 		},
 		Approver: deps.Approver,
 		Execute: func(ctx context.Context, args writeArgs) (string, error) {
-			argv, err := writeArgv(args)
-			if err != nil {
-				return "", err
-			}
-			out, err := gitTextEnv(ctx, root, commitIdentityEnv(ctx, args.Op, root), argv...)
+			out, err := gitTextEnv(ctx, root, commitIdentityEnv(ctx, args.Op, root), args.argv...)
 			if err != nil {
 				return flagged(writeToolName, err)
 			}

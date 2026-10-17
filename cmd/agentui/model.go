@@ -5,11 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
 
@@ -53,8 +53,9 @@ type model struct {
 	modelPicker, syntaxPicker, skillPicker, palette listPicker
 	// overlay is the modal popup drawn over the finished frame.
 	overlay    tuikit.Overlay
+	toolDialog toolDialog
 	settings   settingsPanel
-	chat       viewport.Model
+	chat       tuikit.MemoList
 	help       help.Model
 	input      textarea.Model
 	spinner    spinner.Model
@@ -67,20 +68,22 @@ type model struct {
 	browsing, sending, userScrolled bool
 	// cancelSend stops the turn in flight; stopping marks that the cancel was
 	// deliberate, so the response path renders a stop notice, not an error.
-	cancelSend  context.CancelFunc
-	sentAt      time.Time
-	stopping    bool
-	quitArmed   time.Time
-	usage       turn.TokenUsage
-	hasUsage    bool
-	notify      notifier
-	lastPending int
+	cancelSend      context.CancelFunc
+	sentAt          time.Time
+	compactingAt    time.Time
+	stopping        bool
+	recorded        string
+	recordedWarning string
+	turnStart       uint64
+	quitArmed       time.Time
+	usage           turn.TokenUsage
+	hasUsage        bool
+	notify          notifier
+	lastPending     int
 	// focusMode is the transcript-focus (fold) mode; focusMsg is the message
-	// index its cursor sits on; blockRanges are the [start,end) content-line
-	// ranges of foldable blocks in the last composed chat content.
+	// index its cursor sits on.
 	focusMode     bool
 	focusMsg      int
-	blockRanges   []blockRange
 	hideHints     bool
 	prefsPath     string
 	width, height int
@@ -106,7 +109,7 @@ const (
 // ponytail: env knob instead of full config/flag plumbing. Promote to a CLI flag
 // if it needs to be discoverable.
 func progressModeFromEnv() progressMode {
-	mode, _ := parseMode[progressMode](progressModeNames, strings.ToLower(strings.TrimSpace(os.Getenv("INVOKR_TOOL_PROGRESS"))))
+	mode, _ := parseMode[progressMode](progressModeNames, strings.ToLower(config.Env("INVOKR_TOOL_PROGRESS")))
 	return mode
 }
 
@@ -138,10 +141,7 @@ func newModelWithCommands(ctx context.Context, session turn.Session, commands Co
 	input.SetWidth(96)
 	input.Focus()
 
-	chat := viewport.New(viewport.WithWidth(96), viewport.WithHeight(23))
-	for _, binding := range []*key.Binding{&chat.KeyMap.Up, &chat.KeyMap.Down, &chat.KeyMap.HalfPageUp, &chat.KeyMap.HalfPageDown, &chat.KeyMap.Left, &chat.KeyMap.Right} {
-		binding.Unbind()
-	}
+	chat := tuikit.NewMemoList()
 
 	m := &model{
 		ctx:           ctx,
@@ -189,7 +189,7 @@ func (m *model) applyTheme() {
 	inputStyles.Focused.Prompt, inputStyles.Blurred.Prompt = ui.Invokr.Frame, ui.Invokr.Frame
 	inputStyles.Focused.Text, inputStyles.Blurred.Text = ui.Invokr.Text, ui.Invokr.Text
 	inputStyles.Focused.Placeholder, inputStyles.Blurred.Placeholder = ui.Invokr.Muted, ui.Invokr.Muted
-	inputStyles.Cursor.Color = ui.Invokr.Palette.Brand
+	inputStyles.Cursor.Color, inputStyles.Cursor.Blink = ui.Invokr.Palette.Brand, false
 	// bubbles paints the cursor row with a filled background by default, which
 	// reads as a gray bar across the whole width. The box drawn in inputArea is
 	// what marks the input instead.
@@ -205,10 +205,9 @@ func (m *model) applyTheme() {
 
 	// The markdown renderer captures the palette when it is built, and the
 	// streamer caches what it has already drawn, so both have to be replaced
-	// rather than told about the change. The per-message render memo holds the
-	// old colors too, so it drops with them.
+	// rather than told about the change. MemoList's render cache drops too.
 	resetMarkdown()
-	m.chatLog.InvalidateRender()
+	m.chat.InvalidateAll()
 }
 
 // savePrefs writes every preference the TUI remembers, so saving one does not
@@ -222,9 +221,13 @@ func (m *model) savePrefs() {
 	})
 }
 
-func (m *model) Init() tea.Cmd { return tea.Batch(textarea.Blink, tea.RequestBackgroundColor) }
+func (m *model) Init() tea.Cmd { return tea.RequestBackgroundColor }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if toggle, ok := msg.(toolToggleMsg); ok {
+		m.updateToolToggle(toggle)
+		return m, nil
+	}
 	// huh's own messages (field focus, blink) come back through here, so an
 	// open settings form sees every non-key message as well as the model.
 	if _, isKey := msg.(tea.KeyPressMsg); m.settings.open && !isKey {
@@ -371,6 +374,10 @@ func (m *model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if cmd, handled := m.updateOverlayKey(msg); handled {
 		return m, cmd
 	}
+	if key.Matches(msg, m.keys.Recorded) {
+		m.showRecorded()
+		return m, nil
+	}
 	if updated, cmd, handled := m.updateControlKey(msg); handled {
 		return updated, cmd
 	}
@@ -395,6 +402,9 @@ func (m *model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // modal: while one is showing it owns every key but ctrl+c, including the esc
 // that would otherwise deny approvals or interrupt a turn.
 func (m *model) updateModalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	if cmd, handled := m.updateToolDialogKey(msg); handled {
+		return cmd, true
+	}
 	if m.overlay.Update(msg) {
 		if !m.overlay.IsOpen() {
 			// ctrl+h opens the popup and expands the footer block together, so
@@ -671,7 +681,11 @@ func (m *model) stopBrowsing() {
 
 func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	m.drainToolEvents()
+	if len(msg.evidence) == 0 {
+		msg.evidence = m.chatLog.observedEvidence(m.turnStart)
+	}
 	m.sending = false
+	m.compactingAt = time.Time{}
 	if m.cancelSend != nil {
 		m.cancelSend()
 		m.cancelSend = nil
@@ -680,19 +694,26 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	case m.stopping || errors.Is(msg.err, context.Canceled):
 		m.stopping = false
 		m.chatLog.Append(message{role: "tool", text: "⏹ stopped"})
+		m.recordedWarning = fmt.Sprintf("Interrupted · %d recorded · Alt+R", len(msg.evidence))
 	case msg.err != nil:
 		m.err = msg.err
 		m.chatLog.Append(message{role: "error", text: msg.err.Error()})
+		m.recordedWarning = "turn failed; recorded calls do not verify completion"
 	default:
 		m.usage = msg.usage
 		m.hasUsage = true
-		text := turn.AppendExecutionGuard(turn.AppendToolOutcomeGuard(msg.text, msg.failures), msg.evidence)
-		answer := message{role: "assistant", text: text, meta: m.responseMeta(msg.usage)}
+		answer := message{role: "assistant", text: msg.text, meta: m.responseMeta(msg.usage)}
 		if last := m.chatLog.Last(); last != nil && last.role == "assistant" && last.streaming {
+			answer.id, answer.version = last.id, last.version+1
 			*last = answer
 		} else {
 			m.chatLog.Append(answer)
 		}
+		m.recordedWarning = executionWarning(msg.failures, msg.evidence)
+	}
+	m.recorded = m.chatLog.executionHistory(m.turnStart, msg.failures, msg.evidence)
+	if errors.Is(msg.err, context.Canceled) || strings.HasPrefix(m.recordedWarning, "Interrupted") {
+		m.recorded = "Interrupted — incomplete\n" + m.recorded
 	}
 	m.syncChatViewport(true)
 	return m, tea.Batch(m.notify.turnDone(), m.notifyPendingCmd())
@@ -735,6 +756,7 @@ func (m *model) drainToolEvents() {
 	if m.toolEvents != nil {
 		for _, ev := range m.toolEvents.Drain() {
 			m.chatLog.ApplyEvent(ev)
+			m.trackCompaction(ev)
 		}
 	}
 	m.clampQueueCursor()
@@ -747,7 +769,12 @@ func (m *model) View() tea.View {
 	}
 	// The popup floats over the finished frame, so the transcript underneath is
 	// left exactly as it was and no height math changes.
-	content = m.settingsView(m.overlay.Render(content, m.width, m.height))
+	if m.overlay.IsOpen() && m.overlay.Title() == "tools" && m.toolDialog.open {
+		content = m.toolDialogView(content)
+	} else {
+		content = m.overlay.Render(content, m.width, m.height)
+	}
+	content = m.settingsView(content)
 	if banner := m.modeBanner(); banner != "" {
 		content = banner + "\n" + content
 	}
@@ -768,7 +795,8 @@ func (m *model) View() tea.View {
 
 func (m *model) mainView() string {
 	m.syncChatViewport(false)
-	content := m.chat.View()
+	content := m.chat.Render(m.mainWidth(), m.chatVisibleLines())
+	content += strings.Repeat("\n", max(0, m.chatVisibleLines()-strings.Count(content, "\n")-1))
 	// The popup goes above the keys, not between them and the input: it is a
 	// list of what you are typing, so it belongs next to the transcript, and
 	// the keys stay put on the row above the prompt.
@@ -856,6 +884,13 @@ func (m *model) helpHint() string {
 	if time.Since(m.quitArmed) < quitConfirmWindow {
 		return ui.Invokr.GradientText("press ctrl+c again to exit")
 	}
+	if m.recordedWarning != "" {
+		warning := m.recordedWarning
+		if ansi.StringWidth(warning) > m.mainWidth() {
+			warning = "! " + strings.TrimSpace(strings.SplitN(warning, " · ", 2)[0]) + " · Alt+R"
+		}
+		return ui.Invokr.Warn.Render(ansi.Truncate(warning, m.mainWidth(), "…"))
+	}
 	if m.focusMode {
 		return focusHint(m.keys)
 	}
@@ -863,7 +898,7 @@ func (m *model) helpHint() string {
 	// takes the selection down takes the message with it, so it never goes
 	// stale and needs no timer.
 	if m.copiedChars > 0 && !m.selection.Empty() && time.Since(m.copiedAt) < copyNoticeWindow {
-		return ui.Invokr.GradientText(fmt.Sprintf("copied %d chars to clipboard", m.copiedChars))
+		return ui.Invokr.GradientText(fmt.Sprintf("copy requested: %d chars · terminal must allow clipboard access · /mouse off for native selection", m.copiedChars))
 	}
 	if m.hideHints && !m.help.ShowAll {
 		return hintAffordance(m.keys.ToggleHints, "show hints")
@@ -872,6 +907,47 @@ func (m *model) helpHint() string {
 		return hintAffordance(m.keys.Help, "help")
 	}
 	return strings.TrimSpace(m.help.View(m.keys))
+}
+
+func (m *model) showRecorded() {
+	m.overlay.Open("Recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
+}
+
+func executionWarning(failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {
+	counts := map[string]int{}
+	for _, item := range evidence {
+		switch item.Outcome {
+		case "completed":
+			continue
+		case "denied", "failed", "flagged":
+			counts[item.Outcome]++
+		default:
+			counts["incomplete"]++
+		}
+	}
+	if len(failures) > 0 {
+		counts["tool errors"] = len(failures)
+	}
+	if len(counts) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(counts))
+	for _, status := range []string{"tool errors", "denied", "failed", "flagged", "incomplete"} {
+		if n := counts[status]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, status))
+		}
+	}
+	return strings.Join(parts, " · ") + " · Alt+R for recorded calls"
+}
+
+func (m *model) appendSavedTranscript(item turn.TranscriptMessage) {
+	if item.Role == "assistant" {
+		m.recorded = "Historical call details unavailable"
+		if len(item.ExecutionEvidence) > 0 {
+			m.recorded = "Historical — not current verification\n" + m.chatLog.executionHistory(m.chatLog.nextID, item.ToolCalls, item.ExecutionEvidence)
+		}
+	}
+	m.chatLog.appendTranscript(item)
 }
 
 // setHideHints records the choice on disk as well as in the model: ctrl+g is a
@@ -896,31 +972,23 @@ func hintAffordance(binding key.Binding, label string) string {
 // reported usage. It has no hide toggle: the readout is one cell on a row that
 // already exists, not the two full rows above the input it used to occupy.
 func (m *model) contextStatus(width int) string {
+	if !m.compactingAt.IsZero() {
+		return ui.Invokr.Muted.Render("compacting · " + formatDuration(time.Since(m.compactingAt)))
+	}
 	if !m.hasUsage {
 		return ""
 	}
 	return renderContextStatus(m.usage, width, compactionThreshold(m.session, m.usage.ContextWindowTokens))
 }
 
-func (m *model) chatContent() string {
+func (m *model) chatTail() string {
 	var b strings.Builder
-
-	b.WriteString(renderIntro(m.mainWidth(), m.height) + "\n\n")
-
-	// Fold hit-testing and focus scrolling need each block's content-line
-	// range, so the transcript render records them, shifted past the intro.
-	offset := strings.Count(b.String(), "\n")
-	content, ranges := m.chatLog.ContentRanges(m.mainWidth(), m.spinner.View(), m.focusedMsg())
-	for i := range ranges {
-		ranges[i].start += offset
-		ranges[i].end += offset
-	}
-	m.blockRanges = ranges
-	b.WriteString(content)
 
 	if m.sending {
 		if m.pendingApprovals() > 0 {
 			b.WriteString(renderRunning(m.spinner.View(), "waiting for approval", ui.Invokr.Warn, m.sentAt, m.mainWidth()) + "\n\n")
+		} else if !m.compactingAt.IsZero() {
+			b.WriteString(renderRunning(m.spinner.View(), "compacting context", ui.Invokr.Info, m.compactingAt, m.mainWidth()) + "\n\n")
 		} else {
 			b.WriteString(renderThinking(m.spinner.View(), m.sentAt, m.mainWidth()) + "\n\n")
 		}
@@ -985,6 +1053,8 @@ func (m *model) submit() (*model, tea.Cmd) {
 
 	m.appendHistory(text)
 	m.lastPrompt = text
+	m.recorded, m.recordedWarning, m.turnStart = "", "", m.chatLog.nextID
+	m.chatLog.recordedTools = nil
 	m.chatLog.Append(message{role: "user", text: text})
 	m.sending = true
 	m.sentAt = time.Now()
@@ -1104,20 +1174,22 @@ func (m *model) updateChatViewportKey(msg tea.KeyPressMsg) bool {
 
 	m.syncChatViewport(false)
 	switch {
-	case key.Matches(msg, m.keys.PageUp, m.keys.PageDn):
-		m.chat, _ = m.chat.Update(msg)
+	case key.Matches(msg, m.keys.PageUp):
+		m.chat.ScrollBy(-m.chatVisibleLines())
+	case key.Matches(msg, m.keys.PageDn):
+		m.chat.ScrollBy(m.chatVisibleLines())
 	case key.Matches(msg, m.keys.ToggleHints):
 		// Collapsing the hints frees a line at some widths, so the viewport is
 		// resized below.
 		m.setHideHints(!m.hideHints)
 	case key.Matches(msg, m.keys.ScrollUp):
-		m.chat.ScrollUp(scrollStep)
+		m.chat.ScrollBy(-scrollStep)
 	case key.Matches(msg, m.keys.ScrollDown):
-		m.chat.ScrollDown(scrollStep)
+		m.chat.ScrollBy(scrollStep)
 	case key.Matches(msg, m.keys.Home):
-		m.chat.GotoTop()
+		m.chat.ScrollToTop()
 	case key.Matches(msg, m.keys.End):
-		m.chat.GotoBottom()
+		m.chat.ScrollToBottom()
 	default:
 		return false
 	}
@@ -1125,7 +1197,7 @@ func (m *model) updateChatViewportKey(msg tea.KeyPressMsg) bool {
 	// so spinner/log ticks can't yank the view back down; resume following only
 	// when they return to the bottom (End, or paging down to it).
 	m.syncChatViewport(false)
-	m.userScrolled = !m.chat.AtBottom()
+	m.userScrolled = !m.chat.Following()
 	return true
 }
 
@@ -1146,18 +1218,22 @@ func (m *model) updateMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	m.syncChatViewport(false)
 	switch msg.Button {
 	case tea.MouseWheelUp:
-		m.chat.ScrollUp(scrollStep)
+		m.chat.ScrollBy(-scrollStep)
 	case tea.MouseWheelDown:
-		m.chat.ScrollDown(scrollStep)
+		m.chat.ScrollBy(scrollStep)
 	default:
 		return m, nil
 	}
-	m.userScrolled = !m.chat.AtBottom()
+	m.userScrolled = !m.chat.Following()
 	return m, nil
 }
 
 func (m *model) syncChatViewport(forceBottom bool) {
-	followViewport(&m.chat, m.mainWidth(), m.chatVisibleLines(), m.chatContent(), forceBottom && !m.userScrolled)
+	m.chat.SetItems(m.transcriptItems())
+	if forceBottom && !m.userScrolled {
+		m.chat.ScrollToBottom()
+	}
+	m.chat.Render(m.mainWidth(), m.chatVisibleLines())
 }
 
 // followViewport re-lays a viewport out around new content and keeps it pinned

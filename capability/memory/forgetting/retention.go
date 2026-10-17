@@ -72,29 +72,6 @@ func Retention(rec Record, now time.Time, cfg Config) float64 {
 	return strength * math.Exp(-ln2*ageDays/cfg.HalfLifeDays)
 }
 
-// Reinforce returns a copy of rec strengthened by one recall: strength scaled by
-// the reinforcement factor (capped at MaxStrength), recall count bumped, and
-// last-recalled reset to now. Frequently recalled memories become effectively
-// permanent; unused ones fade.
-func Reinforce(rec Record, now time.Time, cfg Config) Record {
-	strength := rec.Strength
-	if strength <= 0 {
-		strength = 1.0
-	}
-	factor := cfg.ReinforcementFactor
-	if factor <= 0 {
-		factor = 1.0
-	}
-	strength *= factor
-	if cfg.MaxStrength > 0 && strength > cfg.MaxStrength {
-		strength = cfg.MaxStrength
-	}
-	rec.Strength = strength
-	rec.RecallCount++
-	rec.LastRecalledAt = now
-	return rec
-}
-
 // ShouldForget reports whether rec has decayed below the archive threshold.
 // Exempt kinds are never forgotten.
 func ShouldForget(rec Record, now time.Time, cfg Config) bool {
@@ -102,14 +79,4 @@ func ShouldForget(rec Record, now time.Time, cfg Config) bool {
 		return false
 	}
 	return Retention(rec, now, cfg) < cfg.MinRetention
-}
-
-// ShouldPurge reports whether an archived row (archived at archivedAt) is old
-// enough to hard-delete. PurgeAfterDays <= 0 keeps the archive forever.
-func ShouldPurge(archivedAt, now time.Time, cfg Config) bool {
-	if cfg.PurgeAfterDays <= 0 || archivedAt.IsZero() {
-		return false
-	}
-	ageDays := now.Sub(archivedAt).Hours() / 24
-	return ageDays >= float64(cfg.PurgeAfterDays)
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# One-line installer for invokr-agent: detects OS/arch, downloads the
+# One-line installer for invokr: detects OS/arch, downloads the
 # matching release asset from GitHub Releases, verifies its checksum, and
 # installs the binary to ~/.local/bin.
 #
@@ -12,10 +12,10 @@
 #   INVOKR_INSTALL_DIR       install directory, default: $HOME/.local/bin
 set -eu
 
-REPO="${INVOKR_INSTALL_REPO:-antonikliment/invokr}"
+REPO="${INVOKR_INSTALL_REPO:-invokr-ai/invokr}"
 VERSION="${INVOKR_INSTALL_VERSION:-latest}"
 INSTALL_DIR="${INVOKR_INSTALL_DIR:-$HOME/.local/bin}"
-BIN_NAME="invokr-agent"
+BIN_NAME="invokr"
 
 log() { printf '%s\n' "$*" >&2; }
 die() {
@@ -30,7 +30,7 @@ detect_platform() {
 	Linux) goos=linux ;;
 	Darwin) goos=darwin ;;
 	*)
-		die "unsupported OS: $os. invokr-agent ships prebuilt binaries for Linux and macOS only; on Windows, use WSL."
+		die "unsupported OS: $os. invokr ships prebuilt binaries for Linux and macOS only; on Windows, use WSL."
 		;;
 	esac
 	case "$arch" in

@@ -1,13 +1,17 @@
 package constants
 
-import "slices"
-
 const (
 	DefaultAgentSystemPrompt = `You are Invokr, a coding agent in a real terminal workspace.
-
+Aim for at most 200 words of reasoning per response, then take the next useful action. When an uncertain fact blocks progress, check it with a tool instead of repeatedly reconsidering it. Write new implementation code directly in tool-call arguments. Keep reasoning to the immediate decision and unresolved risks.
+Worked example of a decision followed by action (fictional; do not execute these example arguments):
+Request: Raise the timeout from 5 to 10 seconds, add structured logging, and update usage documentation.
+Observed: settings.py contains the unique span "timeout_seconds = 5"; inspection confirms this setting is independent of logging. Logging and documentation still need work.
+Decision: Apply the known timeout change now. Logging and documentation remain pending; their implementation is not yet decided.
+Immediate action: invoke the native edit tool with arguments {"path":"settings.py","edits":[{"oldText":"timeout_seconds = 5","newText":"timeout_seconds = 10"}]}.
+Continue from the real tool result to implement the remaining requirements, then verify all requested behavior. Use actual native calls, not printed call text.
+Do not overplan. Start small and figure out details along the way.
 Complete requested changes: implement, run, and resolve blockers. Follow explicit scope; use judgment for unspecified work without overbuilding.
 Choose the smallest working solution. Reuse existing code and the standard library before adding code or dependencies; review and trim the diff.
-Use delegate_task for broad searches, long logs, speculative investigations, or repeated work across more than three files when only the conclusion is needed. Handle small, focused work directly.
 If you need a file's contents, read it; if you need a command's output, run it. State uncertainty instead of guessing.
 Be brief: lead with results, include failures and skipped work, and do not restate the request.`
 	// DefaultAgentTemperature matches the sampling the local model servers are
@@ -63,19 +67,11 @@ Be brief: lead with results, include failures and skipped work, and do not resta
 // and fetch grinds, and delegation fan-out. A quota of 0 or less is unlimited,
 // and every tool not named here is unlimited.
 func DefaultToolQuotas() map[string]int {
-	return map[string]int{"web_search": 5, "web_fetch": 8, "delegate": 3}
+	return map[string]int{"web_search": 5, "web_fetch": 8}
 }
 
 // MinimalTools is the tool set MinimalToolPreset expands to.
 var MinimalTools = []string{"shell", "read", "edit", "file_search", "git_read"}
 
-// EagerSchemaTools ship their full schema on every turn. Every other tool is
-// listed by name and description only until tool_search or a first call loads
-// it: the full native set cost ~21k tokens of a 131k window per turn (#480).
-// tmux is included despite the ~410-token cost of its schema (1634 chars):
-// a deferred schema meant the model never discovered the tool at all in a
-// marathon run (0 tool_search calls), even with the #527 shell hint (#541).
-// delegate_task likewise: the prompt tells the model to delegate, but 25
-// plain bench runs made 0 tool_search calls and 0 delegations while its
-// schema was deferred.
-var EagerSchemaTools = slices.Concat(MinimalTools, []string{"tool_search", "todo", "tmux", "delegate_task"})
+// ManagedCoreTools is fixed for a session; optional tools execute through tools.run.
+var ManagedCoreTools = []string{"tools", "read", "edit", "shell", "git_read", "git_write", "file_search", "todo", "apply_patch"}

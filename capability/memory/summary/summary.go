@@ -106,25 +106,3 @@ func ParseMemorySummary(raw string) (MemorySummary, error) {
 	})
 	return summary, nil
 }
-
-func RenderMemoryForEmbedding(summary MemorySummary) string {
-	var out strings.Builder
-	out.WriteString("Summary: ")
-	out.WriteString(strings.TrimSpace(summary.Summary))
-	if len(summary.Facts) > 0 {
-		out.WriteString("\nFacts:")
-		for _, fact := range summary.Facts {
-			line := strings.TrimSpace(strings.Join([]string{fact.Subject, fact.Predicate, fact.Object}, " "))
-			if line == "" {
-				continue
-			}
-			out.WriteString("\n- ")
-			out.WriteString(line)
-		}
-	}
-	if len(summary.Topics) > 0 {
-		out.WriteString("\nTopics: ")
-		out.WriteString(strings.Join(summary.Topics, ", "))
-	}
-	return strings.TrimSpace(out.String())
-}

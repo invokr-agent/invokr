@@ -32,6 +32,8 @@ PROMPT = os.environ.get(
     "Use the shell tool to run exactly: go build ./tools/core   "
     "Then tell me if it compiled.",
 )
+DISPLAY_MODEL = os.environ.get("DEMO_MODEL_LABEL", "")
+ACTUAL_MODEL = os.environ.get("INVOKR_MODEL", "")
 
 COLS, ROWS = 100, 28
 FONT_PATH = "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf"
@@ -92,7 +94,7 @@ SCRIPTS = {
         (1.0, "\r", True),                 # send it
         (18.0, None, True),                # thinking, then the approval panel
         (0.4, "a", True),                  # approve the shell call
-        (35.0, None, True),                # the tool runs and the answer streams
+        (75.0, None, True),                # the tool runs and the answer streams
         # Written in one go rather than Typed: while the completion popup is
         # open, pyte keeps the transcript text under it instead of repainting
         # those rows (a real terminal does not), so the demo skips past the
@@ -185,7 +187,14 @@ def run(command):
 
 
 def snapshot(screen):
-    return [[screen.buffer[y][x] for x in range(COLS)] for y in range(ROWS)]
+    rows = [[screen.buffer[y][x] for x in range(COLS)] for y in range(ROWS)]
+    if DISPLAY_MODEL and ACTUAL_MODEL:
+        for row in rows:
+            start = "".join(char.data for char in row).find(ACTUAL_MODEL)
+            if start >= 0:
+                for offset, data in enumerate(DISPLAY_MODEL.ljust(len(ACTUAL_MODEL))[:len(ACTUAL_MODEL)]):
+                    row[start + offset] = row[start + offset]._replace(data=data)
+    return rows
 
 
 def glyph_font(char, font, fallback):
@@ -277,7 +286,8 @@ def main():
     if not images:
         sys.exit("no frames captured")
 
-    durations = [int(1000 * (b - a)) for a, b in zip(times, times[1:])] + [1200]
+    # Skip long unchanged waits without accelerating typed characters.
+    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [1200]
     paletted = quantize(images)
     paletted[0].save(gif_path, save_all=True, append_images=paletted[1:],
                      duration=durations, loop=0, optimize=True, disposal=1)

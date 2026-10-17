@@ -10,10 +10,12 @@ import (
 	"github.com/invokr-ai/invokr/constants"
 )
 
+func loadTestFile(path string) (AppConfig, error) { return loadFile(path, "", false) }
+
 func TestLoadFileMissingUsesDefaults(t *testing.T) {
 	t.Setenv("INVOKR_HOME", t.TempDir())
 
-	cfg, err := LoadFile(filepath.Join(t.TempDir(), "missing.json"))
+	cfg, err := loadTestFile(filepath.Join(t.TempDir(), "missing.json"))
 	if err != nil {
 		t.Fatalf("expected missing config file to be ignored, got %v", err)
 	}
@@ -21,7 +23,7 @@ func TestLoadFileMissingUsesDefaults(t *testing.T) {
 	if cfg.Provider.BaseURL != constants.DefaultProviderBaseURL {
 		t.Fatalf("expected default base URL, got %q", cfg.Provider.BaseURL)
 	}
-	if cfg.Provider.Model != constants.DefaultProviderModel {
+	if cfg.Provider.Model != "" {
 		t.Fatalf("expected default model, got %q", cfg.Provider.Model)
 	}
 	if cfg.Agent.MaxTurns != constants.DefaultAgentMaxTurns {
@@ -36,7 +38,7 @@ func TestLoadFilePartialConfigPreservesDefaults(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -44,7 +46,7 @@ func TestLoadFilePartialConfigPreservesDefaults(t *testing.T) {
 	if cfg.Provider.BaseURL != "http://file.local:8080" {
 		t.Fatalf("expected file base URL, got %q", cfg.Provider.BaseURL)
 	}
-	if cfg.Provider.Model != constants.DefaultProviderModel {
+	if cfg.Provider.Model != "" {
 		t.Fatalf("expected default model, got %q", cfg.Provider.Model)
 	}
 	if cfg.Agent.NPredict != constants.DefaultAgentNPredict {
@@ -59,7 +61,7 @@ func TestLoadFileNestedProviderConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -82,7 +84,7 @@ func TestLoadFileShellConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -107,7 +109,7 @@ func TestLoadFileIgnoresRemovedMemoryRecallConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -124,7 +126,7 @@ func TestLoadFileMemoryZerfooConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -145,7 +147,7 @@ func TestLoadFileSkillsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -162,7 +164,7 @@ func TestLoadFileIgnoresRemovedApplyPatchKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := LoadFile(path); err != nil {
+	if _, err := loadTestFile(path); err != nil {
 		t.Fatalf("expected config with removed apply_patch keys to load, got %v", err)
 	}
 }
@@ -174,7 +176,7 @@ func TestLoadFileLegacyTopLevelBaseURLUsesDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -192,7 +194,7 @@ func TestLoadFileEnvOverridesFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -214,7 +216,7 @@ func TestLoadFileParallelToolCallsFieldIsIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -230,7 +232,7 @@ func TestLoadFileParallelToolCallsDisabledKnobWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatalf("expected config to load, got %v", err)
 	}
@@ -245,7 +247,7 @@ func TestLoadFileMalformedJSONReturnsError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := LoadFile(path); err == nil {
+	if _, err := loadTestFile(path); err == nil {
 		t.Fatal("expected malformed JSON to return an error")
 	}
 }
@@ -262,7 +264,7 @@ func TestLoadFileEnvOverridesFileButDefaultsStayPure(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg, err := LoadFile(path)
+	cfg, err := loadTestFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

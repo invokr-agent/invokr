@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
-	"log"
 	"os"
 	"os/signal"
-	"slices"
-	"strings"
 	"syscall"
 
 	"github.com/invokr-ai/invokr/capability/docker_sandbox"
@@ -21,7 +19,8 @@ func main() {
 	defer stop()
 
 	if err := run(ctx); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
 	}
 }
 
@@ -60,40 +59,48 @@ func run(ctx context.Context) (err error) {
 }
 
 func loadStartupConfig() (config.AppConfig, error) {
+	choice, err := parseStartupChoice(os.Args)
+	if err != nil {
+		return config.AppConfig{}, err
+	}
 	ensure := setup.Ensure
-	if !setupRequested(os.Args) {
+	if !choice.setup {
 		// A missing ~/.invokr means a fresh install: ask instead of guessing.
 		ensure = func() (setup.Result, error) { return setup.EnsureFirstRun(os.Stdin, os.Stdout) }
 	}
 	if _, err := ensure(); err != nil {
 		return config.AppConfig{}, err
 	}
-	return config.LoadDefaultFileWithProfile(profileRequested(os.Args))
-}
-
-// profileRequested scrapes --profile from the raw arguments. It runs before
-// cobra parses anything because the profile has to be overlaid onto the config
-// before flags bind to it — that ordering is what lets an explicit flag still
-// beat a profile value. Cobra later accepts the flag itself (see
-// registerRootFlags) but its parsed value is unused.
-func profileRequested(args []string) string {
-	rest := args[1:]
-	for i, arg := range rest {
-		if arg == "--profile" {
-			if i+1 < len(rest) {
-				return rest[i+1]
-			}
-			return ""
-		}
-		if name, ok := strings.CutPrefix(arg, "--profile="); ok {
-			return name
-		}
+	if choice.setup || choice.configUse {
+		return config.LoadDefaultFileWithoutProfile()
 	}
-	return ""
+	return config.LoadDefaultFileWithProfile(choice.profile)
 }
 
-// setupRequested reports whether the user invoked the setup command itself, in
-// which case the preflight must not prompt as well.
-func setupRequested(args []string) bool {
-	return slices.ContainsFunc(args[1:], func(arg string) bool { return arg == "setup" || arg == "init" })
+type startupChoice struct {
+	profile          string
+	setup, configUse bool
+}
+
+// parseStartupChoice uses Cobra's command and flag parser before config load,
+// so prompt text after -- cannot change the selected profile or recovery path.
+func parseStartupChoice(args []string) (startupChoice, error) {
+	root, cleanup := cmd.NewRootCmd(config.AppConfig{})
+	defer func() { _ = cleanup() }()
+	if len(args) > 0 {
+		args = args[1:]
+	}
+	command, remaining, err := root.Find(args)
+	if err != nil {
+		return startupChoice{}, err
+	}
+	command.InitDefaultHelpFlag()
+	command.InitDefaultVersionFlag()
+	if err := command.ParseFlags(remaining); err != nil {
+		return startupChoice{}, err
+	}
+	profile, _ := command.Flags().GetString("profile")
+	parent := command.Parent()
+	return startupChoice{profile: profile, setup: command.Name() == "setup",
+		configUse: command.Name() == "use" && parent != nil && parent.Name() == "config"}, nil
 }

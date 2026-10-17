@@ -31,7 +31,7 @@ func assertNoToolMarkup(t *testing.T, answer string) {
 // (turn ceiling and request-token backstop) go through gracefulExhaustion.
 func TestB06_GracefulExhaustionShape(t *testing.T) {
 	searchStep := func(id string) providertest.CompletionStep {
-		return providertest.NativeToolCallStep(id, "tool_search", map[string]any{"query": "tool_search", "include_schema": true})
+		return providertest.NativeToolCallStep(id, "tools", map[string]any{"action": "search", "query": "tool_search", "include_schema": true})
 	}
 
 	t.Run("turn ceiling markup-only answer falls back to the literal notice", func(t *testing.T) {

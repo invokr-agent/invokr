@@ -24,13 +24,9 @@ type NativeRegistrar interface {
 	ReplaceNativeToolsBySource(source string, tools []DynamicNativeTool) []string
 }
 
-type SearchableRegistry interface {
-	NativeRegistrar
-	Specs() []ToolSpec
-	MarkSchemasLoaded(sessionID string, names []string)
-}
-
 type ToolCall struct {
+	// Managed is trusted execution metadata, never accepted from model JSON.
+	Managed   bool            `json:"-"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }

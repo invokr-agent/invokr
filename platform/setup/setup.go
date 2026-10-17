@@ -11,8 +11,6 @@ import (
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/support/fsutil"
-
-	"github.com/charmbracelet/x/term"
 )
 
 const (
@@ -61,14 +59,14 @@ type Answers struct {
 	// installed from the default hub. Interactive-only: scripted runs stay
 	// off the network and leave it false.
 	InstallSkills bool
+	// ResetToolTemplates replaces edited copies during an explicit setup run.
+	ResetToolTemplates bool
 }
 
 type QuestionnaireResult struct {
 	Result
 	Answers
 }
-
-func DefaultPaths() Paths { return PathsFor(config.DefaultConfigDir()) }
 
 func PathsFor(homeDir string) Paths {
 	return Paths{
@@ -99,18 +97,21 @@ func EnsureFirstRun(in io.Reader, out io.Writer) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	if exists || !isTerminal(in) {
+	if exists || !fsutil.IsTerminal(in) {
+		if !exists {
+			_, _ = fmt.Fprintln(os.Stderr, "no config yet; run `invokr setup`")
+		}
 		return EnsureAt(homeDir)
 	}
 	result, err := RunQuestionnaire(in, out)
 	return result.Result, err
 }
 
-func EnsureAt(homeDir string) (Result, error) { return ensureWith(homeDir, ensureDefaultConfig) }
+func EnsureAt(homeDir string) (Result, error) { return ensureWith(homeDir, ensureDefaultConfig, false) }
 
 // ensureWith is the shared body of EnsureAt and EnsureConfigured: ensure the
 // home layout, write the config via writeConfig, then seed PERSONA.md.
-func ensureWith(homeDir string, writeConfig func(path, homeDir string) (bool, error)) (Result, error) {
+func ensureWith(homeDir string, writeConfig func(path, homeDir string) (bool, error), resetTemplates bool) (Result, error) {
 	result, err := ensureHome(homeDir)
 	if err != nil {
 		return result, err
@@ -126,6 +127,9 @@ func ensureWith(homeDir string, writeConfig func(path, homeDir string) (bool, er
 		return result, err
 	}
 	result.PersonaCreated = created
+	if err := WriteToolTemplates(homeDir, resetTemplates); err != nil {
+		return result, err
+	}
 	return result, nil
 }
 
@@ -141,13 +145,7 @@ func RunQuestionnaire(in io.Reader, out io.Writer) (QuestionnaireResult, error) 
 
 // wantsAccessible reports whether the questionnaire should use huh's
 // accessible mode.
-func wantsAccessible(in io.Reader) bool { return accessibleMode(isTerminal(in)) }
-
-// isTerminal reports whether in is an interactive terminal.
-func isTerminal(in io.Reader) bool {
-	terminalIn, ok := in.(interface{ Fd() uintptr })
-	return ok && term.IsTerminal(terminalIn.Fd())
-}
+func wantsAccessible(in io.Reader) bool { return accessibleMode(fsutil.IsTerminal(in)) }
 
 // accessibleMode decides the mode from whether input is a terminal: anything
 // that is not one, and any terminal too dumb to redraw. The TERM check
@@ -160,7 +158,7 @@ func accessibleMode(isTerminal bool) bool { return !isTerminal || os.Getenv("TER
 func EnsureConfigured(homeDir string, answers Answers) (Result, error) {
 	return ensureWith(homeDir, func(path, home string) (bool, error) {
 		return writeConfiguredDefault(path, home, answers)
-	})
+	}, answers.ResetToolTemplates)
 }
 
 func ensureHome(homeDir string) (Result, error) {
@@ -271,7 +269,7 @@ func writeConfiguredDefault(path string, homeDir string, answers Answers) (bool,
 // default from an isolated or scripted run writes into that home rather than
 // the operator's real one (~/.invokr).
 func defaultHomePrompt() string {
-	if dir := strings.TrimSpace(os.Getenv("INVOKR_HOME")); dir != "" {
+	if dir := config.Env("INVOKR_HOME"); dir != "" {
 		return dir
 	}
 	return DefaultHomePrompt

@@ -1,20 +1,23 @@
 package agent
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/capability/syntax"
-	"github.com/invokr-ai/invokr/platform/events"
-	turnpkg "github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/tools/core"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/capability/syntax"
+	"github.com/invokr-ai/invokr/platform/events"
+	turnpkg "github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/system/tool_search"
 
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"
@@ -30,8 +33,6 @@ var errOutputLimitCut = errors.New("your reply was cut off by the output limit b
 // the UI renders it as a settled "cancelled" block rather than a failure.
 const ToolCodeCanceled = "canceled"
 
-// toolCallKey hashes a tool call's name and arguments into a stable identity for
-// the runner's repetition guard.
 func toolCallKey(call *core.ToolCall) string { return core.CallHash(call.Name, call.Arguments) }
 
 // ResetCallHistory clears request-local denials; a new message can change intent.
@@ -165,8 +166,6 @@ func containsOrphanedToolCallMarkup(reply string) bool {
 	return false
 }
 
-// nativeCallResult is one tool call's outcome, collected positionally so the
-// concurrent fan-out can be reassembled in the model's original call order.
 type nativeCallResult struct {
 	message inference.Message
 	outcome *turnpkg.ToolOutcome
@@ -198,10 +197,6 @@ func (p *TurnProcessor) nativeToolCall(ctx context.Context, turn int, messages [
 	return turnResult{done: false, usage: completion.usage, outcomes: outcomes, toolCallCount: len(sigs), calls: sigs}, messages, nil
 }
 
-// runCallsParallel fans out one goroutine per call; the model requested
-// parallel tool calls, so independent calls shouldn't pay each other's
-// latency. Results are written to distinct indices (no shared-slice race)
-// and reassembled in order.
 func (p *TurnProcessor) runCallsParallel(ctx context.Context, turn int, calls []inference.ToolCall) []nativeCallResult {
 	results, sem := make([]nativeCallResult, len(calls)), make(chan struct{}, maxParallelNativeTools)
 	var wg sync.WaitGroup
@@ -255,11 +250,21 @@ func (p *TurnProcessor) batchNeedsOrder(calls []inference.ToolCall) bool {
 	if len(calls) < 2 || p.tools == nil {
 		return false
 	}
+	names := make([]string, 0, len(calls))
+	for _, call := range calls {
+		name := strings.TrimSpace(call.Name)
+		if name == "tools" {
+			var args tool_search.Args
+			if json.Unmarshal([]byte(call.Arguments), &args) != nil || args.Action != "run" {
+				return true
+			}
+			name = args.Name
+		}
+		names = append(names, name)
+	}
 	return slices.ContainsFunc(p.tools.Specs(), func(spec core.ToolSpec) bool {
 		c := spec.Metadata.Capabilities
-		return c.WritesWorkspace && !c.ExecutesCode && slices.ContainsFunc(calls, func(call inference.ToolCall) bool {
-			return strings.TrimSpace(call.Name) == spec.Name
-		})
+		return c.WritesWorkspace && !c.ExecutesCode && slices.Contains(names, spec.Name)
 	})
 }
 
@@ -280,9 +285,7 @@ func (p *TurnProcessor) processNativeCallSafe(ctx context.Context, turn int, nat
 		if r := recover(); r != nil {
 			p.logger.Error("panic in native tool call execution", zap.Int("turn", turn), zap.String("tool_call_id", nativeCall.ID), zap.Any("recover", r), zap.Stack("stack"))
 			name := strings.TrimSpace(nativeCall.Name)
-			if name == "" {
-				name = "unknown"
-			}
+			name = cmp.Or(name, "unknown")
 			err := fmt.Errorf("panic: %v", r)
 			res = nativeCallResult{
 				message: p.codec.NativeToolResultMessage(nativeCall.ID, syntax.ErrorPayload(err)),
@@ -316,7 +319,7 @@ func historySafeToolCalls(calls []inference.ToolCall) []inference.ToolCall {
 // argumentsCutHint is appended to the tool result for a call whose arguments
 // were cut by the output cap, so the model retries with a smaller edit instead
 // of re-issuing the same oversized call.
-const argumentsCutHint = "; your %s arguments exceeded the output limit — split the edit into smaller old/new pairs and re-issue"
+const argumentsCutHint = "; your %s arguments exceeded the output limit — split the tool call into smaller changes and re-issue"
 
 // cutArgumentsBytes is the argument size above which an unparseable call is
 // read as an output-cap cut rather than a malformed short call.
@@ -326,9 +329,7 @@ func withCutHint(err error, name, args string) error {
 	if len(args) < cutArgumentsBytes {
 		return err
 	}
-	if name == "" {
-		name = "tool"
-	}
+	name = cmp.Or(name, "tool")
 	return fmt.Errorf("%w"+argumentsCutHint, err, name)
 }
 
@@ -345,7 +346,7 @@ func (p *TurnProcessor) processNativeCall(ctx context.Context, turn int, nativeC
 		if name != "" {
 			result.outcome.Tool = name
 			result.outcome.Kind = turnpkg.OutcomeKindError
-			result.sig = toolCallSignature{Name: name, Key: core.HashHex(name + "\x00" + nativeCall.Arguments), Args: nativeCall.Arguments}
+			result.sig = toolCallSignature{Name: name, Key: strutil.HashHex(name + "\x00" + nativeCall.Arguments), Args: nativeCall.Arguments}
 		}
 		return result
 	}
@@ -362,6 +363,14 @@ func (p *TurnProcessor) processNativeCall(ctx context.Context, turn int, nativeC
 // file name (a fresh sequence number per call), so hashing the gated output
 // would never match across repeats of an oversized result.
 func (p *TurnProcessor) executeTool(ctx context.Context, turn int, id, label string, call *core.ToolCall) (string, string, *turnpkg.ToolOutcome) {
+	resolved, err := p.resolveToolCall(ctx, call)
+	if err != nil {
+		return p.handleToolError(ctx, turn, id, label, call, 0, err)
+	}
+	if resolved != call {
+		call = resolved
+	}
+
 	if id == "" {
 		// Default (non-native) path has no native tool-call ID; it is single-call
 		// per turn, so (turn, name) is a stable correlation key for the UI.
@@ -375,7 +384,7 @@ func (p *TurnProcessor) executeTool(ctx context.Context, turn int, id, label str
 		failPayload.Code = "denied"
 		p.dispatchToolEvent(ctx, events.EventToolFailed, failPayload)
 		payload := syntax.DeniedRetryPayload(call.Name)
-		return payload, core.HashHex(payload), &turnpkg.ToolOutcome{Tool: call.Name, Kind: turnpkg.OutcomeKindDenied, Detail: detail}
+		return payload, strutil.HashHex(payload), &turnpkg.ToolOutcome{Tool: call.Name, Kind: turnpkg.OutcomeKindDenied, Detail: detail}
 	}
 	toolStarted := time.Now()
 	p.logger.Info(label+" started", zap.Int("turn", turn), zap.String("tool", call.Name), zap.String("arguments", string(call.Arguments)))
@@ -392,7 +401,7 @@ func (p *TurnProcessor) executeTool(ctx context.Context, turn int, id, label str
 		return p.handleToolError(ctx, turn, id, label, call, 0, err)
 	}
 
-	ctx = p.evidence.Context(ctx, id, turn)
+	ctx = context.WithValue(p.evidence.Context(ctx, id, turn), core.ToolCallIDKey{}, id)
 	toolOutput, err := p.tools.HandleCall(core.WithSessionID(ctx, p.sessionID), call)
 	// Cancellation wins over whatever the tool reported: a backend that returns a
 	// partial result (or its own exit code) after its child was killed must still
@@ -404,35 +413,13 @@ func (p *TurnProcessor) executeTool(ctx context.Context, turn int, id, label str
 		return p.handleToolError(ctx, turn, id, label, call, time.Since(toolStarted), err)
 	}
 	duration := time.Since(toolStarted)
-	if call.Name == editFileToolName {
-		p.callMu.Lock()
-		p.editRejects = 0
-		p.callMu.Unlock()
-	}
 	// The event carries the ORIGINAL output (the UI shows what actually ran);
 	// only the model-facing string goes through the gate.
 	p.dispatchToolEvent(ctx, events.EventToolCompleted, toolPayloadFromCall(call, id, turn, duration, toolOutput, ""))
-	rawHash := core.HashHex(toolOutput)
-	toolOutput = p.gateResult(call, id, toolOutput)
+	rawHash := strutil.HashHex(toolOutput)
+	toolOutput, _ = p.gate.cap(call.Name, call.Arguments, toolOutput)
 	p.logger.Info(label+" completed", zap.Int("turn", turn), zap.String("tool", call.Name), zap.Duration("duration", duration), zap.Int("output_len", len(toolOutput)))
 	return toolOutput, rawHash, nil
-}
-
-// gateResult runs the oversize gate and records any spill ref keyed by tool
-// call ID, so a later eviction/search feature can recover what a stubbed
-// result pointed at.
-func (p *TurnProcessor) gateResult(call *core.ToolCall, id, output string) string {
-	gated, spillRef := p.gate.cap(call.Name, call.Arguments, output)
-	if spillRef == "" {
-		return gated
-	}
-	p.callMu.Lock()
-	if p.spillRefs == nil {
-		p.spillRefs = make(map[string]string)
-	}
-	p.spillRefs[id] = spillRef
-	p.callMu.Unlock()
-	return gated
 }
 
 // handleToolCanceled settles a call whose turn was interrupted. It is the single
@@ -448,7 +435,7 @@ func (p *TurnProcessor) handleToolCanceled(ctx context.Context, turn int, id, la
 	payload.Code = ToolCodeCanceled
 	p.dispatchToolEvent(ctx, events.EventToolFailed, payload)
 	result := syntax.ErrorPayload(errors.New(detail))
-	return result, core.HashHex(result), &turnpkg.ToolOutcome{Tool: call.Name, Kind: turnpkg.OutcomeKindCanceled, Detail: detail}
+	return result, strutil.HashHex(result), &turnpkg.ToolOutcome{Tool: call.Name, Kind: turnpkg.OutcomeKindCanceled, Detail: detail}
 }
 
 func (p *TurnProcessor) handleToolError(ctx context.Context, turn int, id, label string, call *core.ToolCall, duration time.Duration, err error) (string, string, *turnpkg.ToolOutcome) {
@@ -468,16 +455,13 @@ func (p *TurnProcessor) handleToolError(ctx context.Context, turn int, id, label
 		payload := toolPayloadFromCall(call, id, turn, duration, toolErr.Payload, "")
 		payload.Code = toolErr.Code
 		p.dispatchToolEvent(ctx, events.EventToolCompleted, payload)
-		rawHash := core.HashHex(toolErr.Payload)
-		return p.gateResult(call, id, toolErr.Payload), rawHash, nil
+		rawHash := strutil.HashHex(toolErr.Payload)
+		output, _ := p.gate.cap(call.Name, call.Arguments, toolErr.Payload)
+		return output, rawHash, nil
 	}
 
-	bare := err // Recovery hints must not change repeat detection identity.
-	if hint := p.editFallbackHint(call, err); hint != "" {
-		err = fmt.Errorf("%w%s", err, hint)
-	}
 	p.logger.Warn(label+" failed", zap.Int("turn", turn), zap.String("tool", call.Name), zap.Duration("duration", duration), zap.Error(err))
-	kind, detail, code := turnpkg.OutcomeKindError, bare.Error(), ""
+	kind, detail, code := turnpkg.OutcomeKindError, err.Error(), ""
 	if isToolErr && toolErr != nil {
 		code = toolErr.Code
 	}
@@ -488,9 +472,7 @@ func (p *TurnProcessor) handleToolError(ctx context.Context, turn int, id, label
 	var denied *approval.DeniedError
 	if errors.As(err, &denied) && denied != nil && kind != turnpkg.OutcomeKindCanceled {
 		kind, detail = turnpkg.OutcomeKindDenied, denied.Reason
-		if code == "" {
-			code = "denied"
-		}
+		code = cmp.Or(code, "denied")
 		// Deny is final for this request: remember the call so an identical
 		// retry is refused without re-prompting the user (PR #131, test 11).
 		p.markDenied(toolCallKey(call))
@@ -499,39 +481,10 @@ func (p *TurnProcessor) handleToolError(ctx context.Context, turn int, id, label
 	failPayload := toolPayloadFromCall(call, id, turn, duration, "", err.Error())
 	failPayload.Code = code
 	p.dispatchToolEvent(ctx, events.EventToolFailed, failPayload)
-	return payload, core.HashHex(syntax.ErrorPayload(bare)), &turnpkg.ToolOutcome{Tool: call.Name, Kind: kind, Detail: detail}
+	return payload, strutil.HashHex(syntax.ErrorPayload(err)), &turnpkg.ToolOutcome{Tool: call.Name, Kind: kind, Detail: detail}
 }
 
-const (
-	editFileToolName = "edit"
-	readFileToolName = "read"
-	// editRejectCap is how many consecutive edit failures are treated as
-	// "the model cannot localize this edit". Past it, asking for a better match
-	// just burns turns, so the model is steered to re-read and rewrite whole.
-	editRejectCap = 2
-)
-
-const editFallbackText = "\n\nYou have now had %d edit failures in a row. Stop guessing: call read on the target first, " +
-	"then send one edit with an `edits` entry whose `old` is copied verbatim from that output — or pass the file's entire current content as `old` " +
-	"and the full intended file as `new`."
-
-// editFallbackHint counts consecutive edit hard failures and, past the
-// cap, appends a re-read/whole-file instruction to the error the model sees.
-// Denials and cancellations are not the model's edit going wrong, so they
-// neither count nor reset.
-func (p *TurnProcessor) editFallbackHint(call *core.ToolCall, err error) string {
-	var denied *approval.DeniedError
-	var toolErr *core.ToolError
-	if (errors.As(err, &toolErr) && toolErr.Code == "missing_file") || call.Name != editFileToolName || errors.Is(err, context.Canceled) || errors.As(err, &denied) {
-		return ""
-	}
-	p.callMu.Lock()
-	defer p.callMu.Unlock()
-	if p.editRejects++; p.editRejects <= editRejectCap {
-		return ""
-	}
-	return fmt.Sprintf(editFallbackText, p.editRejects)
-}
+const readFileToolName = "read"
 
 func outcomeSlice(outcome *turnpkg.ToolOutcome) []turnpkg.ToolOutcome {
 	if outcome == nil {
@@ -574,14 +527,11 @@ func toolPayloadFromCall(call *core.ToolCall, id string, turn int, duration time
 	return payload
 }
 
-// spillRefSnapshot copies the call id → spill path ledger for readers outside
-// the dispatch loop (context aging). Nil-safe: a processor that never spilled
-// returns nil, and the aging pass falls back to "call again if needed".
-func (p *TurnProcessor) spillRefSnapshot() map[string]string {
-	if p == nil {
-		return nil
+func (p *TurnProcessor) resolveToolCall(ctx context.Context, call *core.ToolCall) (*core.ToolCall, error) {
+	if resolver, ok := p.tools.(interface {
+		ResolveToolCall(context.Context, *core.ToolCall) (*core.ToolCall, error)
+	}); ok {
+		return resolver.ResolveToolCall(core.WithSessionID(ctx, p.sessionID), call)
 	}
-	p.callMu.Lock()
-	defer p.callMu.Unlock()
-	return maps.Clone(p.spillRefs)
+	return call, nil
 }

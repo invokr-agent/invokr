@@ -76,3 +76,12 @@ func TestProgressWriterBuffersAcrossWrites(t *testing.T) {
 		}
 	})
 }
+
+func TestProgressWriterPreservesCallID(t *testing.T) {
+	w, d := newProgressWriter()
+	w.ctx = context.WithValue(core.WithSessionID(w.ctx, "session"), core.ToolCallIDKey{}, "first")
+	writeAll(t, w, constants.ToolboxProgressPrefix+" working\n")
+	if len(d.events) != 1 || d.events[0].Tool.ID != "first" || d.events[0].SessionID != "session" {
+		t.Fatalf("events = %#v", d.events)
+	}
+}

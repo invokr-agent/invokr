@@ -51,7 +51,7 @@ func TestBuildSectionsSumToSystemLength(t *testing.T) {
 }
 
 // The working rules sit directly after the base prompt, before the tool
-// contract, and only when the model has a way to run something.
+// contract, even when only read tools are available.
 func TestBuildRendersWorkRulesRightAfterBasePrompt(t *testing.T) {
 	shell := toolcore.ToolSpec{Name: "shell", Description: "run", Metadata: toolcore.ToolMetadata{AlwaysVisible: true}}
 	builder, err := NewBuilder(Config{BasePrompt: "Base prompt.", NativeToolCalling: true}, testDeps(Deps{Tools: &fakeTools{specs: []toolcore.ToolSpec{shell}}}))
@@ -62,17 +62,18 @@ func TestBuildRendersWorkRulesRightAfterBasePrompt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(prompt.System, "Base prompt.\n\nWorking rules:\n- A reply with no tool call ends the task.") {
+	if !strings.HasPrefix(prompt.System, "Base prompt.\n\nWorking rules:\n") ||
+		!strings.Contains(prompt.System, "A reply with no tool call ends the task.") {
 		t.Fatalf("system prompt = %q", prompt.System)
 	}
-	if strings.Contains(prompt.System, "argv-only") || !strings.Contains(prompt.System, "shell runs one full bash line") {
-		t.Fatalf("stale shell rule in prompt:\n%s", prompt.System)
+	if strings.Contains(prompt.System, "Rules for tools:") || strings.Contains(prompt.System, "shell runs one full bash line") {
+		t.Fatalf("generic tool guidance remains in prompt:\n%s", prompt.System)
 	}
 
 	readOnly, _ := NewBuilder(Config{BasePrompt: "Base prompt."}, testDeps(Deps{Tools: &fakeTools{specs: []toolcore.ToolSpec{{Name: "read", Metadata: toolcore.ToolMetadata{AlwaysVisible: true}}}}}))
 	prompt, _ = readOnly.Build(context.Background(), Request{SessionID: "s1", UserMessage: "hi"})
-	if strings.Contains(prompt.System, "Working rules") {
-		t.Fatalf("work rules need a runnable tool:\n%s", prompt.System)
+	if !strings.HasPrefix(prompt.System, "Base prompt.\n\nWorking rules:\n") {
+		t.Fatalf("work rules missing for read-only tools:\n%s", prompt.System)
 	}
 }
 
@@ -82,6 +83,11 @@ func TestToolRulesRouteEditsToEditFileWhenApplyPatchIsDeferred(t *testing.T) {
 	rules := strings.Join(toolRules([]toolcore.ToolSpec{{Name: "apply_patch"}, {Name: "edit", Metadata: toolcore.ToolMetadata{AlwaysVisible: true}}}), "\n")
 	if strings.Contains(rules, "Use apply_patch") || !strings.Contains(rules, "Use edit with an `edits` list") {
 		t.Fatalf("rules = %q", rules)
+	}
+	for _, want := range []string{"`oldText`", "`newText`", "original file", "overlapping edits are rejected", "`content`", "create or overwrite"} {
+		if !strings.Contains(rules, want) {
+			t.Fatalf("missing edit contract %q in %q", want, rules)
+		}
 	}
 	rules = strings.Join(toolRules([]toolcore.ToolSpec{{Name: "apply_patch", Parameters: map[string]any{"type": "object"}}, {Name: "edit", Metadata: toolcore.ToolMetadata{AlwaysVisible: true}}}), "\n")
 	if !strings.Contains(rules, "Use apply_patch") {

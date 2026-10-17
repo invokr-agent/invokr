@@ -21,7 +21,6 @@ const (
 
 var buildState struct {
 	once sync.Once
-	dir  string
 	path string
 	err  error
 	out  string
@@ -80,12 +79,6 @@ func NewState(t testing.TB) State {
 		}
 	}
 	return state
-}
-
-func RunInvokrAgent(t testing.TB, opts Options) (string, error) {
-	t.Helper()
-	result := Run(t, opts)
-	return result.Stdout + result.Stderr, result.Err
 }
 
 func Run(t testing.TB, opts Options) Result {
@@ -202,7 +195,6 @@ func Binary(t testing.TB) string {
 			buildState.err = err
 			return
 		}
-		buildState.dir = dir
 		buildState.path = filepath.Join(dir, "github.com/invokr-ai/invokr")
 
 		ctx, cancel := context.WithTimeout(context.Background(), defaultBuildTimeout)
@@ -232,12 +224,6 @@ func Binary(t testing.TB) string {
 		t.Fatalf("build invokr binary: %v\noutput:\n%s", buildState.err, buildState.out)
 	}
 	return buildState.path
-}
-
-func Cleanup() {
-	if buildState.dir != "" {
-		_ = os.RemoveAll(buildState.dir)
-	}
 }
 
 func RepoRoot() string {

@@ -27,28 +27,18 @@ var toolNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,63}$`)
 
 var createToolCommitMu sync.Mutex
 
-const createToolExample = `{"name":"create_tool","arguments":{"name":"word_count","description":"Count words in text","example":"{\"name\":\"word_count\",\"arguments\":{\"text\":\"hi there\"}}","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]},"python_source":"import json,sys\ncall=json.loads(sys.stdin.read())\nargs=call.get(\"arguments\") or {}\nprint(json.dumps({\"result\":str(len(args[\"text\"].split()))}))","policy":{"tiers":["executes_code"],"approval":"ask"}}}`
+const createToolExample = `{"name":"create_tool","arguments":{"name":"read_readme","description":"Read README.md from the workspace","example":"{\"name\":\"read_readme\",\"arguments\":{}}","parameters":{"type":"object","properties":{}},"python_source":"import json,sys\nfrom pathlib import Path\ndef main():\n    json.loads(sys.stdin.read())\n    return {'result':Path('README.md').read_text()}\nprint(json.dumps(main()))","capabilities":{"reads_workspace":true},"policy":{"tiers":["read_workspace"],"approval":"ask"}}}`
 
 type createToolArgs struct {
 	Name         string                `json:"name" desc:"Lowercase slug, e.g. word_count."`
 	Description  string                `json:"description"`
 	Example      string                `json:"example"`
 	Parameters   map[string]any        `json:"parameters" desc:"JSON Schema for the new tool's arguments."`
-	PythonSource string                `json:"python_source" desc:"Contents of main.py. Stdin is a JSON call envelope; read user values from call['arguments']."`
+	PythonSource string                `json:"python_source" desc:"Contents of main.py, run as a script on every call. If you define main(), call it at top level and print its JSON result, e.g. print(json.dumps(main())); returning a value alone emits no output. Read the JSON call envelope from stdin; there is no implicit arguments variable. Cwd is the workspace only with explicit reads_workspace/writes_workspace capability; otherwise it is the plugin directory. INVOKR_WORKING_DIR names the workspace and INVOKR_TOOL_DIR the plugin directory. Workspace Python modules are not automatically importable."`
 	Requirements []string              `json:"requirements,omitempty" desc:"Pinned requirements (name==version), no VCS/URL/path specs."`
-	Capabilities core.ToolCapabilities `json:"capabilities" schema:"object"`
+	Capabilities core.ToolCapabilities `json:"capabilities" schema:"object" desc:"Declare reads_workspace or writes_workspace explicitly for workspace file access and relative paths. Policy tiers do not grant these capabilities."`
 	Policy       core.ToolPolicy       `json:"policy" schema:"object"`
-	// AlwaysVisible defaults to true when omitted: a tool the agent was just
-	// asked to author is one it is about to call, and a deferred tool drops out
-	// of the prompt schema immediately after creation — which sends the model
-	// back to code_interpreter instead of the tool it just built. Pass false
-	// explicitly for a tool meant to sit behind tool_search.
-	AlwaysVisible *bool `json:"always_visible,omitempty" desc:"Include the full schema in every prompt. Default true; pass false to hide the tool behind tool_search."`
-	Overwrite     bool  `json:"overwrite,omitempty" desc:"Replace an existing tool with the same name. Default false."`
-}
-
-func (a createToolArgs) alwaysVisible() bool {
-	return a.AlwaysVisible == nil || *a.AlwaysVisible
+	Overwrite    bool                  `json:"overwrite,omitempty" desc:"Replace an existing tool with the same name. Default false."`
 }
 
 // toolSpecFile mirrors the JSON shape toolbox's loader expects from
@@ -60,18 +50,14 @@ type toolSpecFile struct {
 	Parameters   map[string]any        `json:"parameters"`
 	Policy       core.ToolPolicy       `json:"policy"`
 	Capabilities core.ToolCapabilities `json:"capabilities"`
-	// Written unconditionally (no omitempty) so the manifest states the
-	// visibility it was created with rather than leaning on a loader default.
-	AlwaysVisible bool `json:"always_visible"`
 }
 
 func RegisterCreateToolTool(registrar core.NativeRegistrar, deps core.CallerDeps) {
 	core.Register(registrar, core.Tool[createToolArgs]{
 		Spec: core.ToolSpec{
 			Name: "create_tool", Description: "Author a new Python toolbox tool: writes tool.json/main.py (and requirements.txt) under the toolbox directory and makes it callable immediately.",
-			Example: createToolExample,
-			// capabilities is derivable but deliberately optional.
-			Parameters: core.SchemaFor[createToolArgs](core.WithRequired("name", "description", "example", "parameters", "python_source")),
+			Example:    createToolExample,
+			Parameters: core.SchemaFor[createToolArgs](core.WithRequired("name", "description", "example", "parameters", "python_source", "capabilities")),
 			Metadata:   core.NativeMetadata("create_tool", []string{"write_workspace", "executes_code"}, constants.ApprovalPolicyAsk, core.ToolCapabilities{WritesWorkspace: true, ExecutesCode: true}),
 		},
 		Prepare: func(_ context.Context, args createToolArgs) (createToolArgs, error) {
@@ -149,7 +135,7 @@ func executeCreateTool(ctx context.Context, deps core.CallerDeps, args createToo
 
 	specJSON, err := json.MarshalIndent(toolSpecFile{
 		Name: args.Name, Description: args.Description, Example: args.Example,
-		Parameters: args.Parameters, Policy: args.Policy, Capabilities: args.Capabilities, AlwaysVisible: args.alwaysVisible(),
+		Parameters: args.Parameters, Policy: args.Policy, Capabilities: args.Capabilities,
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal tool spec: %w", err)
@@ -191,7 +177,7 @@ func installStagedTool(stagingDir, toolDir string, overwrite bool) error {
 		return fmt.Errorf("stat existing tool: %w", statErr)
 	}
 	if statErr == nil && !overwrite {
-		return fmt.Errorf("tool %q already exists; pass overwrite:true to replace it", filepath.Base(toolDir))
+		return fmt.Errorf("tool %q already exists; pass overwrite:true to replace it. Retry the same full definition with overwrite:true inside it: tools {\"action\":\"create\",\"definition\":{\"name\":%q,\"overwrite\":true,...}}. If create_tool is directly exposed, call create_tool with that full definition instead. Do not repeat create without the flag", filepath.Base(toolDir), filepath.Base(toolDir))
 	}
 	if os.IsNotExist(statErr) {
 		return renameStagedTool(stagingDir, toolDir)

@@ -1,13 +1,13 @@
 package sqlite
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/strutil"
 	"maps"
 	"math"
 	"path/filepath"
@@ -16,6 +16,8 @@ import (
 	"sync"
 	"time"
 	"unicode"
+
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	"github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/config"
@@ -68,11 +70,22 @@ func NewStore(cfg Config) (*Memory, error) {
 	return &Memory{db: db}, nil
 }
 
-func (s *Memory) Close() error {
-	if s == nil || s.db == nil {
+func (s *Memory) Close() error { return CloseDB(s.db) }
+
+// CloseDB closes db; a store that never opened one has nothing to close.
+func CloseDB(db *sql.DB) error {
+	if db == nil {
 		return nil
 	}
-	return s.db.Close()
+	return db.Close()
+}
+
+// CheckOpen reports a store whose database was never opened.
+func CheckOpen(db *sql.DB, store string) error {
+	if db == nil {
+		return fmt.Errorf("%s: nil store", store)
+	}
+	return nil
 }
 
 func normalizeRecord(rec core.Record) (core.Record, error) {
@@ -81,15 +94,9 @@ func normalizeRecord(rec core.Record) (core.Record, error) {
 		return rec, fmt.Errorf("sqlite memory store: content is required")
 	}
 	rec.Summary = strings.TrimSpace(rec.Summary)
-	if rec.Scope == "" {
-		rec.Scope = config.ScopeProject
-	}
-	if rec.Kind == "" {
-		rec.Kind = core.KindFact
-	}
-	if rec.Source == "" {
-		rec.Source = core.SourceSQLite
-	}
+	rec.Scope = cmp.Or(rec.Scope, config.ScopeProject)
+	rec.Kind = cmp.Or(rec.Kind, core.KindFact)
+	rec.Source = cmp.Or(rec.Source, core.SourceSQLite)
 	return rec, nil
 }
 
@@ -599,12 +606,7 @@ func (s *Memory) findActiveByHash(ctx context.Context, scope config.MemoryScope,
 	return recordFromRow(*row), nil
 }
 
-func (s *Memory) check() error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("sqlite memory store: nil store")
-	}
-	return nil
-}
+func (s *Memory) check() error { return CheckOpen(s.db, "sqlite memory store") }
 
 func recordColumns(alias string) []string {
 	return []string{qualify(alias, "uuid") + " AS uuid",

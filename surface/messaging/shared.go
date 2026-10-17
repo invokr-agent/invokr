@@ -38,3 +38,11 @@ func WaitBackoff(ctx context.Context, backoff *time.Duration, limit time.Duratio
 func Allowed[T comparable](allowAll bool, set map[T]bool, key T) bool {
 	return allowAll || (len(set) > 0 && set[key])
 }
+
+// StartListen runs loop in the background and hands back the inbound channel
+// it feeds, the shared shape of every adapter's Listen.
+func StartListen(ctx context.Context, loop func(context.Context, chan<- Inbound)) (<-chan Inbound, error) {
+	out := make(chan Inbound, 32)
+	go loop(ctx, out)
+	return out, nil
+}

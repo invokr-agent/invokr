@@ -22,24 +22,6 @@ func TestClamp01(t *testing.T) {
 	}
 }
 
-func TestCosine(t *testing.T) {
-	if got := Cosine([]float32{1, 0}, []float32{1, 0}); math.Abs(got-1) > 1e-9 {
-		t.Fatalf("identical vectors: got %v, want 1", got)
-	}
-	if got := Cosine([]float32{1, 0}, []float32{0, 1}); got != 0 {
-		t.Fatalf("orthogonal vectors: got %v, want 0", got)
-	}
-	if got := Cosine(nil, nil); got != 0 {
-		t.Fatalf("empty vectors: got %v, want 0", got)
-	}
-	if got := Cosine([]float32{1, 2}, []float32{1, 2, 3}); got != 0 {
-		t.Fatalf("length mismatch: got %v, want 0", got)
-	}
-	if got := Cosine([]float32{0, 0}, []float32{1, 1}); got != 0 {
-		t.Fatalf("zero norm: got %v, want 0", got)
-	}
-}
-
 func TestCosineWithNorms(t *testing.T) {
 	a := []float32{3, 4}
 	b := []float32{3, 4}

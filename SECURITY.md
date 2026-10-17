@@ -9,7 +9,7 @@ reporting.
 ## Reporting a vulnerability
 
 Report privately through GitHub's private vulnerability reporting:
-<https://github.com/antonikliment/invokr/security/advisories/new>.
+<https://github.com/invokr-ai/invokr/security/advisories/new>.
 
 Please do not open a public issue for a suspected vulnerability.
 

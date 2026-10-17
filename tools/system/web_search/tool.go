@@ -21,6 +21,7 @@ import (
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/support/mathutil"
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -218,7 +219,7 @@ func (s *searchService) dispatchAudit(ctx context.Context, args toolArgs, result
 		Action:  "web_search",
 		Tool:    "web_search",
 		Outcome: outcome,
-		Details: map[string]any{"policy_tier": constants.WebSearchPolicyTier, "query_hash": core.HashHexTrimmed(args.Query), "providers": args.Providers, "domains": args.Domains, "recency_days": args.RecencyDays, "cache_hit": cacheHit, "sensitive_query": sensitive, "approval_decision": approval, "result_count": resultCount, "duration_ms": duration.Milliseconds()},
+		Details: map[string]any{"policy_tier": constants.WebSearchPolicyTier, "query_hash": strutil.HashHexTrimmed(args.Query), "providers": args.Providers, "domains": args.Domains, "recency_days": args.RecencyDays, "cache_hit": cacheHit, "sensitive_query": sensitive, "approval_decision": approval, "result_count": resultCount, "duration_ms": duration.Milliseconds()},
 	}, err)
 }
 
@@ -246,13 +247,6 @@ func containsSensitiveTerm(lowerQuery string, values []string) bool {
 	return slices.ContainsFunc(values, func(value string) bool {
 		return value != "" && strings.Contains(lowerQuery, strings.ToLower(value))
 	})
-}
-
-// HasConfiguredProvider reports whether any provider selected in cfg has what it
-// needs to run: an API key in the environment for brave/tavily, an endpoint for
-// custom_http.
-func HasConfiguredProvider(cfg config.WebSearchConfig) bool {
-	return slices.ContainsFunc(cfg.Providers, func(name string) bool { return providerConfigured(name, cfg) })
 }
 
 // ConfiguredProviders lists the selected providers that can actually be

@@ -111,7 +111,7 @@ func (s *fakeSession) Send(_ context.Context, _ string) (turn.AgentResponse, err
 func makeTestRouter(t *testing.T, transports []Transport, cfg config.MessagingConfig, sessionFunc runtime.ChatSessionFunc) *Router {
 	t.Helper()
 	store := newTestStore(t)
-	app := config.AppConfig{Messaging: cfg}
+	app := config.AppConfig{Messaging: cfg, Memory: config.MemoryConfig{Dir: t.TempDir()}}
 	bus := events.NewOrderedDispatcher(zap.NewNop())
 	services := runtime.Services{
 		App:            app,

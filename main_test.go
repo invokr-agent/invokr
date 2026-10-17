@@ -8,6 +8,7 @@ import (
 
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/platform/setup"
 )
 
 func TestLoadStartupConfigRunsSetupBeforeConfigLoad(t *testing.T) {
@@ -43,18 +44,95 @@ func TestLoadStartupConfigRunsSetupBeforeConfigLoad(t *testing.T) {
 	}
 }
 
-func TestSetupRequested(t *testing.T) {
+func TestSetupCanResetMalformedActiveJSONProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	if _, err := setup.EnsureAt(home); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(home, "config.json")
+	if err := os.WriteFile(path, []byte(`{"profile":"researcher"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	profilePath := filepath.Join(config.ProfilesDir(home), "researcher.json")
+	if err := os.WriteFile(profilePath, []byte(`{"mode":"bogus"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Args
+	os.Args = []string{"invokr", "setup"}
+	t.Cleanup(func() { os.Args = previous })
+	if _, err := loadStartupConfig(); err != nil {
+		t.Fatalf("setup preflight rejected malformed profile: %v", err)
+	}
+	if err := setup.WriteToolTemplates(home, true); err != nil {
+		t.Fatal(err)
+	}
+	os.Args = []string{"invokr", "agent"}
+	if _, err := loadStartupConfig(); err != nil {
+		t.Fatalf("reset profile did not recover startup: %v", err)
+	}
+}
+
+func TestConfigUseCanReplaceMalformedActiveProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	if _, err := setup.EnsureAt(home); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.json"), []byte(`{"profile":"researcher"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config.ProfilesDir(home), "researcher.json"), []byte(`{"mode":"bogus"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Args
+	os.Args = []string{"invokr", "config", "use", "coder"}
+	t.Cleanup(func() { os.Args = previous })
+	if _, err := loadStartupConfig(); err != nil {
+		t.Fatalf("config use preflight rejected malformed profile: %v", err)
+	}
+}
+
+func TestStartupChoiceTreatsPromptAsData(t *testing.T) {
 	for _, tc := range []struct {
-		args []string
-		want bool
+		args             []string
+		profile          string
+		setup, configUse bool
 	}{
-		{[]string{"invokr"}, false},
-		{[]string{"invokr", "setup"}, true},
-		{[]string{"invokr", "init"}, true},
-		{[]string{"invokr", "agent"}, false},
+		{args: []string{"invokr"}},
+		{args: []string{"invokr", "setup"}, setup: true},
+		{args: []string{"invokr", "setup", "--help"}, setup: true},
+		{args: []string{"invokr", "--help"}},
+		{args: []string{"invokr", "config", "--help"}},
+		{args: []string{"invokr", "--version"}},
+		{args: []string{"invokr", "config", "use", "coder"}, configUse: true},
+		{args: []string{"invokr", "exec", "setup"}},
+		{args: []string{"invokr", "--profile", "researcher", "exec", "setup"}, profile: "researcher"},
+		{args: []string{"invokr", "exec", "--", "--profile=coder"}},
 	} {
-		if got := setupRequested(tc.args); got != tc.want {
-			t.Fatalf("setupRequested(%v) = %v, want %v", tc.args, got, tc.want)
+		got, err := parseStartupChoice(tc.args)
+		if err != nil || got.profile != tc.profile || got.setup != tc.setup || got.configUse != tc.configUse {
+			t.Fatalf("parseStartupChoice(%v) = %+v, %v", tc.args, got, err)
+		}
+	}
+}
+
+func TestPromptTextCannotBroadenStoredProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	if _, err := setup.EnsureAt(home); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.json"), []byte(`{"profile":"researcher"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previous := os.Args
+	t.Cleanup(func() { os.Args = previous })
+	for _, args := range [][]string{{"invokr", "exec", "setup"}, {"invokr", "exec", "--", "--profile=coder"}} {
+		os.Args = args
+		cfg, err := loadStartupConfig()
+		if err != nil || cfg.SessionMode != "auto" || len(cfg.Tools.Allowlist) == 0 {
+			t.Fatalf("args=%v lost stored researcher profile: mode=%q tools=%v err=%v", args, cfg.SessionMode, cfg.Tools.Allowlist, err)
 		}
 	}
 }

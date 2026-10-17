@@ -135,7 +135,6 @@ func loadAction(ctx context.Context, store *sessionstore.Store, args Args) (stri
 	return marshal(loadResponse{SessionID: sid, Messages: truncateTranscript(messages)})
 }
 
-// listSessions lists this directory's sessions, or every session when all.
 func listSessions(store *sessionstore.Store, all bool) ([]sessionstore.SessionInfo, error) {
 	sessions, err := store.List()
 	if err != nil || all {

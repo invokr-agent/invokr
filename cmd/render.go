@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/spf13/cobra"
 	"io"
 	"os"
 	"sync"
@@ -12,6 +15,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/antonikliment/tuikit"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/term"
 )
 
@@ -20,8 +24,7 @@ import (
 const tableGap = 2
 
 // cellWidth caps one cell. A session title is free text and a long one pushes
-// every other column off the right edge; eliding the middle keeps both ends,
-// which is where the distinguishing part usually is.
+// every other column off the right edge, so it is cut with a trailing "…".
 const cellWidth = 44
 
 // renderer is the CLI's presentation surface. It exists so command output and
@@ -70,13 +73,13 @@ func (r renderer) success(s string) string { return r.paint(r.theme.Success, s) 
 func (r renderer) danger(s string) string  { return r.paint(r.theme.Danger, s) }
 func (r renderer) warn(s string) string    { return r.paint(r.theme.Warn, s) }
 
-// table renders aligned columns with a muted header. Cells are elided in the
-// middle rather than truncated, and styled cells still align because tuikit
+// table renders aligned columns with a muted header. Long cells end in "…"
+// (ANSI-aware), and styled cells still align because tuikit
 // measures display width rather than bytes.
 func (r renderer) table(header []string, rows [][]string) string {
 	for _, row := range rows {
 		for i, cell := range row {
-			row[i] = tuikit.TruncMiddle(cell, cellWidth)
+			row[i] = ansi.Truncate(cell, cellWidth, "…")
 		}
 	}
 	return r.theme.Palette.Table(r.paint, header, rows, tableGap)
@@ -92,10 +95,13 @@ func (r renderer) status(word string) string { return r.theme.Palette.StatusWord
 // tuikit would grade "allow" as a good outcome, and on a scheduled job it is
 // the opposite — every tool call approved with nobody watching.
 func (r renderer) policy(p string) string {
-	if p == "allow" {
+	switch p {
+	case approval.PolicyAllowAll:
 		return r.danger(p)
+	case approval.PolicyDeny:
+		return r.muted(p)
 	}
-	return r.muted(p)
+	return r.warn(p) // a tier list: some calls run unattended
 }
 
 // when renders an instant as how long ago it was, which is the question a
@@ -107,15 +113,29 @@ func (r renderer) when(at time.Time) string {
 	return tuikit.Age(at, time.Now())
 }
 
+// addJSONFlag registers the --json flag every listing command shares; emit
+// reads it.
+func addJSONFlag(cmd *cobra.Command) {
+	cmd.Flags().Bool("json", false, "Emit machine-readable JSON instead of a table")
+}
+
+// emit encodes v as JSON under --json, and otherwise calls table.
+func emit(cmd *cobra.Command, v any, table func() error) error {
+	if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+		return json.NewEncoder(cmd.OutOrStdout()).Encode(v)
+	}
+	return table()
+}
+
 // renderTable prints a table of items, or a muted note when there are none.
-// print is fmt.Fprint or fmt.Fprintln: callers differ on the trailing newline.
-func renderTable[T any](out io.Writer, print func(io.Writer, ...any) (int, error), header []string, empty string, items []T, row func(renderer, T) []string) error {
+// The table already ends in a newline.
+func renderTable[T any](out io.Writer, header []string, empty string, items []T, row func(renderer, T) []string) error {
 	r := newRenderer(out)
 	if len(items) == 0 {
 		_, err := fmt.Fprintln(out, r.muted(empty))
 		return err
 	}
 	rows := toolcore.MapSlice(items, func(item T) []string { return row(r, item) })
-	_, err := print(out, r.table(header, rows))
+	_, err := fmt.Fprint(out, r.table(header, rows))
 	return err
 }

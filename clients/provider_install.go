@@ -80,3 +80,13 @@ func newProviderInstaller() (*install.Installer, error) {
 	}
 	return installer, nil
 }
+
+// InstalledProvider reports the verified cached binary for providerType, the
+// same lookup the driver does before launching it.
+func InstalledProvider(providerType string) (string, bool, error) {
+	installer, err := newProviderInstaller()
+	if err != nil {
+		return "", false, err
+	}
+	return installer.Locate(providerType, "")
+}

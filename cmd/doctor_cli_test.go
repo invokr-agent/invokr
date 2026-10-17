@@ -68,6 +68,9 @@ func TestCheckProviderAndModel(t *testing.T) {
 	if got := checkModel("local-model", ids); got.status != "ok" {
 		t.Fatalf("expected served model to pass, got %+v", got)
 	}
+	if got := checkModel("", ids); got.status != "ok" || !strings.Contains(got.detail, "local-model") {
+		t.Fatalf("expected empty model to fall back to first served, got %+v", got)
+	}
 	missing := checkModel("other-model", ids)
 	if missing.status != "fail" || missing.remedy == "" {
 		t.Fatalf("expected missing model to fail with a remedy, got %+v", missing)

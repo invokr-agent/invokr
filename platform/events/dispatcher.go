@@ -1,6 +1,7 @@
 package events
 
 import (
+	"cmp"
 	"context"
 	"slices"
 	"sync"
@@ -22,9 +23,7 @@ type registeredHandler struct {
 }
 
 func NewOrderedDispatcher(logger *zap.Logger, handlers ...Handler) *OrderedDispatcher {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = cmp.Or(logger, zap.NewNop())
 	d := &OrderedDispatcher{logger: logger, registered: []registeredHandler{}}
 	for _, handler := range handlers {
 		d.Register(handler)
@@ -42,14 +41,11 @@ func (d *OrderedDispatcher) Register(handler Handler) func() {
 	d.registered = append(d.registered, registeredHandler{id: id, handler: handler})
 	d.mu.Unlock()
 
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			d.mu.Lock()
-			defer d.mu.Unlock()
-			d.registered = slices.DeleteFunc(d.registered, func(r registeredHandler) bool { return r.id == id })
-		})
-	}
+	return sync.OnceFunc(func() {
+		d.mu.Lock()
+		defer d.mu.Unlock()
+		d.registered = slices.DeleteFunc(d.registered, func(r registeredHandler) bool { return r.id == id })
+	})
 }
 
 func (d *OrderedDispatcher) Dispatch(ctx context.Context, event Event) {

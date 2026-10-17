@@ -6,9 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +13,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	"github.com/tidwall/gjson"
 )
@@ -58,7 +59,7 @@ func (p *jsonSearchProvider) Search(ctx context.Context, req SearchRequest) ([]P
 	if strings.TrimSpace(p.endpoint) == "" {
 		return nil, fmt.Errorf("%s endpoint is required", p.name)
 	}
-	apiKey := core.FirstNonEmptyTrimmed(p.apiKey, os.Getenv(p.keyEnv))
+	apiKey := strutil.FirstNonEmptyTrimmed(p.apiKey, os.Getenv(p.keyEnv))
 	if p.keyEnv != "" && apiKey == "" {
 		return nil, fmt.Errorf("%s API key env %q is empty", p.name, p.keyEnv)
 	}
@@ -118,7 +119,6 @@ func (p *jsonSearchProvider) results(items []providerItem) []ProviderResult {
 	return out
 }
 
-// newProviderRequest builds one JSON-over-HTTP search request with headers set.
 func newProviderRequest(ctx context.Context, method, rawURL string, body []byte, headers map[string]string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, method, rawURL, bytes.NewReader(body))
 	if err != nil {
@@ -135,9 +135,9 @@ func newJSONProvider(name, endpoint, keyEnv string, client *http.Client) *jsonSe
 }
 
 func NewBraveProvider(cfg SearchProviderConfig, client *http.Client) *jsonSearchProvider {
-	cfg.Endpoint = core.FirstNonEmptyTrimmed(cfg.Endpoint, constants.BraveSearchEndpoint)
-	cfg.APIKeyEnv = core.FirstNonEmptyTrimmed(cfg.APIKeyEnv, constants.BraveSearchAPIKeyEnv)
-	keyHeader := core.FirstNonEmptyTrimmed(cfg.APIKeyHeader, constants.BraveSearchAPIKeyHeader, "X-Subscription-Token")
+	cfg.Endpoint = strutil.FirstNonEmptyTrimmed(cfg.Endpoint, constants.BraveSearchEndpoint)
+	cfg.APIKeyEnv = strutil.FirstNonEmptyTrimmed(cfg.APIKeyEnv, constants.BraveSearchAPIKeyEnv)
+	keyHeader := strutil.FirstNonEmptyTrimmed(cfg.APIKeyHeader, constants.BraveSearchAPIKeyHeader, "X-Subscription-Token")
 	p := newJSONProvider("brave", cfg.Endpoint, cfg.APIKeyEnv, client)
 	p.build = func(ctx context.Context, endpoint, apiKey string, req SearchRequest) (*http.Request, error) {
 		u, err := url.Parse(endpoint)
@@ -160,9 +160,9 @@ func NewBraveProvider(cfg SearchProviderConfig, client *http.Client) *jsonSearch
 }
 
 func NewTavilyProvider(cfg SearchProviderConfig, client *http.Client) *jsonSearchProvider {
-	cfg.Endpoint = core.FirstNonEmptyTrimmed(cfg.Endpoint, constants.TavilySearchEndpoint)
-	cfg.APIKeyEnv = core.FirstNonEmptyTrimmed(cfg.APIKeyEnv, constants.TavilySearchAPIKeyEnv)
-	keyHeader := core.FirstNonEmptyTrimmed(cfg.APIKeyHeader, constants.TavilySearchAPIKeyHeader, "Authorization")
+	cfg.Endpoint = strutil.FirstNonEmptyTrimmed(cfg.Endpoint, constants.TavilySearchEndpoint)
+	cfg.APIKeyEnv = strutil.FirstNonEmptyTrimmed(cfg.APIKeyEnv, constants.TavilySearchAPIKeyEnv)
+	keyHeader := strutil.FirstNonEmptyTrimmed(cfg.APIKeyHeader, constants.TavilySearchAPIKeyHeader, "Authorization")
 	p := newJSONProvider("tavily", cfg.Endpoint, cfg.APIKeyEnv, client)
 	p.build = func(ctx context.Context, endpoint, apiKey string, req SearchRequest) (*http.Request, error) {
 		body := map[string]any{"query": req.Query, "max_results": req.MaxResults}
@@ -180,8 +180,8 @@ func NewTavilyProvider(cfg SearchProviderConfig, client *http.Client) *jsonSearc
 }
 
 func NewCustomHTTPProvider(cfg config.CustomHTTPSearchConfig, client *http.Client) *jsonSearchProvider {
-	method := strings.ToUpper(core.FirstNonEmptyTrimmed(cfg.Method, http.MethodGet))
-	queryParam := core.FirstNonEmptyTrimmed(cfg.QueryParam, "q")
+	method := strings.ToUpper(strutil.FirstNonEmptyTrimmed(cfg.Method, http.MethodGet))
+	queryParam := strutil.FirstNonEmptyTrimmed(cfg.QueryParam, "q")
 	p := newJSONProvider("custom_http", cfg.Endpoint, "", client)
 	p.build = func(ctx context.Context, endpoint, _ string, req SearchRequest) (*http.Request, error) {
 		return buildCustomHTTPRequest(ctx, cfg, method, queryParam, endpoint, req)

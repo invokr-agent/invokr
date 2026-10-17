@@ -461,6 +461,10 @@ func TestConcurrentSyncOpensOnce(t *testing.T) {
 		t.Fatalf("concurrent sync: %v", err)
 	}
 
+	// didOpen is a notification: sync returns before the server has read it.
+	for deadline := time.Now().Add(2 * time.Second); fake.openCount() == 0 && time.Now().Before(deadline); {
+		time.Sleep(time.Millisecond)
+	}
 	if opens := fake.openCount(); opens != 1 {
 		t.Fatalf("didOpen sent %d times, want exactly 1", opens)
 	}

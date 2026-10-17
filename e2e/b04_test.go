@@ -14,7 +14,7 @@ const repeatNotice = "repeated tool call detected; asking model to change approa
 // searchCall is a successful, cheap tool call whose signature is fully
 // determined by the query, so a script can repeat or vary it at will.
 func searchCall(id, query string) providertest.CompletionStep {
-	return providertest.NativeToolCallStep(id, "tool_search", map[string]any{"query": query})
+	return providertest.NativeToolCallStep(id, "tools", map[string]any{"action": "search", "query": query})
 }
 
 // TestB04_RepeatGuardNonConsecutive covers plan cases B04/P03: the guard counts

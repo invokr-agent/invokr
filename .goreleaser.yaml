@@ -1,6 +1,6 @@
 version: 2
 
-project_name: invokr-agent
+project_name: invokr
 
 before:
   hooks:
@@ -11,7 +11,7 @@ builds:
   # cross-compile CGO-free from a single build host.
   - id: invokr-agent
     main: .
-    binary: invokr-agent
+    binary: invokr
     env:
       - CGO_ENABLED=0
     goos:
@@ -25,9 +25,9 @@ builds:
         goarch: arm64
     ldflags: &ldflags
       - -s -w
-      - -X github.com/antonikliment/invokr/platform/version.Version={{.Version}}
-      - -X github.com/antonikliment/invokr/platform/version.Commit={{.ShortCommit}}
-      - -X github.com/antonikliment/invokr/platform/version.Date={{.Date}}
+      - -X github.com/invokr-ai/invokr/platform/version.Version={{.Version}}
+      - -X github.com/invokr-ai/invokr/platform/version.Commit={{.ShortCommit}}
+      - -X github.com/invokr-ai/invokr/platform/version.Date={{.Date}}
 
   # linux/arm64 needs CGO: github.com/zerfoo/zerfoo's (and its ztensor dep's)
   # optional CUDA support resolves dlopen/dlsym via a //go:linkname into
@@ -39,7 +39,7 @@ builds:
   # (`apt-get install gcc-aarch64-linux-gnu` on Debian/Ubuntu).
   - id: invokr-agent-linux-arm64
     main: .
-    binary: invokr-agent
+    binary: invokr
     env:
       - CGO_ENABLED=1
       - CC=aarch64-linux-gnu-gcc

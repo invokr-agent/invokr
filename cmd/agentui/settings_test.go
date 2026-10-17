@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/platform/setup"
 )
 
 func openSettingsModel(t *testing.T) *model {
@@ -130,5 +131,27 @@ func TestSettingsSetupReadsFileNotEnv(t *testing.T) {
 	m.setupSettings()
 	if got := m.settings.setup; got.model != "file-model" || got.baseURL != "http://file:1/v1" {
 		t.Fatalf("setup draft = %+v, want the config file's values", got)
+	}
+}
+
+func TestSettingsResetToolTemplatesWithoutSavingConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	if err := setup.WriteToolTemplates(home, false); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(setup.ToolTemplatesDir(home), "planner.json")
+	if err := os.WriteFile(path, []byte(`{"edited":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m := newTestModelWithHiddenLogs()
+	m.settings.setup.resetTemplates = true
+	m.saveSettingsTab(setupTab)
+	data, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(data), "edited") {
+		t.Fatalf("template was not reset: %s %v", data, err)
+	}
+	if _, err := os.Stat(config.DefaultConfigPath()); !os.IsNotExist(err) {
+		t.Fatalf("reset wrote config.json: %v", err)
 	}
 }

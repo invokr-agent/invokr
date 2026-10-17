@@ -2,7 +2,6 @@ package config
 
 import (
 	"cmp"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -18,6 +17,9 @@ import (
 // startup instead of silently yielding empty skills/agents/toolbox sets.
 // Call it after WithDefaults; logger may be nil (warnings dropped).
 func (c AppConfig) Validate(logger *zap.Logger) error {
+	if err := c.Agent.ValidateModelOptions(); err != nil {
+		return err
+	}
 	compact := cmp.Or(c.Agent.ContextCompactPercent, constants.ContextCompactPercent)
 	if c.Agent.ContextWarningPercent < 0 || c.Agent.ContextWarningPercent >= compact || compact >= 100 ||
 		(c.Agent.ContextCompactPercent != 0 && c.Agent.ContextWarningPercent == 0) {
@@ -53,12 +55,12 @@ func (c AppConfig) Validate(logger *zap.Logger) error {
 	if err := validateToolResultStrategies(c.Agent); err != nil {
 		return err
 	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
-	warnMissingDir(logger, "skills.dir", c.Skills.Dir)
-	warnMissingDir(logger, "agents.dir", c.Agents.Dir)
-	warnMissingDir(logger, "toolbox.dir", c.Toolbox.Dir)
+	logger = cmp.Or(logger, zap.NewNop())
+	// A default dir that does not exist yet is a fresh install, not a typo.
+	def := AppConfig{}.WithDefaults()
+	warnMissingDir(logger, "skills.dir", c.Skills.Dir, def.Skills.Dir)
+	warnMissingDir(logger, "agents.dir", c.Agents.Dir, def.Agents.Dir)
+	warnMissingDir(logger, "toolbox.dir", c.Toolbox.Dir, def.Toolbox.Dir)
 	return nil
 }
 
@@ -92,12 +94,8 @@ func validateMCP(servers map[string]MCPServerConfig) error {
 }
 
 // validateToolResultStrategies rejects unknown oversize-strategy names so a
-// typo surfaces at startup instead of silently falling back to the default,
-// and an aging threshold that would fire before the keep window.
+// typo surfaces at startup instead of silently falling back to the default.
 func validateToolResultStrategies(agent AgentConfig) error {
-	if age := agent.ToolResultAgeTurns; age < 0 || (age > 0 && age < agent.ToolResultKeepTurns) {
-		return errors.New("config: agent.tool_result_age_turns must be at least agent.tool_result_keep_turns (and at least 1)")
-	}
 	valid := func(name string) bool {
 		return name == "" || name == constants.ToolResultStrategySpill || name == constants.ToolResultStrategyCap
 	}
@@ -112,8 +110,8 @@ func validateToolResultStrategies(agent AgentConfig) error {
 	return nil
 }
 
-func warnMissingDir(logger *zap.Logger, key, dir string) {
-	if dir == "" {
+func warnMissingDir(logger *zap.Logger, key, dir, defaultDir string) {
+	if dir == "" || dir == defaultDir {
 		return
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {

@@ -48,10 +48,10 @@ func TestEventSinks(t *testing.T) {
 	// save/recall lifecycle families).
 	steps := []providertest.CompletionStep{
 		providertest.NativeToolCallStep("sink-search", "file_search", map[string]any{"query": "amber-orbit"}),
-		providertest.NativeToolCallStep("sink-save", "memory", map[string]any{
+		managedToolStep("sink-save", "memory", map[string]any{
 			"action": "save", "scope": "project", "kind": "fact", "content": "Codename is amber-orbit.",
 		}),
-		providertest.NativeToolCallStep("sink-recall", "recall", map[string]any{"query": "codename", "limit": 3}),
+		managedToolStep("sink-recall", "recall", map[string]any{"query": "codename", "limit": 3}),
 		providertest.ReplyStep("done"),
 	}
 
@@ -77,8 +77,8 @@ func TestEventSinks(t *testing.T) {
 			return nil
 		}))
 	})
-	if got.Resp.ToolCallCount != 3 {
-		t.Fatalf("expected three tool calls, got %d", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 5 {
+		t.Fatalf("expected five tool calls, got %d", got.Resp.ToolCallCount)
 	}
 
 	// 1. The audit payload is real work, not an empty shell.

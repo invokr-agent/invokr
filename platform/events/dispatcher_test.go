@@ -4,8 +4,44 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"sync"
+	"sync/atomic"
 	"testing"
 )
+
+func TestOrderedDispatcherConcurrentRegisterUnregisterDispatch(t *testing.T) {
+	var kept, transient atomic.Int64
+	dispatcher := NewOrderedDispatcher(nil, HandlerFunc(func(context.Context, Event) error {
+		kept.Add(1)
+		return nil
+	}))
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	for range 8 {
+		workers.Go(func() {
+			<-start
+			for range 100 {
+				unregister := dispatcher.Register(HandlerFunc(func(context.Context, Event) error {
+					transient.Add(1)
+					return nil
+				}))
+				dispatcher.Dispatch(context.Background(), Event{Type: EventAfterResponse})
+				unregister()
+				unregister()
+			}
+		})
+	}
+	close(start)
+	workers.Wait()
+	before := transient.Load()
+	dispatcher.Dispatch(context.Background(), Event{Type: EventAfterResponse})
+	if got := kept.Load(); got != 801 {
+		t.Fatalf("persistent handler calls = %d, want 801", got)
+	}
+	if before < 800 || transient.Load() != before {
+		t.Fatalf("transient handler calls = %d before final dispatch, %d after", before, transient.Load())
+	}
+}
 
 func TestOrderedDispatcherRunsHandlersInOrderAndContinuesAfterError(t *testing.T) {
 	var got []string

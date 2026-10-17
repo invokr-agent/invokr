@@ -30,16 +30,12 @@ func NewTruncatingWriters(limit int) *TruncatingWriters {
 	return parent
 }
 
-// Stdout returns the writer for the subprocess's standard output.
 func (w *TruncatingWriters) Stdout() io.Writer { return w.stdout }
 
-// Stderr returns the writer for the subprocess's standard error.
 func (w *TruncatingWriters) Stderr() io.Writer { return w.stderr }
 
-// StdoutString returns the captured (possibly truncated) standard output.
 func (w *TruncatingWriters) StdoutString() string { return w.stdout.String() }
 
-// StderrString returns the captured (possibly truncated) standard error.
 func (w *TruncatingWriters) StderrString() string { return w.stderr.String() }
 
 // Truncated reports whether any output was dropped because the budget ran out.

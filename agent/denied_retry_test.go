@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
 func denyingHandler(executions *int) core.NativeHandler {
 	return func(ctx context.Context, _ *core.ToolCall) (string, error) {
 		*executions++
-		err := core.EnforceApproval(ctx, approval.StaticApprover{Decision: approval.Decision{Approved: false}}, core.ToolSpec{Name: "demo"}, core.Ask(approval.Request{Tool: "demo"}))
+		err := core.EnforceApproval(ctx, testutil.StaticApprover{Decision: approval.Decision{Approved: false}}, core.ToolSpec{Name: "demo"}, core.Ask(approval.Request{Tool: "demo"}))
 		return "", err
 	}
 }

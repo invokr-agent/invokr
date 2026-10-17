@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/antonikliment/tuikit/markdown"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/platform/setup"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/support/fsutil"
 	"github.com/invokr-ai/invokr/surface/ui"
@@ -19,14 +20,15 @@ import (
 // The settings panel gathers the per-setting slash commands into one tabbed
 // popup. Each tab is a huh form; a field change goes straight through the
 // setter its slash command uses, so the panel adds no setting logic of its own.
-// Only the Setup tab defers: it writes config.json on Save.
+// Setup and Model options defer their config.json writes until Save.
 
-var settingsTitles = []string{"View", "Session", "Profiles", "Setup"}
+var settingsTitles = []string{"View", "Session", "Profiles", "Setup", "Model options"}
 
 const (
-	settingsHint   = "ctrl+←/→ tabs · tab fields · esc close"
-	setupTab       = 3
-	currentProfile = "(current)"
+	settingsHint    = "ctrl+←/→ tabs · tab fields · esc close"
+	setupTab        = 3
+	modelOptionsTab = 4
+	currentProfile  = "(current)"
 )
 
 var reasoningLevels = []string{"default", "none", "minimal", "low", "medium", "high", "xhigh", "max"}
@@ -40,17 +42,18 @@ type settingField struct {
 }
 
 type setupDraft struct {
-	baseURL, model string
-	memory, save   bool
+	baseURL, model               string
+	memory, save, resetTemplates bool
 }
 
 type settingsPanel struct {
-	open   bool
-	tab    int
-	forms  [4]*huh.Form
-	fields [4][]*settingField
-	models []string
-	setup  setupDraft
+	open         bool
+	tab          int
+	forms        [5]*huh.Form
+	fields       [5][]*settingField
+	models       []string
+	setup        setupDraft
+	modelOptions modelOptionsDraft
 }
 
 func runSettingsCommand(m *model, _ string, _ []string) tea.Cmd { return m.openSettings() }
@@ -71,7 +74,7 @@ func (m *model) openSettings() tea.Cmd {
 
 func (m *model) buildSettingsTab(tab int) tea.Cmd {
 	m.settings.fields[tab] = nil
-	build := [...]func(*model) []huh.Field{(*model).viewSettings, (*model).sessionSettings, (*model).profileSettings, (*model).setupSettings}[tab]
+	build := [...]func(*model) []huh.Field{(*model).viewSettings, (*model).sessionSettings, (*model).profileSettings, (*model).setupSettings, (*model).modelOptionsSettings}[tab]
 	form := huh.NewForm(huh.NewGroup(build(m)...)).WithShowHelp(false).WithTheme(huh.ThemeFunc(huh.ThemeCharm)).WithWidth(max(20, m.settingsWidth()-4))
 	m.settings.forms[tab] = form
 	return form.Init()
@@ -99,6 +102,9 @@ func (m *model) updateSettings(msg tea.Msg) tea.Cmd {
 		case "ctrl+left", "ctrl+right":
 			step := map[bool]int{true: 1, false: len(settingsTitles) - 1}[k.String() == "ctrl+right"]
 			p.tab = (p.tab + step) % len(settingsTitles)
+			if p.tab == modelOptionsTab {
+				return m.buildSettingsTab(p.tab)
+			}
 			return nil
 		}
 	}
@@ -112,8 +118,8 @@ func (m *model) updateSettings(msg tea.Msg) tea.Cmd {
 		}
 	}
 	if state := p.forms[tab].State; state != huh.StateNormal {
-		if tab == setupTab && state == huh.StateCompleted && p.setup.save {
-			m.saveSetup()
+		if state == huh.StateCompleted {
+			m.saveSettingsTab(tab)
 		}
 		// A finished huh form stops taking input, so it starts over.
 		return tea.Batch(cmd, m.buildSettingsTab(tab))
@@ -121,8 +127,31 @@ func (m *model) updateSettings(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+func (m *model) saveSettingsTab(tab int) {
+	switch tab {
+	case setupTab:
+		if m.settings.setup.save || m.settings.setup.resetTemplates {
+			m.saveSetup()
+		}
+	case modelOptionsTab:
+		if m.settings.modelOptions.save {
+			m.saveModelOptions()
+		}
+	}
+}
+
 func (m *model) saveSetup() {
 	s, path := m.settings.setup, config.DefaultConfigPath()
+	if s.resetTemplates {
+		if err := setup.WriteToolTemplates(config.InvokrHomeDir(), true); err != nil {
+			m.commandMessage("tool templates: " + err.Error())
+		} else {
+			m.commandMessage("JSON profiles reset in " + setup.ToolTemplatesDir(config.InvokrHomeDir()))
+		}
+	}
+	if !s.save {
+		return
+	}
 	if err := config.SetSetupFields(path, s.baseURL, s.model, s.memory); err != nil {
 		m.commandMessage("settings: " + err.Error())
 		return
@@ -200,6 +229,7 @@ func (m *model) setupSettings() []huh.Field {
 		huh.NewInput().Title("Default model").Value(&s.model),
 		huh.NewConfirm().Title("Memory (zerfoo)").Value(&s.memory),
 		huh.NewNote().Title("Home").Description(config.InvokrHomeDir() + "\nApplies after restart; an active router profile's provider/model win at runtime."),
+		huh.NewConfirm().Title("Reset JSON profiles?").Description("Replace shipped JSON profiles in profiles.").Affirmative("Reset").Negative("Keep").Value(&s.resetTemplates),
 		huh.NewConfirm().Title("Write config.json?").Affirmative("Save").Negative("Cancel").Value(&s.save),
 	}
 }
@@ -216,8 +246,13 @@ func (m *model) settingsView(bg string) string {
 	// The hint leads the body so a short terminal clips the form, not the hint.
 	body := ui.Invokr.Muted.Render(settingsHint) + "\n\n" + p.forms[p.tab].View()
 	pal := ui.Invokr.Palette
-	accents := []color.Color{pal.Brand, pal.Blue, pal.Cyan, pal.Yellow}
-	panel := pal.TabbedPanel(settingsTitles, accents, p.tab, m.settingsWidth(), min(m.height-2, lipgloss.Height(body)+4), body)
+	accents := []color.Color{pal.Brand, pal.Blue, pal.Cyan, pal.Yellow, pal.Brand}
+	return m.tabbedModal(bg, settingsTitles, accents, p.tab, m.settingsWidth(), body)
+}
+
+// tabbedModal centers a tabbed panel sized to body over bg.
+func (m *model) tabbedModal(bg string, titles []string, accents []color.Color, tab, width int, body string) string {
+	panel := ui.Invokr.Palette.TabbedPanel(titles, accents, tab, width, min(m.height-2, lipgloss.Height(body)+4), body)
 	layers := lipgloss.NewCompositor(
 		lipgloss.NewLayer(bg).Z(0),
 		lipgloss.NewLayer(panel).X(max(0, (m.width-lipgloss.Width(panel))/2)).Y(max(0, (m.height-lipgloss.Height(panel))/2)).Z(1),

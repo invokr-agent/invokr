@@ -118,11 +118,11 @@ func TestEditFileKeepsCRLFEndToEnd(t *testing.T) {
 
 func TestCreateNewFileKeepsBytesVerbatim(t *testing.T) {
 	wsp, _ := testPolicy(t)
-	p, err := plan(t, wsp, editArgs{Path: "fresh.txt", Edits: []editOp{{New: "a\r\nb\n"}}})
+	p, err := contentPlan(t, wsp, "fresh.txt", "a\r\nb\n")
 	if err != nil {
 		t.Fatalf("prepareEdit: %v", err)
 	}
-	if !p.created || p.updated != "a\r\nb\n" {
-		t.Fatalf("created=%v updated=%q", p.created, p.updated)
+	if p.operation != "create" || p.updated != "a\r\nb\n" {
+		t.Fatalf("operation=%s updated=%q", p.operation, p.updated)
 	}
 }

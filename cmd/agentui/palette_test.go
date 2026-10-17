@@ -70,13 +70,7 @@ func TestPaletteEnterRunsArgumentlessCommand(t *testing.T) {
 	if m.palette.open {
 		t.Fatal("palette still open after enter")
 	}
-	found := false
-	for _, msg := range m.chatLog.messages {
-		if strings.Contains(msg.text, "transcript cleared") {
-			found = true
-		}
-	}
-	if !found {
+	if m.err != ErrNewSession {
 		t.Fatal("/clear did not run from the palette")
 	}
 }

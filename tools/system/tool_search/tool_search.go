@@ -1,147 +1,64 @@
+// Package tool_search owns manager discovery and its native schema.
 package tool_search
 
 import (
-	"cmp"
 	"context"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strings"
-	"time"
+
+	"github.com/invokr-ai/invokr/tools/core"
 )
 
-const (
-	defaultMaxResults = 10
-	maxResultsCap     = 100
-	policyTier        = "read_workspace"
-	// A search narrow enough to return a handful of tools is a search for
-	// something to call, so load those schemas without being asked: the
-	// alternative is a hit that changes nothing and says nothing (#534).
-	autoLoadMaxResults = 3
-)
+// RunShape is the manager call that runs an enabled optional tool.
+const RunShape = `tools {"action":"run","name":"<tool>","arguments":{...}}`
 
-type searchArgs struct {
-	Query         string `json:"query,omitempty" desc:"Optional text search over tool name, namespace, and description."`
-	Namespace     string `json:"namespace,omitempty" desc:"Optional namespace filter."`
-	MaxResults    int    `json:"max_results,omitempty" desc:"Maximum results, capped at 100."`
-	IncludeSchema bool   `json:"include_schema,omitempty" desc:"Include parameters and mark returned tools loaded for this session."`
+type Args struct {
+	Action     string          `json:"action" enum:"list,search,enable,disable,create,run" desc:"List/search never enable. Enable before run; create persists and enables a toolbox tool."`
+	Query      string          `json:"query,omitempty" desc:"Search names, namespaces and descriptions."`
+	Names      []string        `json:"names,omitempty" desc:"Optional tools to enable or disable."`
+	Name       string          `json:"name,omitempty" desc:"Enabled target for run."`
+	Arguments  json.RawMessage `json:"arguments,omitempty" schema:"object" desc:"Arguments for the run target."`
+	Definition json.RawMessage `json:"definition,omitempty" schema:"object" desc:"Persistent toolbox definition for create."`
 }
 
-type searchResponse struct {
-	Tools []toolResult `json:"tools"`
-	Note  string       `json:"note,omitempty"`
-}
+func RegisterManager(c core.NativeRegistrar, execute func(context.Context, Args) (string, error), definition map[string]any) {
+	schema := core.SchemaFor[Args]()
+	schema["properties"].(map[string]any)["arguments"] = map[string]any{"type": "object", "description": "Arguments for the enabled run target."}
+	schema["properties"].(map[string]any)["definition"] = definition
 
-type toolResult struct {
-	Name         string                `json:"name"`
-	Namespace    string                `json:"namespace"`
-	Description  string                `json:"description"`
-	Parameters   map[string]any        `json:"parameters,omitempty"`
-	Source       string                `json:"source"`
-	Runtime      string                `json:"runtime,omitempty"`
-	PluginDir    string                `json:"plugin_dir,omitempty"`
-	Policy       core.ToolPolicy       `json:"policy"`
-	Capabilities core.ToolCapabilities `json:"capabilities"`
-}
-
-func RegisterToolSearchTool(c core.SearchableRegistry, deps core.CallerDeps) {
-	core.Register(c, core.Tool[searchArgs]{
-		Spec: core.ToolSpec{
-			Name: "tool_search", Description: "Search the tool registry by name, namespace, or description. Uses read_workspace policy. Set include_schema=true before calling a deferred tool.",
-			Example:    `{"name":"tool_search","arguments":{"query":"web","namespace":"network","max_results":10,"include_schema":true}}`,
-			Parameters: core.SchemaFor[searchArgs](), Metadata: core.ReadWorkspaceMetadata("system", core.ToolCapabilities{ReadsWorkspace: true}),
-		},
-		Prepare: func(ctx context.Context, args searchArgs) (searchArgs, error) { return normalizeArgs(args), nil },
-		AuditFailure: func(ctx context.Context, args searchArgs, err error) {
-			dispatchAudit(deps.Dispatcher, ctx, args, 0, 0, "failed", err)
-		},
-		Execute: func(ctx context.Context, args searchArgs) (string, error) {
-			return runToolSearch(deps.Dispatcher, ctx, c, args)
-		},
+	core.Register(c, core.Tool[Args]{
+		Spec:    core.ToolSpec{Name: "tools", Description: "List or search permitted tools. Enable an optional tool when it fits the task better than a shell workaround, then run it with {\"action\":\"run\",\"name\":...,\"arguments\":{...}}; disable unused tools, or create a persistent toolbox tool.", Parameters: schema, Metadata: core.ReadWorkspaceMetadata("system", core.ToolCapabilities{})},
+		Execute: execute,
 	})
 }
 
-func runToolSearch(dispatcher events.Dispatcher, ctx context.Context, registry core.SearchableRegistry, args searchArgs) (payload string, err error) {
-	started := time.Now()
-	resultCount := 0
-	defer func() {
-		dispatchAudit(dispatcher, ctx, args, resultCount, time.Since(started), core.Outcome(err), err)
-	}()
-
-	if dispatcher != nil {
-		dispatcher.Dispatch(ctx, events.Event{Type: events.EventToolboxRefreshRequested, SessionID: core.SessionIDFromContext(ctx)})
-	}
-	results := searchSpecs(registry.Specs(), args)
-	resultCount = len(results)
-	loaded := len(results) > 0 && (args.IncludeSchema || len(results) <= autoLoadMaxResults)
-	if loaded && !args.IncludeSchema {
-		// Narrow enough to be a search for something to call: re-run it as if
-		// include_schema had been set, so the result carries the schema too.
-		// args itself stays untouched — the audit records what was asked for.
-		withSchema := args
-		withSchema.IncludeSchema = true
-		results = searchSpecs(registry.Specs(), withSchema)
-	}
-	if loaded {
-		names := core.MapSlice(results, func(result toolResult) string { return result.Name })
-		registry.MarkSchemasLoaded(core.SessionIDFromContext(ctx), names)
-	}
-
-	return core.MarshalResult("tool_search", searchResponse{Tools: results, Note: resultNote(loaded, len(results))})
+type Listing struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Enabled     bool           `json:"enabled"`
+	Protected   bool           `json:"protected"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
 }
 
-// resultNote tells the model whether the tools it just found are callable, so
-// a search without include_schema is never a silent no-op.
-func resultNote(loaded bool, count int) string {
-	if count == 0 {
-		return ""
-	}
-	if loaded {
-		return "schema loaded; call these tools directly now."
-	}
-	return "schemas not loaded; narrow the query or re-run with include_schema:true before calling these tools (a first direct call also loads the schema)."
-}
-
-func normalizeArgs(args searchArgs) searchArgs {
-	args.Query = strings.TrimSpace(args.Query)
-	args.Namespace = strings.TrimSpace(args.Namespace)
-	args.MaxResults = mathutil.ClampInt(args.MaxResults, defaultMaxResults, maxResultsCap)
-	return args
-}
-
-func searchSpecs(specs []core.ToolSpec, args searchArgs) []toolResult {
-	slices.SortStableFunc(specs, func(a, b core.ToolSpec) int {
-		return cmp.Or(cmp.Compare(a.Metadata.Namespace, b.Metadata.Namespace), cmp.Compare(a.Name, b.Name))
-	})
-	namespace := strings.ToLower(args.Namespace)
-	results := make([]toolResult, 0, len(specs))
+func List(specs []core.ToolSpec, enabled []string, query string, schemas []string, protected func(string) bool) []Listing {
+	out := []Listing{}
 	for _, spec := range specs {
-		meta := spec.Metadata
-		lowerNamespace := strings.ToLower(meta.Namespace)
-		if namespace != "" && lowerNamespace != namespace {
+		if !matchesQuery(spec, query) {
 			continue
 		}
-		if !matchesQuery(spec, lowerNamespace, args.Query) {
-			continue
+		item := Listing{Name: spec.Name, Description: ShortDescription(spec.Description), Protected: protected(spec.Name)}
+		item.Enabled = item.Protected || slices.Contains(enabled, spec.Name)
+		if slices.Contains(schemas, spec.Name) {
+			item.Parameters = spec.Parameters
 		}
-		result := toolResult{
-			Name: spec.Name, Namespace: meta.Namespace, Description: spec.Description, Source: meta.Source,
-			Runtime: meta.Runtime, PluginDir: meta.PluginDir, Policy: meta.Policy, Capabilities: meta.Capabilities,
-		}
-		if args.IncludeSchema {
-			result.Parameters = spec.Parameters
-		}
-		results = append(results, result)
-		if len(results) >= args.MaxResults {
-			break
-		}
+		out = append(out, item)
 	}
-	return results
+	return out
 }
-
-func matchesQuery(spec core.ToolSpec, namespace, query string) bool {
-	haystack := strings.ToLower(spec.Name + " " + namespace + " " + spec.Description)
+func matchesQuery(spec core.ToolSpec, query string) bool {
+	haystack := strings.ToLower(spec.Name + " " + spec.Metadata.Namespace + " " + spec.Description)
 	for term := range strings.FieldsSeq(strings.ToLower(query)) {
 		if !strings.Contains(haystack, term) {
 			return false
@@ -149,11 +66,62 @@ func matchesQuery(spec core.ToolSpec, namespace, query string) bool {
 	}
 	return true
 }
+func ShortDescription(description string) string {
+	line, _, _ := strings.Cut(description, "\n")
+	sentence, _, _ := strings.Cut(line, ". ")
+	return strings.TrimSpace(sentence)
+}
 
-func dispatchAudit(dispatcher events.Dispatcher, ctx context.Context, args searchArgs, resultCount int, duration time.Duration, outcome string, err error) {
-	core.AuditDetails(ctx, dispatcher, "tool_search", outcome, map[string]any{
-		"policy_tier": policyTier, "query_hash": core.HashHexTrimmed(args.Query),
-		"namespace": args.Namespace, "include_schema": args.IncludeSchema,
-		"result_count": resultCount, "duration_ms": duration.Milliseconds(),
-	}, err)
+// Resolve decodes manager execution without invoking a handler. This keeps the
+// actual target inside normal approval, quota, and outcome processing.
+func Resolve(call *core.ToolCall, allowed, protected func(string) bool) (*core.ToolCall, error) {
+	if call.Name != "tools" {
+		return call, nil
+	}
+	var args Args
+	if err := json.Unmarshal(call.Arguments, &args); err != nil {
+		return nil, err
+	}
+	switch args.Action {
+	case "create":
+		if err := allowedCreation(args.Definition, allowed); err != nil {
+			return nil, err
+		}
+		return managedTarget("create_tool", args.Definition, allowed, protected)
+	case "run":
+		if args.Name == "create_tool" {
+			return nil, fmt.Errorf(`use tools.create: tools {"action":"create","definition":{...}}; put your complete create_tool arguments inside definition, not arguments`)
+		}
+		return managedTarget(args.Name, args.Arguments, allowed, protected)
+	default:
+		return call, nil
+	}
+}
+func managedTarget(name string, args json.RawMessage, allowed, protected func(string) bool) (*core.ToolCall, error) {
+	if protected(name) || name == "tool_search" {
+		return nil, fmt.Errorf("call core tools directly; tools.run cannot invoke %q. Correct call: {\"name\":%q,\"arguments\":{...}}. Copy the inner arguments object unchanged; omit the tools/action/run wrapper", name, name)
+	}
+	if name == "" {
+		return nil, fmt.Errorf("name is required: %s", RunShape)
+	}
+	if !allowed(name) {
+		return nil, fmt.Errorf("tool %q is not permitted", name)
+	}
+	if len(args) == 0 || args[0] != '{' || !json.Valid(args) {
+		return nil, fmt.Errorf("arguments must be a JSON object: %s", RunShape)
+	}
+	return &core.ToolCall{Name: name, Arguments: args, Managed: true}, nil
+}
+
+func allowedCreation(raw json.RawMessage, allowed func(string) bool) error {
+	var definition struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &definition); err != nil {
+		return err
+	}
+	if !allowed(definition.Name) {
+		return fmt.Errorf("created tool %q is outside the operator allowlist", definition.Name)
+	}
+	return nil
 }

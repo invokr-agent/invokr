@@ -24,24 +24,28 @@ func runPlainWithCommands(ctx context.Context, session turn.Session, commands Co
 	renderer := plainResponseRenderer{out: out, errOut: errOut}
 	unregister := registerToolEvents(eventBus, session, renderer.handleEvent, nil)
 	defer unregister()
+	defer context.AfterFunc(ctx, func() {
+		if input, ok := in.(io.Closer); ok {
+			_ = input.Close()
+		}
+	})()
 
 	writePlain(out, renderIntro(0, 0), "\n", renderPrompt())
 
 	scanner := bufio.NewScanner(in)
+	scanned := make(chan bool, 1)
 	for {
+		go func() { scanned <- scanner.Scan() }()
+		var ok bool
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-		}
-
-		text, ok, err := nextPlainInput(scanner)
-		if err != nil {
-			return err
+		case ok = <-scanned:
 		}
 		if !ok {
-			return nil
+			return scanner.Err()
 		}
+		text := strings.TrimSpace(scanner.Text())
 
 		if text == "" {
 			writePlain(out, renderPrompt())
@@ -86,13 +90,6 @@ func denyPlainApprovals(approvals *approval.Broker, grants *approval.Store, errO
 		}
 		return decision
 	})
-}
-
-func nextPlainInput(scanner *bufio.Scanner) (string, bool, error) {
-	if !scanner.Scan() {
-		return "", false, scanner.Err()
-	}
-	return strings.TrimSpace(scanner.Text()), true, nil
 }
 
 type plainResponseRenderer struct {
@@ -159,10 +156,6 @@ func listModelsPlain(out io.Writer, session turn.Session) {
 	writePlain(out, renderModelList(models, current)+"Use /model <name> to switch.")
 }
 
-// renderModelList builds the indented model list used by both the TUI and the
-// plain renderer: each id on its own line, the current model flagged with
-// "* … ← current". Every line ends with a newline; callers append their own
-// trailing guidance.
 func renderModelList(models []string, current string) string {
 	var b strings.Builder
 	for _, id := range models {

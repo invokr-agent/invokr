@@ -23,36 +23,10 @@ index d95f3ad..0000000
 -content
 `
 
-func TestParseUnifiedDiffSections(t *testing.T) {
-	sections := parseUnifiedDiffSections(sampleUnifiedDiff)
-	if len(sections) != 2 {
-		t.Fatalf("sections = %d, want 2", len(sections))
-	}
-	if sections[0].path != "a.txt" {
-		t.Fatalf("path = %q, want a.txt", sections[0].path)
-	}
-	if !strings.Contains(sections[0].before, "two") || strings.Contains(sections[0].after, "two") {
-		t.Fatalf("before=%q after=%q, want 'two' removed", sections[0].before, sections[0].after)
-	}
-	if !strings.Contains(sections[0].after, "three") {
-		t.Fatalf("after = %q, want 'three' added", sections[0].after)
-	}
-	if !sections[1].deleted {
-		t.Fatal("want gone.txt marked deleted")
-	}
-}
-
-func TestParseUnifiedDiffSectionsSkipsCommitHeader(t *testing.T) {
-	show := "commit abc123\nAuthor: t\n\n    message\n\n" + sampleUnifiedDiff
-	sections := parseUnifiedDiffSections(show)
-	if len(sections) != 2 || sections[0].path != "a.txt" {
-		t.Fatalf("sections = %#v, want header skipped", sections)
-	}
-}
-
-func TestParseUnifiedDiffSectionsRejectsPlainText(t *testing.T) {
-	if got := parseUnifiedDiffSections("just some text\nwith lines\n"); got != nil {
-		t.Fatalf("sections = %#v, want nil for non-diff text", got)
+func TestRenderGitDiff(t *testing.T) {
+	got := renderGitDiff("commit abc123\nAuthor: t\n\n"+sampleUnifiedDiff, 100, 0)
+	if !strings.Contains(got, "a.txt") || !strings.Contains(got, "gone.txt") || !strings.Contains(got, "three") {
+		t.Fatalf("git diff missing file or change: %q", got)
 	}
 }
 
@@ -68,5 +42,28 @@ func TestGitReadPartsEnvelope(t *testing.T) {
 	_, _, plain = gitReadParts("not json")
 	if plain != "not json" {
 		t.Fatalf("plain = %q, want raw fallback", plain)
+	}
+}
+
+func TestGitReadPartsJSONFallback(t *testing.T) {
+	for _, input := range []string{
+		"```json\n{\"stat\":\"changed\",\"diff\":\"+new\"}\n```",
+		`prefix {"stat":"changed","diff":"+new"} trailing {"diff":"wrong"}`,
+	} {
+		stat, diff, plain := gitReadParts(input)
+		if stat != "changed" || diff != "+new" || plain != "" {
+			t.Fatalf("gitReadParts(%q) = %q, %q, %q", input, stat, diff, plain)
+		}
+	}
+	for _, input := range []string{
+		`plain output`, `null`, `{}`, `prefix {"diff":"unfinished"`,
+		`prefix {bad} {"diff":"must not skip first brace"}`,
+		`prefix {"stat":"partial","diff":7}`,
+		`{"stat":"strict","diff":7,"nested":{"diff":"must not unwrap valid JSON"}}`,
+	} {
+		stat, diff, plain := gitReadParts(input)
+		if stat != "" || diff != "" || plain != input {
+			t.Fatalf("invalid envelope %q must stay raw, got %q, %q, %q", input, stat, diff, plain)
+		}
 	}
 }

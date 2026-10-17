@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"fmt"
 	"io"
 	"os"
@@ -29,14 +30,43 @@ var defaultProviderModels = map[string]string{"anthropic": constants.DefaultAnth
 func NewProviderCmd() *cobra.Command {
 	providerCmd := &cobra.Command{
 		Use:     "provider",
-		Aliases: []string{"providers"},
 		Short:   "Install model providers and store their API keys",
 		Long:    "A provider is what actually talks to a model vendor. Anthropic, Bedrock\nand OpenAI run as their own process, downloaded by `install`;\nopenai-compatible endpoints need nothing installed and are served\nin-process.\n\nInstalling one also defines a profile for it — `invokr config profiles`\nlists them, `invokr config use` switches between them.",
-		Example: "  invokr provider install anthropic\n  printf %s \"$ANTHROPIC_API_KEY\" | invokr provider set-key anthropic\n  invokr config use anthropic",
+		Example: "  invokr provider list\n  invokr provider install anthropic\n  printf %s \"$ANTHROPIC_API_KEY\" | invokr provider set-key anthropic\n  invokr config use anthropic",
 		GroupID: groupConfigure,
 	}
-	providerCmd.AddCommand(newProviderInstallCmd(), newProviderKeyCmd(), retiredCommand("key", "invokr provider set-key"))
+	providerCmd.AddCommand(newProviderListCmd(), newProviderInstallCmd(), newProviderKeyCmd(), retiredCommand("key", "invokr provider set-key"))
 	return providerCmd
+}
+
+// providerStatus.Installed is the cache path, an install hint, or why the lookup failed.
+type providerStatus struct {
+	Provider  string `json:"provider"`
+	Installed string `json:"installed"`
+}
+
+func newProviderListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List installable providers and which are installed",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			statuses := make([]providerStatus, 0, len(installableProviders))
+			for _, p := range installableProviders {
+				path, _, err := clients.InstalledProvider(p)
+				if err != nil {
+					path = err.Error()
+				}
+				statuses = append(statuses, providerStatus{p, cmp.Or(path, "no — invokr provider install "+p)})
+			}
+			return emit(cmd, statuses, func() error {
+				return renderTable(cmd.OutOrStdout(), []string{"PROVIDER", "INSTALLED"}, "", statuses,
+					func(_ renderer, st providerStatus) []string { return []string{st.Provider, st.Installed} })
+			})
+		},
+	}
+	addJSONFlag(cmd)
+	return cmd
 }
 
 // newProviderKeyCmd stores an API key on a provider definition. The key is read

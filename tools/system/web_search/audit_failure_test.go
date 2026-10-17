@@ -9,6 +9,7 @@ import (
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -19,7 +20,7 @@ func TestSensitiveApprovalDenialIsAudited(t *testing.T) {
 	RegisterWebSearchTool(registry, core.CallerDeps{
 		App:        config.AppConfig{WebSearch: config.WebSearchConfig{Providers: []string{constants.WebSearchProviderBrave}}},
 		Dispatcher: dispatcher,
-		Approver: approval.StaticApprover{Decision: approval.Decision{
+		Approver: testutil.StaticApprover{Decision: approval.Decision{
 			Approved: false,
 			Reason:   "blocked by test policy",
 		}},

@@ -18,7 +18,9 @@ import (
 	"github.com/invokr-ai/invokr/capability/skills/hub"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/strutil"
 	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/system/toolbox"
 
 	"go.uber.org/zap"
 )
@@ -56,6 +58,8 @@ func (c *CommandService) Execute(ctx context.Context, command string, args []str
 		return c.renderSkills(ctx)
 	case "jobs":
 		return c.jobs(ctx, args)
+	case "toolbox":
+		return c.installTool(ctx, args)
 	case "memory":
 		return c.renderMemory(ctx)
 	default:
@@ -108,6 +112,33 @@ func (c *CommandService) HubSkills(ctx context.Context) ([]hub.HubSkill, error) 
 	return found, nil
 }
 
+// HubTools lists the toolbox hub's tools. It backs the /tools Install tab.
+func (c *CommandService) HubTools(ctx context.Context) ([]toolbox.HubTool, error) {
+	return toolbox.HubTools(ctx, c.app)
+}
+
+// installTool installs one hub tool with the chosen approval and asks the live toolbox to reload.
+func (c *CommandService) installTool(ctx context.Context, args []string) (string, error) {
+	if len(args) != 3 || args[0] != "install" {
+		return "", fmt.Errorf("usage: toolbox install <name> <approval>")
+	}
+	found, err := toolbox.HubTools(ctx, c.app)
+	if err != nil {
+		return "", err
+	}
+	i := slices.IndexFunc(found, func(t toolbox.HubTool) bool { return t.Name == args[1] })
+	if i < 0 {
+		return "", fmt.Errorf("tool %q not found in %s", args[1], toolbox.HubRepo)
+	}
+	if err := toolbox.InstallHubTool(c.app, found[i], args[2]); err != nil {
+		return "", err
+	}
+	if c.events != nil {
+		c.events.Dispatch(ctx, events.Event{Type: events.EventToolboxRefreshRequested})
+	}
+	return args[1] + " installed", nil
+}
+
 func (c *CommandService) renderAgents() string {
 	names := c.agents.Names()
 	if len(names) == 0 {
@@ -117,9 +148,9 @@ func (c *CommandService) renderAgents() string {
 		def, _ := c.agents.Get(name)
 		tools := "all tools"
 		if def.ToolsExplicit {
-			tools = toolcore.FirstNonEmptyTrimmed(strings.Join(def.Tools, ", "), "no tools")
+			tools = strutil.FirstNonEmptyTrimmed(strings.Join(def.Tools, ", "), "no tools")
 		}
-		return fmt.Sprintf("%s — model: %s; tools: %s\n", name, toolcore.FirstNonEmptyTrimmed(def.Model, "inherit"), tools)
+		return fmt.Sprintf("%s — model: %s; tools: %s\n", name, strutil.FirstNonEmptyTrimmed(def.Model, "inherit"), tools)
 	}), ""))
 }
 
@@ -219,6 +250,6 @@ func (c *CommandService) renderMemory(ctx context.Context) (string, error) {
 		return status + "\nno user/project records", nil
 	}
 	return status + strings.Join(toolcore.MapSlice(records, func(record core.Record) string {
-		return fmt.Sprintf("\n%s: %s", record.Scope, toolcore.FirstNonEmptyTrimmed(record.Content, record.Summary))
+		return fmt.Sprintf("\n%s: %s", record.Scope, strutil.FirstNonEmptyTrimmed(record.Content, record.Summary))
 	}), ""), nil
 }

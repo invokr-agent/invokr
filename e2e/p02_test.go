@@ -87,7 +87,6 @@ func TestP02_ApplyPatchMismatchDiagnostics(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			provider := providertest.NewScripted(t,
-				loadApplyPatch("p02-load-"+tc.file),
 				patchCall("p02-"+tc.file, tc.patch),
 				providertest.ReplyStep("p02-done"),
 			)

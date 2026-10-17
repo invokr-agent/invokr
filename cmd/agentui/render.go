@@ -131,9 +131,6 @@ func renderResponseHeader(width int) string {
 	return wrapText(ui.Invokr.Muted.Render("response"), width)
 }
 
-// renderThinking is the design's running indicator: the spinner glyph and the
-// word in the running blue, with live elapsed and the interrupt affordance.
-// The pre-redesign version was a muted "\ thinking..." with neither.
 func renderThinking(frame string, since time.Time, width int) string {
 	return renderRunning(frame, "thinking", ui.Invokr.Info, since, width)
 }
@@ -334,10 +331,6 @@ func trimErr(s string) string {
 	return s
 }
 
-// renderApprovalQueuePanel renders the batch approval queue.
-// items is the current snapshot (len > 0 guaranteed by caller).
-// cursor is the selected item index (0-based).
-// keys is the keyMap for inline hint rendering.
 func renderApprovalQueuePanel(items []approval.QueueItem, cursor int, expanded bool, detailOffset int, keys keyMap, hints help.Model, width int) string {
 	var b strings.Builder
 	b.WriteString(renderApprovalHeader(len(items), cursor, width) + "\n")
@@ -580,8 +573,6 @@ func renderContextStatus(usage turn.TokenUsage, width, compactPercent int) strin
 	return label + " " + tuikit.NewMeter(barWidth, fill).View(int(contextPercent(usage)+0.5)) + " " + style.Render(count)
 }
 
-// contextColors escalates the context readout from informational to warning to
-// danger as the window fills.
 func contextColors(percent float64, compactPercent int) (lipgloss.Style, color.Color) {
 	switch {
 	case percent >= float64(compactPercent):
@@ -598,8 +589,6 @@ func contextPercent(usage turn.TokenUsage) float64 {
 	return float64(used) / float64(usage.ContextWindowTokens) * 100
 }
 
-// sectionRule is the design's section header: a caps label in the section color
-// followed by a rule to the pane's edge.
 func sectionRule(label string, width int) string {
 	head := ui.Invokr.Warn.Render(label)
 	if width <= 0 {

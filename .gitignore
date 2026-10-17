@@ -14,6 +14,7 @@ e2e-live.sh
 handovers/
 dist/
 invokr-agent
+invokr
 invokr-dev
 
 # Integration-test model downloads (see support/testutil.UseRepoModelCache)

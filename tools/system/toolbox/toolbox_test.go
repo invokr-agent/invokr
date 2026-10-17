@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
@@ -116,7 +117,8 @@ func TestToolboxConfigEnvPolicyOverrides(t *testing.T) {
 	t.Setenv("INVOKR_BROWSER_AGENT_STATE", "/tmp/browser-state")
 	t.Setenv("INVOKR_SHELL_ALLOWED_COMMANDS", "git,go")
 
-	cfg, err := config.LoadFile(filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("INVOKR_HOME", t.TempDir())
+	cfg, err := config.LoadDefaultFileWithProfile("")
 	if err != nil {
 		t.Fatalf("LoadFile() error = %v", err)
 	}
@@ -260,14 +262,60 @@ func TestLoadToolboxToolsSkipsRegistrationWithoutSandbox(t *testing.T) {
 	}
 }
 
-type stubRegistrar struct{ replaced int }
+type stubRegistrar struct {
+	replaced  int
+	onReplace func()
+}
 
 func (r *stubRegistrar) RegisterNative(core.ToolSpec, core.NativeHandler) {}
 func (r *stubRegistrar) HasNative(string) bool                            { return false }
 func (r *stubRegistrar) NativeSource(string) string                       { return "" }
 func (r *stubRegistrar) ReplaceNativeToolsBySource(string, []core.DynamicNativeTool) []string {
 	r.replaced++
+	if r.onReplace != nil {
+		r.onReplace()
+	}
 	return nil
+}
+
+func TestRegisterToolboxToolsUnregisterDuringRefresh(t *testing.T) {
+	root := t.TempDir()
+	bus := events.NewOrderedDispatcher(nil)
+	entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	registrar := &stubRegistrar{}
+	registrar.onReplace = func() {
+		if registrar.replaced == 2 {
+			close(entered)
+			<-release
+		}
+	}
+	deps := core.CallerDeps{
+		App: config.AppConfig{Toolbox: config.ToolboxConfig{Dir: root}}, Dispatcher: bus,
+	}
+	unregister := RegisterToolboxTools(registrar, deps, zap.NewNop())
+	defer unregister()
+	// An entry-count change forces a scan without relying on debounce timing.
+	if err := os.Mkdir(filepath.Join(root, ".refresh-marker"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	event := events.Event{Type: events.EventToolboxRefreshRequested}
+	go func() {
+		defer close(done)
+		bus.Dispatch(context.Background(), event)
+	}()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		close(release)
+		t.Fatal("refresh did not reach the registrar")
+	}
+	unregister()
+	close(release)
+	<-done
+	bus.Dispatch(context.Background(), event)
+	if registrar.replaced != 2 {
+		t.Fatalf("replacement calls = %d, want initial scan and in-flight refresh", registrar.replaced)
+	}
 }
 
 type stubBus struct {

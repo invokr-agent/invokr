@@ -192,9 +192,9 @@ type gateTestCaller struct {
 	err    error
 }
 
-func (c *gateTestCaller) PromptSpecs(string) []core.ToolSpec   { return nil }
-func (c *gateTestCaller) CallableSpecs(string) []core.ToolSpec { return nil }
-func (c *gateTestCaller) Specs() []core.ToolSpec               { return nil }
+func (c *gateTestCaller) PromptSpecs(string) []core.ToolSpec { return nil }
+func (c *gateTestCaller) StableSpecs() []core.ToolSpec       { return nil }
+func (c *gateTestCaller) Specs() []core.ToolSpec             { return nil }
 func (c *gateTestCaller) HandleCall(context.Context, *core.ToolCall) (string, error) {
 	return c.output, c.err
 }
@@ -247,11 +247,10 @@ func TestExecuteToolEventCarriesOriginalOutputModelGetsStub(t *testing.T) {
 	if completed.Output != full || completed.OutputBytes != len(full) {
 		t.Fatalf("completed event does not carry the original output: %d bytes vs %d", completed.OutputBytes, len(full))
 	}
-	p.callMu.Lock()
-	ref := p.spillRefs["call-1"]
-	p.callMu.Unlock()
-	if ref == "" {
-		t.Fatalf("spill ref not recorded in the ledger")
+	ref := filepath.Join(p.gate.spill.(*fileSpillStore).dir, "shell-1.txt")
+	data, err := os.ReadFile(ref)
+	if err != nil || string(data) != full || !strings.Contains(got, ref) {
+		t.Fatalf("model preview must name the complete spilled output: %v", err)
 	}
 }
 
@@ -377,5 +376,27 @@ func TestCapStrategyBoundedByGateBudget(t *testing.T) {
 	}
 	if !strings.Contains(got, "output truncated at ~2000 tokens") {
 		t.Fatalf("missing standard truncation notice: %q", got[max(len(got)-200, 0):])
+	}
+}
+
+func TestEnvelopeLongestFieldJSONFallback(t *testing.T) {
+	for _, input := range []string{
+		`{"stdout":"long output","exit_code":7}`,
+		"```json\n{\"stdout\":\"long output\",\"exit_code\":7}\n```",
+		`prefix {"stdout":"long output","exit_code":7} trailing {"stdout":"other"}`,
+	} {
+		fields, key, value, ok := envelopeLongestField(input)
+		if !ok || key != "stdout" || value != "long output" || string(fields["exit_code"]) != "7" {
+			t.Fatalf("envelopeLongestField(%q) = %v, %q, %q, %v", input, fields, key, value, ok)
+		}
+	}
+	for _, input := range []string{
+		`plain output`, `null`, `{}`, `prefix {"stdout":"unfinished"`,
+		`prefix {bad} {"stdout":"must not skip first brace"}`,
+	} {
+		fields, key, value, ok := envelopeLongestField(input)
+		if ok || fields != nil || key != "" || value != "" {
+			t.Fatalf("invalid envelope %q yielded %v, %q, %q, %v", input, fields, key, value, ok)
+		}
 	}
 }

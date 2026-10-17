@@ -17,6 +17,8 @@ import (
 	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/retrieval"
@@ -524,7 +526,7 @@ func TestRetrievalAgainstRealMemoryStore(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = manager.Close() })
 	service := retrieval.NewServiceWithApprover(app, manager, nil,
-		approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 		workspace.NewWorkspacePolicy(app.Workspace))
 
 	search := func(query string) retrieval.Response {
@@ -604,7 +606,7 @@ func assertHitShape(t *testing.T, resp retrieval.Response) {
 func newRetrievalCaller(t *testing.T, root string, manager *fakeMemory, dispatcher events.Dispatcher) *tools.Caller {
 	t.Helper()
 	return newRetrievalCallerWithApprover(t, root, manager, dispatcher,
-		approval.StaticApprover{Decision: approval.Decision{Approved: true}})
+		testutil.StaticApprover{Decision: approval.Decision{Approved: true}})
 }
 
 func newRetrievalCallerWithApprover(t *testing.T, root string, manager *fakeMemory, dispatcher events.Dispatcher, approver approval.Approver) *tools.Caller {
@@ -623,7 +625,7 @@ func newRetrievalService(t *testing.T, root string, manager *fakeMemory, dispatc
 	app := config.AppConfig{Workspace: config.WorkspaceConfig{Root: root}}
 	return retrieval.NewServiceWithApprover(
 		app, manager, dispatcher,
-		approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 		workspace.NewWorkspacePolicy(app.Workspace),
 	)
 }
@@ -911,7 +913,7 @@ func TestRetrievalHitMetadataMatchesTrimmedContent(t *testing.T) {
 		t.Fatalf("expected one doc record, got %#v", docs)
 	}
 	stored := docs[0].Content
-	if want := "sha256:" + core.HashHex(stored); hit.SourceHash != want {
+	if want := "sha256:" + strutil.HashHex(stored); hit.SourceHash != want {
 		t.Fatalf("source_hash = %q, want %q (hash of the content the hit exposes)", hit.SourceHash, want)
 	}
 	if hit.LineStart != 1 || hit.LineEnd != 2 {

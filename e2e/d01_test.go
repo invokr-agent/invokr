@@ -27,20 +27,20 @@ func TestD01_CreateToolLifecycle(t *testing.T) {
 	changed := "import json,sys\na=json.loads(sys.stdin.read())['arguments']\nprint(json.dumps({'result':str(len(a['text'].split())+10)}))"
 	homeDir := ""
 	steps := []providertest.CompletionStep{
-		providertest.NativeToolCallStep("d01-create", "create_tool", create("word_count_test", count, nil)),
-		providertest.NativeToolCallStep("d01-search", "tool_search", map[string]any{"query": "word_count_test", "include_schema": true}),
-		providertest.NativeToolCallStep("d01-call", "word_count_test", map[string]any{"text": "one two three"}),
-		providertest.NativeToolCallStep("d01-duplicate", "create_tool", create("word_count_test", count, nil)),
-		providertest.NativeToolCallStep("d01-overwrite", "create_tool", create("word_count_test", changed, map[string]any{"overwrite": true})),
-		providertest.NativeToolCallStep("d01-call-changed", "word_count_test", map[string]any{"text": "one two three"}),
-		providertest.NativeToolCallStep("d01-no-req", "create_tool", create("word_count_test", changed, map[string]any{"overwrite": true})),
-		providertest.NativeToolCallStep("d01-invalid-name", "create_tool", create("9bad", count, nil)),
-		providertest.NativeToolCallStep("d01-collision", "create_tool", create("shell", count, nil)),
+		createToolStep("d01-create", "create_tool", create("word_count_test", count, nil)),
+		providertest.NativeToolCallStep("d01-search", "tools", map[string]any{"action": "search", "query": "word_count_test", "include_schema": true}),
+		providertest.NativeToolCallStep("d01-call", "tools", map[string]any{"action": "run", "name": "word_count_test", "arguments": map[string]any{"text": "one two three"}}),
+		createToolStep("d01-duplicate", "create_tool", create("word_count_test", count, nil)),
+		createToolStep("d01-overwrite", "create_tool", create("word_count_test", changed, map[string]any{"overwrite": true})),
+		providertest.NativeToolCallStep("d01-call-changed", "tools", map[string]any{"action": "run", "name": "word_count_test", "arguments": map[string]any{"text": "one two three"}}),
+		createToolStep("d01-no-req", "create_tool", create("word_count_test", changed, map[string]any{"overwrite": true})),
+		createToolStep("d01-invalid-name", "create_tool", create("9bad", count, nil)),
+		createToolStep("d01-collision", "create_tool", create("shell", count, nil)),
 	}
 	for i, requirement := range []string{
 		"https://example.invalid/pkg.whl", "./local-package", "git+https://example.invalid/pkg.git", "requests", "requests==2.31.0",
 	} {
-		steps = append(steps, providertest.NativeToolCallStep("d01-req-"+string(rune('a'+i)), "create_tool",
+		steps = append(steps, createToolStep("d01-req-"+string(rune('a'+i)), "create_tool",
 			create("bad_requirement_"+string(rune('a'+i)), count, map[string]any{"requirements": []string{requirement}})))
 	}
 	steps = append(steps, providertest.ReplyStep("done"))

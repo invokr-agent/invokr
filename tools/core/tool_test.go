@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"strings"
 	"testing"
 )
@@ -112,7 +113,7 @@ func TestHandleApprovalDeniedSkipsExecution(t *testing.T) {
 	executed := false
 	tool := Tool[testArgs]{
 		Spec:     ToolSpec{Name: "demo"},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: false, Reason: "nope"}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: false, Reason: "nope"}},
 		Approve: func(context.Context, testArgs) ApprovalDecision {
 			return Ask(approval.Request{Tool: "demo", Tier: "write_workspace"})
 		},
@@ -134,7 +135,7 @@ func TestHandleApprovalDeniedSkipsExecution(t *testing.T) {
 func TestHandleApprovalApprovedExecutes(t *testing.T) {
 	tool := Tool[testArgs]{
 		Spec:     ToolSpec{Name: "demo"},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 		Approve: func(context.Context, testArgs) ApprovalDecision {
 			return Ask(approval.Request{Tool: "demo", Tier: "write_workspace"})
 		},

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 
@@ -189,4 +190,36 @@ func pinnedMessages(messages []inference.Message, plan retentionPlan) []inferenc
 		}
 	}
 	return out
+}
+
+// toolCallsByID indexes every tool call in the transcript by id, so a tool
+// result can be joined back to the call that produced it.
+func toolCallsByID(messages []inference.Message) map[string]inference.ToolCall {
+	calls := make(map[string]inference.ToolCall)
+	for _, message := range messages {
+		for _, call := range message.ToolCalls {
+			calls[call.ID] = call
+		}
+	}
+	return calls
+}
+
+// readPaths is the path argument(s) of a read call - the single path, or
+// every path of a batched paths call - or nil for any other call.
+func readPaths(call inference.ToolCall) []string {
+	if call.Name != readFileToolName {
+		return nil
+	}
+	var arguments struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
+	_ = json.Unmarshal([]byte(call.Arguments), &arguments)
+	if len(arguments.Paths) > 0 {
+		return arguments.Paths
+	}
+	if arguments.Path != "" {
+		return []string{arguments.Path}
+	}
+	return nil
 }

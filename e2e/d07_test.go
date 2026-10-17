@@ -20,7 +20,7 @@ func TestD07_BackgroundShellProcesses(t *testing.T) {
 	var mu sync.Mutex
 	var processID string
 	dynamic := func(id, action string, extra map[string]any) providertest.CompletionStep {
-		step := providertest.NativeToolCallStep(id, "process", nil)
+		step := managedToolStep(id, "process", nil)
 		step.MutateForRequest = func(req providertest.CompletionRequest, out *providertest.CompletionStep) {
 			mu.Lock()
 			defer mu.Unlock()
@@ -34,13 +34,13 @@ func TestD07_BackgroundShellProcesses(t *testing.T) {
 			for key, value := range extra {
 				args[key] = value
 			}
-			out.ToolCalls[0].Function.Arguments = args
+			out.ToolCalls[1].Function.Arguments.(map[string]any)["arguments"] = args
 		}
 		return step
 	}
 	provider := providertest.NewScripted(t,
 		providertest.NativeToolCallStep("d07-start", "shell", map[string]any{
-			"command": "sh", "args": []string{"-c", "echo d07-start; sleep 1; echo d07-end"}, "background": true,
+			"command": "touch d07-marker; echo d07-start; sleep 1; echo d07-end", "background": true,
 		}),
 		dynamic("d07-list", "list", nil),
 		dynamic("d07-poll", "poll", nil),
@@ -51,7 +51,7 @@ func TestD07_BackgroundShellProcesses(t *testing.T) {
 	)
 	defer provider.Close()
 	home := newHome(t, provider.URL())
-	home.app.Shell.AllowedCommands = []string{"sh"}
+	home.app.Shell.AllowedCommands = []string{"touch", "sleep"}
 	got := runInProc(t, home, provider.URL(), "run background process", grantAll)
 	mu.Lock()
 	pid := processID
@@ -73,8 +73,8 @@ func TestD07_BackgroundShellProcesses(t *testing.T) {
 	}
 
 	foreign := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("d07-foreign", "process", map[string]any{"action": "poll", "process_id": pid}),
-		providertest.NativeToolCallStep("d07-bogus", "process", map[string]any{"action": "kill", "process_id": "00000000-0000-0000-0000-000000000000"}),
+		managedToolStep("d07-foreign", "process", map[string]any{"action": "poll", "process_id": pid}),
+		managedToolStep("d07-bogus", "process", map[string]any{"action": "kill", "process_id": "00000000-0000-0000-0000-000000000000"}),
 		providertest.ReplyStep("done"),
 	)
 	defer foreign.Close()

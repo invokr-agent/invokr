@@ -3,12 +3,6 @@ package shell
 import (
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/tools/core"
 	"io"
 	"os"
 	"os/exec"
@@ -17,6 +11,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/mathutil"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
 
 	"github.com/google/uuid"
 )
@@ -252,7 +254,7 @@ func processLogDir(sessionID string) string {
 	if strings.TrimSpace(sessionID) == "" {
 		sessionID = "unscoped"
 	} else {
-		sessionID = core.HashHex(sessionID)[:12]
+		sessionID = strutil.HashHex(sessionID)[:12]
 	}
 	return filepath.Join(config.InvokrHomeDir(), "process", sessionID)
 }
@@ -393,12 +395,5 @@ func (s *processStore) pruneLocked() {
 }
 
 func dispatchProcessAudit(dispatcher events.Dispatcher, ctx context.Context, id string, outcome string, err error) {
-	if dispatcher == nil {
-		return
-	}
-	errText := ""
-	if err != nil {
-		errText = err.Error()
-	}
-	dispatcher.Dispatch(ctx, events.Event{Type: events.EventAudit, Audit: &events.AuditPayload{Action: "process", Tool: processToolName, Outcome: outcome, Error: errText, Details: map[string]any{"process_id": id}}})
+	core.AuditDetails(ctx, dispatcher, processToolName, outcome, map[string]any{"process_id": id}, err)
 }

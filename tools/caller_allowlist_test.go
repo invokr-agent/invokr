@@ -3,10 +3,15 @@ package tools
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"slices"
 	"testing"
 
+	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/platform/setup"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -14,7 +19,7 @@ import (
 func allowlistCaller(t *testing.T, allowlist ...string) *Caller {
 	t.Helper()
 	caller := NewCaller(core.CallerDeps{
-		App: config.AppConfig{Tools: config.ToolsConfig{Allowlist: allowlist}},
+		App: config.AppConfig{Memory: config.MemoryConfig{Dir: t.TempDir()}, Tools: config.ToolsConfig{Allowlist: allowlist}},
 	})
 	t.Cleanup(caller.Close)
 	for _, name := range []string{"keep_me", "distraction"} {
@@ -35,43 +40,32 @@ func specNames(specs []core.ToolSpec) []string {
 }
 
 func TestCallerAdvertisesOnlyAllowlistedTools(t *testing.T) {
-	caller := allowlistCaller(t, "keep_me")
-
-	for _, tc := range []struct {
-		name  string
-		specs []core.ToolSpec
-	}{
-		{"callable", caller.CallableSpecs("session-1")},
-		{"prompt", caller.PromptSpecs("session-1")},
-	} {
-		names := specNames(tc.specs)
-		if !slices.Contains(names, "keep_me") {
-			t.Fatalf("%s specs = %v, want keep_me advertised", tc.name, names)
-		}
-		if slices.Contains(names, "distraction") {
-			t.Fatalf("%s specs = %v, want distraction filtered out", tc.name, names)
-		}
+	caller := allowlistCaller(t, "read", "keep_me")
+	if err := caller.StartToolSession("session-1"); err != nil {
+		t.Fatal(err)
+	}
+	if names := specNames(caller.StableSpecs()); !slices.Equal(names, []string{"tools", "read"}) {
+		t.Fatalf("core: %v", names)
+	}
+	names := specNames(caller.PromptSpecs("session-1"))
+	if !slices.Contains(names, "keep_me") || slices.Contains(names, "distraction") {
+		t.Fatalf("catalog: %v", names)
 	}
 }
-
-// With no allowlist every tool is advertised, but only the core set ships its
-// schema: the rest is listed for tool_search and loads on its first call (#480).
-func TestCallerAdvertisesEveryToolWhenAllowlistUnset(t *testing.T) {
+func TestCallerKeepsOptionalSchemasOutOfNativeArray(t *testing.T) {
 	caller := allowlistCaller(t)
+	if err := caller.StartToolSession("session-1"); err != nil {
+		t.Fatal(err)
+	}
 	names := specNames(caller.PromptSpecs("session-1"))
-	for _, want := range []string{"keep_me", "distraction"} {
-		if !slices.Contains(names, want) {
-			t.Fatalf("prompt specs = %v, want %q advertised", names, want)
-		}
+	if !slices.Contains(names, "keep_me") || !slices.Contains(names, "distraction") {
+		t.Fatalf("catalog: %v", names)
 	}
-	if callable := specNames(caller.CallableSpecs("session-1")); slices.Contains(callable, "keep_me") {
-		t.Fatalf("callable specs = %v, want keep_me deferred", callable)
+	if _, err := managerCall(t, caller, "session-1", `{"action":"enable","names":["keep_me"]}`); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := caller.HandleCall(core.WithSessionID(context.Background(), "session-1"), &core.ToolCall{Name: "keep_me"}); err != nil {
-		t.Fatalf("first call to a deferred tool: %v", err)
-	}
-	if callable := specNames(caller.CallableSpecs("session-1")); !slices.Contains(callable, "keep_me") {
-		t.Fatalf("callable specs = %v, want keep_me loaded after first call", callable)
+	if slices.Contains(specNames(caller.StableSpecs()), "keep_me") {
+		t.Fatal("enable changed native schema array")
 	}
 }
 
@@ -101,5 +95,52 @@ func TestCallerRejectsDispatchOfUnadvertisedTool(t *testing.T) {
 	// Payload is non-empty so the model sees why and can pick a real tool.
 	if want := `tool "distraction" is not available in this session`; toolErr.Payload != want {
 		t.Fatalf("payload = %q, want %q", toolErr.Payload, want)
+	}
+}
+
+func TestShippedRestrictedProfilesDoNotDispatchGitBackedSearch(t *testing.T) {
+	root, home := t.TempDir(), t.TempDir()
+	if _, err := setup.EnsureAt(home); err != nil {
+		t.Fatal(err)
+	}
+	runGit := func(args ...string) {
+		t.Helper()
+		command := exec.Command("git", append([]string{"-C", root}, args...)...)
+		if out, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+	}
+	runGit("init")
+	marker := filepath.Join(t.TempDir(), "marker")
+	hook := filepath.Join(t.TempDir(), "fsmonitor.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nprintf bypass > '"+marker+"'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runGit("config", "core.fsmonitor", hook)
+	runGit("status", "--porcelain")
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("hook fixture did not run: %v", err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	for name, mode := range map[string]approval.Mode{"researcher": approval.Auto, "planner": approval.Plan} {
+		t.Run(name, func(t *testing.T) {
+			app, err := config.ApplyNamedProfile(config.AppConfig{Workspace: config.WorkspaceConfig{Root: root}}, home, name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			app.Toolbox.Dir = t.TempDir()
+			caller := NewCaller(core.CallerDeps{App: app, Policy: approval.NewPolicy(mode, false)})
+			defer caller.Close()
+			_, err = caller.HandleCall(context.Background(), &core.ToolCall{Name: "file_search", Arguments: []byte(`{"query":"needle"}`)})
+			var toolErr *core.ToolError
+			if !errors.As(err, &toolErr) || toolErr.Code != "not_advertised" {
+				t.Fatalf("file_search error = %v", err)
+			}
+			if _, err := os.Stat(marker); !os.IsNotExist(err) {
+				t.Fatalf("fsmonitor hook executed: %v", err)
+			}
+		})
 	}
 }

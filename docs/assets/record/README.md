@@ -19,6 +19,7 @@ Knobs, all environment variables:
 | `RECORD` | `demo` | which timeline in `record.py`'s `SCRIPTS` to play |
 | `INVOKR_FLAGS` | — | flags for the binary, e.g. `--base-url=…` |
 | `COLORS` | 96 | palette size for the ImageMagick pass |
+| `DEMO_MODEL_LABEL` | — | displayed model name in rendered frames; `INVOKR_MODEL` still selects the model used |
 
 ## How it works
 

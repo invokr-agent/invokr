@@ -2,10 +2,7 @@ package messaging
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sync"
 
 	"github.com/invokr-ai/invokr/support/fsutil"
@@ -77,14 +74,7 @@ func (s *Store) SetSessionID(_ context.Context, chatKey string, sessionID string
 // would cost the whole map and stop `bot serve` from starting.
 // Callers must hold s.mu.
 func (s *Store) save() error {
-	data, err := json.MarshalIndent(s.sessions, "", "  ")
-	if err != nil {
-		return fmt.Errorf("messaging store: encode sessions: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("messaging store: create dir: %w", err)
-	}
-	if err := fsutil.WriteFileAtomic(s.path, append(data, '\n'), 0o600); err != nil {
+	if err := fsutil.SaveJSON(s.path, s.sessions); err != nil {
 		return fmt.Errorf("messaging store: write %s: %w", s.path, err)
 	}
 	return nil

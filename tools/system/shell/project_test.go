@@ -18,7 +18,7 @@ func TestShellDescriptionNamesDetectedEcosystemGaps(t *testing.T) {
 	root := t.TempDir()
 	writeMarker(t, root, "pyproject.toml")
 	writeMarker(t, root, "setup.py") // same ecosystem: must not repeat
-	got := shellDescription([]string{"git", "ls"}, root)
+	got := shellDescription([]string{"git", "ls"}, root, false)
 	want := "Detected project: python (pyproject.toml). Not allowlisted: python3, pytest"
 	if !strings.Contains(got, want) {
 		t.Fatalf("description missing project line %q:\n%s", want, got)
@@ -34,7 +34,7 @@ func TestShellDescriptionNamesDetectedEcosystemGaps(t *testing.T) {
 func TestShellDescriptionOmitsProjectLineWhenCovered(t *testing.T) {
 	root := t.TempDir()
 	writeMarker(t, root, "go.mod")
-	got := shellDescription([]string{"go", "gofmt", "git"}, root)
+	got := shellDescription([]string{"go", "gofmt", "git"}, root, false)
 	if strings.Contains(got, "Detected project") {
 		t.Fatalf("covered project must not be flagged:\n%s", got)
 	}

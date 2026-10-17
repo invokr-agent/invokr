@@ -140,23 +140,6 @@ func TestSetModelTakesEffectOnNextSend(t *testing.T) {
 	}
 }
 
-func TestQueuedUserModelWinsOverFallback(t *testing.T) {
-	gw := &switchableGateway{currentModel: "configured", replies: []string{"done"}}
-	runner := makeRunnerWithSwitchableGateway(gw)
-	sess := &Session{sessionID: "s1", runner: runner}
-
-	sess.SetModel("user-choice")
-	if sess.QueueModelIfIdle("startup-fallback") {
-		t.Fatal("fallback replaced queued user model")
-	}
-	if _, err := sess.Send(context.Background(), "message"); err != nil {
-		t.Fatal(err)
-	}
-	if got := gw.modelsAtTurn[0]; got != "user-choice" {
-		t.Fatalf("turn model = %q, want user choice", got)
-	}
-}
-
 func TestModelQueuedDuringApplyRemainsPending(t *testing.T) {
 	gw := &switchableGateway{currentModel: "configured"}
 	runner := makeRunnerWithSwitchableGateway(gw)

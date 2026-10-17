@@ -39,7 +39,6 @@ var mouseModeTeaModes = map[mouseMode]tea.MouseMode{
 	mouseAll: tea.MouseModeAllMotion,
 }
 
-// teaMode is the tracking mode the renderer writes for this preset.
 func (m mouseMode) teaMode() tea.MouseMode { return mouseModeTeaModes[m] }
 
 // parseMouseMode reads a stored or typed preset. The empty string is the
@@ -84,7 +83,7 @@ func (m *model) updateMouse(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case tea.MouseReleaseMsg:
 		// The highlight stays up after the button comes back: it is the only
-		// feedback that the copy happened, and it is what the next click, a
+		// feedback that a copy was requested, and it is what the next click, a
 		// keystroke, a scroll or new output takes down.
 		text := m.selection.Text(m.frame)
 		if text == "" {

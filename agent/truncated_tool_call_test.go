@@ -48,8 +48,8 @@ func TestTruncatedToolCallLeavesTranscriptParseable(t *testing.T) {
 		}
 	}
 	last := messages[len(messages)-1].Content
-	if !strings.Contains(last, "exceeded the output limit") || !strings.Contains(last, "smaller old/new pairs") {
-		t.Fatalf("tool result = %q, want the split-the-edit hint", last)
+	if !strings.Contains(last, "exceeded the output limit") || !strings.Contains(last, "smaller changes") {
+		t.Fatalf("tool result = %q, want the split-the-tool-call hint", last)
 	}
 	if !strings.Contains(last, "edit") {
 		t.Fatalf("tool result = %q, want the tool named", last)

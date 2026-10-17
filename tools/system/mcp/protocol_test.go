@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/tools/core"
 )
 
 func TestInitializationRejectsUnsupportedVersion(t *testing.T) {
@@ -89,7 +89,8 @@ func TestInitializationPropagatesNotificationFailure(t *testing.T) {
 }
 
 func TestStderrOnlyDecoratesErrors(t *testing.T) {
-	client := &stdioClient{stderr: bytes.NewBufferString("diagnostic")}
+	client := &stdioClient{stderr: core.NewTruncatingWriters(64 * 1024)}
+	_, _ = io.WriteString(client.stderr.Stderr(), "diagnostic")
 	if err := client.withStderr(nil); err != nil {
 		t.Fatalf("successful response became error: %v", err)
 	}
@@ -113,6 +114,17 @@ func TestDecodeRPCRejectsMalformedEnvelopeFields(t *testing.T) {
 		var result map[string]any
 		if err := decodeRPC("tools/list", []byte(payload), &result); err == nil || !strings.Contains(err.Error(), "parse MCP response") {
 			t.Fatalf("payload %s: error=%v", payload, err)
+		}
+	}
+}
+
+func TestSafeNamePreservesNormalization(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{
+		{"", ""}, {" --__ ", ""}, {"  Server...Tool__42  ", "server_tool_42"},
+		{"ÉCHO/工具/test", "cho_test"}, {"A\xffB", "a_b"}, {"Kelvin", "kelvin"},
+	} {
+		if got := safeName(tc.input); got != tc.want {
+			t.Errorf("safeName(%q) = %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }

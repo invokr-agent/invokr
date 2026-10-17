@@ -34,7 +34,7 @@ type readArgs struct {
 func RegisterReadFileTool(c core.NativeRegistrar, wsp workspace.Policy) {
 	core.Register(c, core.Tool[readArgs]{
 		Spec: core.ToolSpec{
-			Name: "read", Description: "Read workspace files as text. paths is a list: put every file you need into one call rather than one call per file. A single file is a list of one. Returns verbatim content; offset/limit page through a large file and apply only when paths holds exactly one.",
+			Name: "read", Description: "Read workspace text verbatim. Batch needed files in paths; use a one-item list for one file. offset/limit apply only to single-file reads.",
 			Example:    `{"name":"read","arguments":{"paths":["README.md","src/app.py","src/models.py"]}}`,
 			Parameters: core.SchemaFor[readArgs](), Metadata: core.ReadWorkspaceMetadata("workspace", core.ToolCapabilities{ReadsWorkspace: true}),
 		},

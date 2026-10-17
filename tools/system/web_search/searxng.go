@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/tidwall/gjson"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,9 +16,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tidwall/gjson"
+
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/support/strutil"
 )
 
 // searxngSettings enables the JSON API (off by default) and turns off the bot
@@ -58,7 +59,7 @@ const searxngRetryDelay = 2 * time.Second
 // NewSearXNGProvider queries a SearXNG instance. With cfg.Endpoint empty the
 // provider starts a local container on first use and reuses it after that.
 func NewSearXNGProvider(cfg config.SearXNGSearchConfig, cacheDir string, client *http.Client) *jsonSearchProvider {
-	endpoint := core.FirstNonEmptyTrimmed(cfg.Endpoint, fmt.Sprintf("http://127.0.0.1:%d/search", cfg.Port))
+	endpoint := strutil.FirstNonEmptyTrimmed(cfg.Endpoint, fmt.Sprintf("http://127.0.0.1:%d/search", cfg.Port))
 	var mu sync.Mutex
 	started := false
 	ensure := func(ctx context.Context, endpoint string) error {
@@ -83,7 +84,6 @@ func NewSearXNGProvider(cfg config.SearXNGSearchConfig, cacheDir string, client 
 	return &jsonSearchProvider{name: "searxng", endpoint: endpoint, client: cmp.Or(client, http.DefaultClient), now: time.Now, build: searxngBuilder(ensure, searxngEngines), retryBuild: searxngBuilder(ensure, searxngFallbackEngines), retryDelay: searxngRetryDelay, decode: searxngDecoder()}
 }
 
-// searxngBuilder builds one JSON search request against the given engine set.
 func searxngBuilder(ensure func(context.Context, string) error, engines string) func(context.Context, string, string, SearchRequest) (*http.Request, error) {
 	return func(ctx context.Context, endpoint, _ string, req SearchRequest) (*http.Request, error) {
 		if err := ensure(ctx, endpoint); err != nil {
@@ -166,7 +166,7 @@ func ensureSearXNG(ctx context.Context, cfg config.SearXNGSearchConfig, cacheDir
 // searxngEngine is the container binary the provider shells out to; the
 // registration gate and the start path must agree on it.
 func searxngEngine(cfg config.SearXNGSearchConfig) string {
-	return core.FirstNonEmptyTrimmed(cfg.Engine, constants.SearXNGDefaultEngine)
+	return strutil.FirstNonEmptyTrimmed(cfg.Engine, constants.SearXNGDefaultEngine)
 }
 
 func searxngRunArgv(cfg config.SearXNGSearchConfig, settingsPath string) []string {

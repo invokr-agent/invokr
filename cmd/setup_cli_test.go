@@ -11,6 +11,7 @@ import (
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/logging"
+	"github.com/invokr-ai/invokr/platform/setup"
 
 	"github.com/stretchr/testify/require"
 )
@@ -42,6 +43,9 @@ func TestSetupCmdUsesQuestionnaireDefaults(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Config: "+cfgPath) {
 		t.Fatalf("expected config path in output, got %q", out.String())
+	}
+	if !strings.Contains(out.String(), "JSON profiles: "+setup.ToolTemplatesDir(home)) {
+		t.Fatalf("expected tool templates path in output, got %q", out.String())
 	}
 }
 
@@ -85,10 +89,14 @@ func TestRootSetupCmdSkipsRuntimeBootstrap(t *testing.T) {
 func TestRootCmdIncludesLogViewFlag(t *testing.T) {
 	root, _ := NewRootCmd(config.AppConfig{})
 
-	flag := root.PersistentFlags().Lookup("log-view")
+	flag := root.Flags().Lookup("log-view")
 	require.NotNil(t, flag, "expected log-view flag")
 	if flag.DefValue != "false" {
 		t.Fatalf("log-view default = %q, want false", flag.DefValue)
+	}
+	skills, _, _ := root.Find([]string{"skills"})
+	if skills.Flags().Lookup("yolo") != nil || skills.InheritedFlags().Lookup("yolo") != nil {
+		t.Fatal("session flags leaked onto skills")
 	}
 }
 

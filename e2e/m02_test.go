@@ -55,27 +55,35 @@ func TestM02_PairSafeRetention(t *testing.T) {
 		summary = "m02-marked-summary"
 	)
 	home := newHome(t, "")
-	home.app.Provider.ContextWindowTokens = 3_700 // shorter system prompt: compact after the third read
+	home.app.Provider.ContextWindowTokens = 3_700 // force compaction while retaining the newest write
 	// Exercise summarization independently of bench defaults.
 	home.app.Agent.ContextWarningPercent = 70
 	home.app.Agent.ContextCompactPercent = 80
+	// Keep compaction reachable even with a short persona and native tool prompt.
 	for i := 1; i <= 3; i++ {
-		mustWrite(t, filepath.Join(home.workspace, "m02-large-"+string(rune('0'+i))+".txt"), strings.Repeat(string(rune('a'+i)), 2_400))
+		mustWrite(t, filepath.Join(home.workspace, "m02-large-"+string(rune('0'+i))+".txt"), strings.Repeat(string(rune('a'+i)), 4_800))
 	}
-	steps := []providertest.CompletionStep{
+	actions := []providertest.CompletionStep{
 		patchCall("m02-patch", "*** Begin Patch\n*** Add File: pinned.txt\n+"+canary+"\n*** End Patch"),
 		providertest.NativeToolCallStep("m02-read-1", "read", map[string]any{"paths": []string{"m02-large-1.txt"}}),
 		providertest.NativeToolCallStep("m02-read-2", "read", map[string]any{"paths": []string{"m02-large-2.txt"}}),
 		providertest.NativeToolCallStep("m02-read-3", "read", map[string]any{"paths": []string{"m02-large-3.txt"}}),
 	}
-	for range 8 {
-		steps = append(steps, providertest.CompletionStep{MutateForRequest: func(req providertest.CompletionRequest, step *providertest.CompletionStep) {
+	// Prompt size controls when summaries interleave with actions. Route every
+	// request by purpose so an earlier summary cannot consume a scripted read.
+	nextAction := 0
+	steps := make([]providertest.CompletionStep, len(actions)+8)
+	for i := range steps {
+		steps[i].MutateForRequest = func(req providertest.CompletionRequest, step *providertest.CompletionStep) {
 			if strings.Contains(requestText(req), "Summarize this quoted conversation segment compactly") {
 				step.Content = summary
+			} else if nextAction < len(actions) {
+				*step = actions[nextAction]
+				nextAction++
 			} else {
 				*step = providertest.ReplyStep("m02-done")
 			}
-		}})
+		}
 	}
 	provider := providertest.New(t, steps, providertest.WithContextWindow(3_700))
 	defer provider.Close()

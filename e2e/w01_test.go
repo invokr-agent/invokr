@@ -62,7 +62,7 @@ func TestW01_WebFetch(t *testing.T) {
 
 	t.Run("denied without the web_network tier", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			providertest.NativeToolCallStep("w01-denied", "web_fetch", map[string]any{"url": fixture.url("/page.html")}),
+			managedToolStep("w01-denied", "web_fetch", map[string]any{"url": fixture.url("/page.html")}),
 			providertest.ReplyStep("denied"),
 		)
 		defer provider.Close()
@@ -78,22 +78,20 @@ func TestW01_WebFetch(t *testing.T) {
 		if got := fixture.hits.Load() - before; got != 0 {
 			t.Fatalf("denied call still issued %d request(s)", got)
 		}
-		// web_fetch ships deferred (#480): calling it loads its schema, so the
-		// next turn must carry it, denial or not.
-		tools := fmt.Sprintf("%v", provider.Snapshot().CompletionRequests[1].Tools)
-		if !strings.Contains(tools, "web_fetch") || !strings.Contains(tools, "max_bytes") {
-			t.Fatalf("web_fetch schema missing from the tool list: %s", tools)
+		next := provider.Snapshot().CompletionRequests[1]
+		if strings.Contains(fmt.Sprint(next.Tools), "web_fetch") || !strings.Contains(requestText(next), "max_bytes") {
+			t.Fatal("enable must return schema without changing native array")
 		}
 	})
 
 	t.Run("granted web_network fetches, truncates, and flags failures", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			providertest.NativeToolCallStep("w01-search", "tool_search", map[string]any{"query": "web_fetch", "include_schema": true}),
-			providertest.NativeToolCallStep("w01-page", "web_fetch", map[string]any{"url": fixture.url("/page.html")}),
-			providertest.NativeToolCallStep("w01-big", "web_fetch", map[string]any{"url": fixture.url("/big.html"), "max_bytes": 2000}),
-			providertest.NativeToolCallStep("w01-404", "web_fetch", map[string]any{"url": fixture.url("/missing")}),
-			providertest.NativeToolCallStep("w01-hops", "web_fetch", map[string]any{"url": fixture.url("/hop/5")}),
-			providertest.NativeToolCallStep("w01-toomany", "web_fetch", map[string]any{"url": fixture.url("/hop/9")}),
+			providertest.NativeToolCallStep("w01-search", "tools", map[string]any{"action": "search", "query": "web_fetch", "include_schema": true}),
+			managedToolStep("w01-page", "web_fetch", map[string]any{"url": fixture.url("/page.html")}),
+			managedToolStep("w01-big", "web_fetch", map[string]any{"url": fixture.url("/big.html"), "max_bytes": 2000}),
+			managedToolStep("w01-404", "web_fetch", map[string]any{"url": fixture.url("/missing")}),
+			managedToolStep("w01-hops", "web_fetch", map[string]any{"url": fixture.url("/hop/5")}),
+			managedToolStep("w01-toomany", "web_fetch", map[string]any{"url": fixture.url("/hop/9")}),
 			providertest.ReplyStep("fetched"),
 		)
 		defer provider.Close()
@@ -127,8 +125,8 @@ func TestW01_WebFetch(t *testing.T) {
 
 	t.Run("private and link-local hosts are refused before dialing", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			providertest.NativeToolCallStep("w01-linklocal", "web_fetch", map[string]any{"url": "http://169.254.169.254/latest/meta-data"}),
-			providertest.NativeToolCallStep("w01-loopback", "web_fetch", map[string]any{"url": fixture.url("/page.html")}),
+			managedToolStep("w01-linklocal", "web_fetch", map[string]any{"url": "http://169.254.169.254/latest/meta-data"}),
+			managedToolStep("w01-loopback", "web_fetch", map[string]any{"url": fixture.url("/page.html")}),
 			providertest.ReplyStep("blocked"),
 		)
 		defer provider.Close()

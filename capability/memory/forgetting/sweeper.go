@@ -22,7 +22,6 @@ type Result struct {
 	Pruned   int
 }
 
-// Empty reports whether the sweep changed nothing.
 func (r Result) Empty() bool { return len(r.Archived) == 0 && r.Purged == 0 && r.Pruned == 0 }
 
 // Sweeper runs the decay maintenance pass: archive below-threshold records,

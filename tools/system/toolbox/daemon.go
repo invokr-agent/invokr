@@ -19,9 +19,10 @@ import (
 // over its lifetime. Communication is newline-delimited JSON on stdin/stdout.
 // env is snapshotted at daemon startup; subsequent callers share the same env.
 type daemonProcess struct {
-	mu      sync.Mutex
+	gate    chan struct{}
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
+	stdout  io.ReadCloser
 	scanner *bufio.Scanner
 	done    chan struct{} // closed by the reaper goroutine when the process exits
 	stderr  *tailWriter
@@ -104,26 +105,29 @@ func startDaemon(maxOutputBytes int, build func() (*exec.Cmd, func(), error), en
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 4096), maxOutputBytes+1)
 
-	return &daemonProcess{cmd: cmd, stdin: stdin, scanner: sc, done: done, stderr: stderr}, nil
+	return &daemonProcess{cmd: cmd, stdin: stdin, stdout: stdout, scanner: sc, done: done, stderr: stderr, gate: make(chan struct{}, 1)}, nil
 }
 
 // invokeDaemon sends a single JSON request to dp and returns the response text.
-// It holds dp.mu for the full round-trip so concurrent callers are serialised
+// It holds dp.gate for the full round-trip so concurrent callers are serialised
 // (the daemon process is single-threaded). The call respects ctx: if ctx is
 // cancelled the daemon is killed, the scan goroutine is drained, and an error
 // is returned so the caller can evict and restart the daemon.
 func invokeDaemon(ctx context.Context, dp *daemonProcess, reqBytes []byte) (string, error) {
-	dp.mu.Lock()
-	defer dp.mu.Unlock()
-
-	line := append(bytes.TrimRight(reqBytes, "\n"), '\n')
-	if _, err := dp.stdin.Write(line); err != nil {
-		return "", fmt.Errorf("write to daemon: %w", err)
+	select {
+	case dp.gate <- struct{}{}:
+		defer func() { <-dp.gate }()
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
 
 	var text string
 	ch := make(chan error, 1)
 	go func() {
+		if _, err := dp.stdin.Write(append(bytes.TrimRight(reqBytes, "\n"), '\n')); err != nil {
+			ch <- fmt.Errorf("write to daemon: %w", err)
+			return
+		}
 		if !dp.scanner.Scan() {
 			scanErr := dp.scanner.Err()
 			if scanErr == nil {
@@ -143,9 +147,21 @@ func invokeDaemon(ctx context.Context, dp *daemonProcess, reqBytes []byte) (stri
 	case err := <-ch:
 		return text, err
 	case <-ctx.Done():
-		_ = dp.cmd.Process.Kill()
+		dp.kill()
 		<-ch // drain the scanner goroutine before releasing the lock
 		return "", fmt.Errorf("daemon invoke: %w", ctx.Err())
+	}
+}
+
+func (dp *daemonProcess) kill() {
+	if dp.cmd != nil && dp.cmd.Process != nil {
+		if dp.cmd.Cancel != nil {
+			_ = dp.cmd.Cancel()
+		} else {
+			_ = dp.cmd.Process.Kill()
+		}
+		_ = dp.stdin.Close()
+		_ = dp.stdout.Close()
 	}
 }
 
@@ -158,9 +174,7 @@ func evictDaemon(key daemonKey, failed *daemonProcess) {
 	daemonsMu.Lock()
 	defer daemonsMu.Unlock()
 	if dp, ok := daemons[key]; ok && dp == failed {
-		if dp.cmd != nil && dp.cmd.Process != nil {
-			_ = dp.cmd.Process.Kill()
-		}
+		dp.kill()
 		delete(daemons, key)
 	}
 }
@@ -173,9 +187,7 @@ func ShutdownDaemons() {
 	daemons = make(map[daemonKey]*daemonProcess)
 	daemonsMu.Unlock()
 	for _, dp := range all {
-		if dp.cmd != nil && dp.cmd.Process != nil {
-			_ = dp.cmd.Process.Kill()
-		}
+		dp.kill()
 		// Killing the daemon doesn't guarantee its stdout pipe closes promptly —
 		// a lingering grandchild (e.g. a headless browser) can hold it open and
 		// hang runtime cleanup indefinitely. Bound the wait.

@@ -127,7 +127,7 @@ func TestCompactionHeadroomAndRuntimeWorkspace(t *testing.T) {
 		t.Fatal("headroom pass orphaned result")
 	}
 	b.windowSize = 1000000
-	again, _ := b.Prepare(context.Background(), "s", got, state, nil)
+	again, _ := b.Prepare(context.Background(), "s", got, state)
 	if !reflect.DeepEqual(again, got) {
 		t.Fatal("ordinary turn invalidated cached prefix")
 	}

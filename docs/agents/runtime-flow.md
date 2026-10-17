@@ -13,9 +13,10 @@
 Runtime bootstrap builds:
 
 - logger (with config validation and optional TUI log-buffer sink)
-- OpenAI-compatible provider; model availability against `/v1/models` and
-  context-window metadata from `/props` are resolved in background goroutines
-  after first paint (first-listed fallback; ADR 0006)
+- OpenAI-compatible provider; model availability against `/v1/models` is
+  resolved synchronously before session creation when no explicit model source
+  is set (first-listed fallback; ADR 0006). Explicit model choices are not
+  replaced. Only context-window metadata probing runs in the background
 - ordered event dispatcher
 - approval broker
 - optional Zerfoo memory worker (lazy model loading)
@@ -27,7 +28,7 @@ Runtime bootstrap builds:
 - custom agent-definition registry (`capability/agentdef`)
 - tool caller with native and toolbox tools (delegate wired to the agent registry)
 - tagged-JSON syntax
-- agent session (plus a chat-session factory for `chat serve`) and the
+- agent session (plus a chat-session factory for `bot serve`) and the
   slash-command backend (`CommandService`)
 
 ## User Message Flow
@@ -83,4 +84,4 @@ Events are typed and structured. Important families:
 - recall lifecycle
 - save lifecycle
 
-Runtime uses the single ordered dispatcher (`platform/events/dispatcher.go`). Handlers run synchronously in registration order and panics are recovered. There is no async dispatcher; the one slow handler (memory summarization) owns its own bounded background worker inside the memory curator instead.
+Runtime uses the single ordered dispatcher (`platform/events/dispatcher.go`). Handlers run synchronously in registration order within each `Dispatch`, and panics are recovered. Concurrent dispatches can overlap; handlers must be concurrency-safe. There is no async dispatcher; the one slow handler (memory summarization) owns its own bounded background worker inside the memory curator instead.

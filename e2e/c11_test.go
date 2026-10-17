@@ -20,20 +20,20 @@ var c11RecordID = regexp.MustCompile(`"id":"([^"]+)"`)
 // issue #299: an update naming only id and content keeps the stored kind, and
 // the assistant's own numbered-list reply never lands in MEMORY.md.
 func TestC11_MemoryUpdateMergeAndNoPhantomRecord(t *testing.T) {
-	update := providertest.NativeToolCallStep("c11-update", "memory", map[string]any{})
+	update := managedToolStep("c11-update", "memory", map[string]any{})
 	update.MutateForRequest = func(req providertest.CompletionRequest, step *providertest.CompletionStep) {
 		id := c11SavedRecordID(req)
-		step.ToolCalls[0].Function.Arguments = map[string]any{
+		step.ToolCalls[1].Function.Arguments.(map[string]any)["arguments"] = map[string]any{
 			"action": "update", "id": id, "content": "mem-canary-proj-11-v2",
 		}
 	}
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c11-save", "memory", map[string]any{
+		managedToolStep("c11-save", "memory", map[string]any{
 			"action": "save", "scope": "project", "kind": "decision",
 			"content": "mem-canary-proj-11",
 		}),
 		update,
-		providertest.NativeToolCallStep("c11-list", "memory", map[string]any{
+		managedToolStep("c11-list", "memory", map[string]any{
 			"action": "list", "scopes": []string{"project"},
 		}),
 		// Free-form prose that the old curator harvested into MEMORY.md.

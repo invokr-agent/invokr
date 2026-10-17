@@ -15,7 +15,7 @@ import (
 func TestD03_MCPLifecycleAndFiltering(t *testing.T) {
 	t.Run("enabled tools filter", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			providertest.NativeToolCallStep("d03-search", "tool_search", map[string]any{"query": "mcp_fixture_echo", "include_schema": true}),
+			providertest.NativeToolCallStep("d03-search", "tools", map[string]any{"action": "search", "query": "mcp_fixture_echo", "include_schema": true}),
 			providertest.ReplyStep("filtered"),
 		)
 		defer provider.Close()

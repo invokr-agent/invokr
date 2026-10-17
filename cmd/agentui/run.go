@@ -3,12 +3,14 @@ package agentui
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-ai/invokr/support/fsutil"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -16,6 +18,9 @@ import (
 type LogSource interface {
 	Lines() []string
 }
+
+// ErrNewSession asks the CLI owner to reopen the UI with a fresh session.
+var ErrNewSession = errors.New("new session requested")
 
 type Params struct {
 	Session       turn.Session
@@ -60,7 +65,7 @@ func Run(ctx context.Context, p Params) error {
 		return err
 	}
 
-	if !isTerminal(p.In) {
+	if !fsutil.IsTerminal(p.In) {
 		return runPlainWithCommands(ctx, p.Session, p.Commands, p.Approvals, p.Grants, p.EventBus, p.In, p.Out, p.ErrOut)
 	}
 
@@ -73,7 +78,7 @@ func Run(ctx context.Context, p Params) error {
 	}
 	uiModel := newModelWithCommands(ctx, p.Session, p.Commands, toolEvents, approvalQueue, p.Logs, p.LogView, p.PromptHistory, initialHistory)
 	for _, item := range p.Transcript {
-		uiModel.chatLog.Append(message{role: item.Role, text: item.Text})
+		uiModel.appendSavedTranscript(item)
 	}
 	uiModel.grants = p.Grants
 	uiModel.prefsPath = prefsPath(p.PrefsDir)

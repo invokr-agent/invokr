@@ -31,7 +31,7 @@ Guard rails:
 ---
 name: reviewer            # required, [a-z][a-z0-9-]*
 description: Read-only reviewer.   # required
-model: gpt-4o-mini        # optional; inherit if omitted
+model: qwen3-coder        # optional; inherit if omitted
 max_turns: 4              # optional; else the tool's max_turns
 tools:                    # optional; omit = full tool set
   - file_search

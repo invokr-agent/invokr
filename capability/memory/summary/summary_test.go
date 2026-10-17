@@ -66,19 +66,3 @@ func TestParseMemorySummaryExtractsFromProse(t *testing.T) {
 		t.Fatalf("unexpected summary %q", got.Summary)
 	}
 }
-
-func TestRenderMemoryForEmbedding(t *testing.T) {
-	text := RenderMemoryForEmbedding(MemorySummary{
-		Summary: "User prefers concise plans.",
-		Facts: []MemoryFact{{
-			Subject:   "user",
-			Predicate: "prefers",
-			Object:    "concise plans",
-		}},
-		Topics: []string{"planning", "memory"},
-	})
-	want := "Summary: User prefers concise plans.\nFacts:\n- user prefers concise plans\nTopics: planning, memory"
-	if text != want {
-		t.Fatalf("embedding text = %q, want %q", text, want)
-	}
-}

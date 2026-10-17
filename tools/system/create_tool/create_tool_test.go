@@ -3,7 +3,7 @@ package create_tool
 import (
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/invokr-ai/invokr/constants"
@@ -11,10 +11,24 @@ import (
 	"github.com/invokr-ai/invokr/tools/system/toolbox"
 )
 
-func TestExampleReadsToolCallArgumentsEnvelope(t *testing.T) {
-	if !strings.Contains(createToolExample, `call.get(\"arguments\")`) {
-		t.Fatalf("create-tool example must read the arguments envelope: %s", createToolExample)
+func TestCreateToolSchemaRequiresCapabilities(t *testing.T) {
+	r := &captureCreateToolRegistrar{}
+	RegisterCreateToolTool(r, core.CallerDeps{})
+	required, ok := r.spec.Parameters["required"].([]string)
+	if !ok || !slices.Contains(required, "capabilities") {
+		t.Fatalf("create_tool required fields = %v, want capabilities", r.spec.Parameters["required"])
 	}
+}
+
+type captureCreateToolRegistrar struct{ spec core.ToolSpec }
+
+func (r *captureCreateToolRegistrar) RegisterNative(spec core.ToolSpec, _ core.NativeHandler) {
+	r.spec = spec
+}
+func (*captureCreateToolRegistrar) HasNative(string) bool      { return false }
+func (*captureCreateToolRegistrar) NativeSource(string) string { return "" }
+func (*captureCreateToolRegistrar) ReplaceNativeToolsBySource(string, []core.DynamicNativeTool) []string {
+	return nil
 }
 
 func TestInstallStagedToolRollsBackFailedReplacement(t *testing.T) {

@@ -7,13 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +14,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/core/sandbox"
+	"github.com/invokr-ai/invokr/tools/system/workspace"
 
 	"go.uber.org/zap"
 )
@@ -212,8 +214,8 @@ func dynamicToolboxTool(tool *executableTool, approver approval.Approver) core.D
 }
 
 func approveToolboxCall(ctx context.Context, approver approval.Approver, tool *executableTool, call *core.ToolCall) error {
-	req := approval.Request{
-		Subject: string(call.Arguments), Confined: sandbox.Available(), Writes: tool.Metadata.Capabilities.WritesWorkspace, Network: tool.Metadata.Capabilities.Network,
+	req := approval.Request{ // ask_once: unconfined, so Auto needs a grant or prompt; always_ask: prompt every call.
+		Subject: string(call.Arguments), Confined: sandbox.Available() && tool.Metadata.Policy.Approval != constants.ApprovalPolicyAskOnce, RequiresScopedApproval: tool.Metadata.Policy.Approval == constants.ApprovalPolicyAlwaysAsk, Writes: tool.Metadata.Capabilities.WritesWorkspace, Network: tool.Metadata.Capabilities.Network,
 		Tool: tool.Name, Reason: "toolbox tool policy requires approval",
 		Tier:    strings.Join(tool.Metadata.Policy.Tiers, ", "),
 		Summary: fmt.Sprintf("Run toolbox tool %s", tool.Name),
@@ -290,7 +292,7 @@ func (p *executableTool) invokeDaemonTool(ctx context.Context, command string, e
 }
 
 func (p *executableTool) daemonStateDir(env []string, sessionID string) (string, error) {
-	stateRoot := core.FirstNonEmptyTrimmed(core.GetEnvValue(env, "INVOKR_TOOL_STATE_DIR"), core.GetEnvValue(env, "INVOKR_BROWSER_AGENT_STATE"))
+	stateRoot := strutil.FirstNonEmptyTrimmed(core.GetEnvValue(env, "INVOKR_TOOL_STATE_DIR"), core.GetEnvValue(env, "INVOKR_BROWSER_AGENT_STATE"))
 	if stateRoot == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -301,7 +303,7 @@ func (p *executableTool) daemonStateDir(env []string, sessionID string) (string,
 	return filepath.Join(stateRoot, safeStateDir("plugin", p.dir), safeStateDir("session", sessionID)), nil
 }
 
-func safeStateDir(kind, value string) string { return kind + "-" + core.HashHex(value)[:16] }
+func safeStateDir(kind, value string) string { return kind + "-" + strutil.HashHex(value)[:16] }
 
 func (p *executableTool) invokeOneShotTool(ctx context.Context, command string, env []string, reqBytes []byte) (string, error) {
 	cmd, cleanup, err := p.buildCommand(ctx, command, env, p.args)
@@ -380,6 +382,7 @@ func (p *executableTool) buildCommand(ctx context.Context, command string, env [
 	}
 	p.logger.Warn("running toolbox tool unsandboxed", zap.String("name", p.Name))
 	cmd := exec.CommandContext(ctx, command, args...)
+	core.ConfigureProcessGroup(cmd)
 	cmd.Dir = p.runDir()
 	return cmd, nil, nil
 }
@@ -489,13 +492,13 @@ func pluginEnv(runtime string, cfg config.ToolboxConfig) []string {
 	for key, value := range cfg.Env {
 		env = core.WithEnvValue(env, key, value)
 	}
-	env = core.WithEnvValue(env, "INVOKR_GO_BIN", core.FirstNonEmptyTrimmed(cfg.GoBin, constants.DefaultGoBin))
+	env = core.WithEnvValue(env, "INVOKR_GO_BIN", strutil.FirstNonEmptyTrimmed(cfg.GoBin, constants.DefaultGoBin))
 	if strings.TrimSpace(cfg.BrowserAgentState) != "" {
 		env = core.WithEnvValue(env, "INVOKR_TOOL_STATE_DIR", cfg.BrowserAgentState)
 	}
 	if runtime == "go" {
 		if core.GetEnvValue(env, "GOCACHE") == "" {
-			cacheDir := core.FirstNonEmptyTrimmed(cfg.GoCacheDir, constants.DefaultGoCacheDir)
+			cacheDir := strutil.FirstNonEmptyTrimmed(cfg.GoCacheDir, constants.DefaultGoCacheDir)
 			_ = os.MkdirAll(cacheDir, 0700)
 			env = core.WithEnvValue(env, "GOCACHE", cacheDir)
 		}
@@ -505,7 +508,7 @@ func pluginEnv(runtime string, cfg config.ToolboxConfig) []string {
 			// bind-mounts the binary's containing directory, not the whole
 			// toolchain tree), so it must be resolved on the host and passed
 			// through explicitly.
-			if goroot, err := goRootFor(core.FirstNonEmptyTrimmed(cfg.GoBin, constants.DefaultGoBin)); err == nil && goroot != "" {
+			if goroot, err := goRootFor(strutil.FirstNonEmptyTrimmed(cfg.GoBin, constants.DefaultGoBin)); err == nil && goroot != "" {
 				env = core.WithEnvValue(env, "GOROOT", goroot)
 			}
 		}

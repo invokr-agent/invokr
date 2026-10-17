@@ -17,6 +17,7 @@ import (
 	"github.com/invokr-ai/invokr/surface/ui"
 
 	"charm.land/bubbles/v2/help"
+	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -100,7 +101,7 @@ func TestRunPlainStreamsAssistantDeltasOnce(t *testing.T) {
 	if got := strings.Count(out.String(), "hello world"); got != 1 {
 		t.Fatalf("streamed response count = %d, output = %q", got, out.String())
 	}
-	if got := strings.Count(out.String(), "[Authoritative tool outcome]"); got != 1 {
+	if got := strings.Count(out.String(), "[Tool attempt failures — history, not final task status]"); got != 1 {
 		t.Fatalf("tool outcome count = %d, output = %q", got, out.String())
 	}
 }
@@ -413,6 +414,9 @@ func TestToggleHintsCollapsesTheFooterToOneKey(t *testing.T) {
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
 	m.hasUsage = true
 	m.usage = turn.TokenUsage{Available: true, ContextWindowTokens: 1000, LatestPromptTokens: 200}
+	if !strings.Contains(ansi.Strip(m.footer()), "alt+x browse details") {
+		t.Fatalf("missing details navigation tip: %s", m.footer())
+	}
 
 	if !strings.Contains(ansi.Strip(m.footer()), "enter send") {
 		t.Fatalf("hints are not showing to begin with: %q", ansi.Strip(m.footer()))
@@ -818,7 +822,7 @@ func TestModel_LongResponseStaysWithinTerminalHeight(t *testing.T) {
 	m.height = 10
 	m.hasUsage = true
 	m.usage = turn.TokenUsage{Available: true, ContextWindowTokens: 1000, LatestPromptTokens: 500}
-	m.chatLog.messages = append(m.chatLog.messages, message{role: "assistant", text: strings.Repeat("tool output line\n", 80)})
+	m.chatLog.Append(message{role: "assistant", text: strings.Repeat("tool output line\n", 80)})
 
 	view := m.View().Content
 	if got := lipgloss.Height(view); got > m.height {
@@ -1385,21 +1389,21 @@ func TestModel_ChatScrollsWithPageKeys(t *testing.T) {
 	m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, nil, nil)
 	m.width = 80
 	m.height = 8
-	m.chatLog.messages = append(m.chatLog.messages, message{role: "assistant", text: strings.Repeat("line\n", 40)})
+	m.chatLog.Append(message{role: "assistant", text: strings.Repeat("line\n", 40)})
 	m.syncChatViewport(true)
-	if !m.chat.AtBottom() {
+	if !m.chat.Following() {
 		t.Fatal("expected chat to start at bottom")
 	}
 
 	updated, _ := m.Update(testKey(tea.KeyPgUp))
 	got := updated.(*model)
-	if got.chat.AtBottom() {
+	if got.chat.Following() {
 		t.Fatal("expected PgUp to scroll chat away from bottom")
 	}
 
 	updated, _ = got.Update(testKey(tea.KeyPgDown))
 	got = updated.(*model)
-	if !got.chat.AtBottom() {
+	if !got.chat.Following() {
 		t.Fatal("expected PgDown to return chat to bottom")
 	}
 }
@@ -1415,37 +1419,37 @@ func TestModel_AutoFollowRespectsUserScroll(t *testing.T) {
 	m.width = 80
 	m.height = 8
 	m.sending = true
-	m.chatLog.messages = append(m.chatLog.messages, message{role: "assistant", text: strings.Repeat("line\n", 40)})
+	m.chatLog.Append(message{role: "assistant", text: strings.Repeat("line\n", 40)})
 	m.syncChatViewport(true)
-	if !m.chat.AtBottom() {
+	if !m.chat.Following() {
 		t.Fatal("expected chat to start at bottom")
 	}
 
 	// User scrolls away: userScrolled flips true and stays there.
 	updated, _ := m.Update(testKey(tea.KeyPgUp))
 	got := updated.(*model)
-	if got.chat.AtBottom() || !got.userScrolled {
-		t.Fatalf("expected scroll-away to set userScrolled, got atBottom=%v userScrolled=%v", got.chat.AtBottom(), got.userScrolled)
+	if got.chat.Following() || !got.userScrolled {
+		t.Fatalf("expected scroll-away to set userScrolled, got atBottom=%v userScrolled=%v", got.chat.Following(), got.userScrolled)
 	}
 
 	// New tool output arrives while sending; a forced-bottom sync (as done by
 	// drainToolEvents/log ticks) must not override the user's scroll position.
 	got.chatLog.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &events.ToolPayload{ID: "call_1", Name: "shell", Arguments: `{"command":"ls"}`}})
 	got.syncChatViewport(true)
-	if got.chat.AtBottom() {
+	if got.chat.Following() {
 		t.Fatal("new content should not pull the view back to bottom while userScrolled is set")
 	}
 
 	// Returning to the bottom (End) clears userScrolled and resumes auto-follow.
 	updated, _ = got.Update(testKey(tea.KeyEnd))
 	got = updated.(*model)
-	if !got.chat.AtBottom() || got.userScrolled {
-		t.Fatalf("expected End to reach bottom and clear userScrolled, got atBottom=%v userScrolled=%v", got.chat.AtBottom(), got.userScrolled)
+	if !got.chat.Following() || got.userScrolled {
+		t.Fatalf("expected End to reach bottom and clear userScrolled, got atBottom=%v userScrolled=%v", got.chat.Following(), got.userScrolled)
 	}
 
 	got.chatLog.ApplyEvent(events.Event{Type: events.EventToolCompleted, Tool: &events.ToolPayload{ID: "call_1", Name: "shell", Duration: time.Millisecond}})
 	got.syncChatViewport(true)
-	if !got.chat.AtBottom() {
+	if !got.chat.Following() {
 		t.Fatal("expected auto-follow to resume once user returned to bottom")
 	}
 }
@@ -1625,16 +1629,16 @@ func TestModel_SubmitModelListReturnsCmd(t *testing.T) {
 func TestModel_LogsModeOwnsPageKeys(t *testing.T) {
 	m := newTestModelWithLogs("one", "two", "three", "four", "five", "six", "seven", "eight")
 	m.height = 8
-	m.chatLog.messages = append(m.chatLog.messages, message{role: "assistant", text: strings.Repeat("chat\n", 40)})
+	m.chatLog.Append(message{role: "assistant", text: strings.Repeat("chat\n", 40)})
 	m.syncChatViewport(true)
 	m.showLogs()
-	if !m.chat.AtBottom() || !m.logPanel.viewport.AtBottom() {
+	if !m.chat.Following() || !m.logPanel.viewport.AtBottom() {
 		t.Fatal("test setup expected chat and logs at bottom")
 	}
 
 	updated, _ := m.Update(testKey(tea.KeyPgUp))
 	got := updated.(*model)
-	if !got.chat.AtBottom() {
+	if !got.chat.Following() {
 		t.Fatal("expected focused logs to own PgUp without moving chat")
 	}
 	if got.logPanel.viewport.AtBottom() {
@@ -1905,6 +1909,13 @@ func TestMouseCommandPersistsThePreset(t *testing.T) {
 	}
 }
 
+func TestIdlePromptDoesNotScheduleCursorRepaints(t *testing.T) {
+	m := newTestModelWithHiddenLogs()
+	if _, cmd := m.Update(textarea.Blink()); cmd != nil {
+		t.Fatal("idle cursor schedules terminal output that can clear native selection")
+	}
+}
+
 func TestMouseDragSelectsAndCopies(t *testing.T) {
 	m := newTestModelWithHiddenLogs()
 	_, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 24})
@@ -1956,7 +1967,7 @@ func TestCopyNoticeRidesTheFooterUntilTheHighlightGoes(t *testing.T) {
 	m.updateMouse(tea.MouseMotionMsg{X: 11, Y: 0, Button: tea.MouseLeft})  //nolint:errcheck
 	m.updateMouse(tea.MouseReleaseMsg{X: 11, Y: 0, Button: tea.MouseLeft}) //nolint:errcheck
 
-	if got := ansi.Strip(m.footer()); !strings.Contains(got, "copied 11 chars to clipboard") {
+	if got := ansi.Strip(m.footer()); !strings.Contains(got, "copy requested: 11 chars") || strings.Contains(got, "copied") {
 		t.Fatalf("footer = %q, want the copy notice", got)
 	}
 	m.updateKey(testKey('x')) //nolint:errcheck

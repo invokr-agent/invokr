@@ -60,7 +60,7 @@ func TestD08_ClientAdapterContracts(t *testing.T) {
 	schemaProvider := d08Provider(t, `{"codename":"amber-orbit"}`)
 	schemaRun := d08Run(t, home, schemaProvider.URL(), []string{"exec", "--output-schema", schema, "d08 schema"}, "")
 	var structured map[string]any
-	if schemaRun.Err != nil || json.Unmarshal([]byte(strings.TrimSpace(schemaRun.Stdout)), &structured) != nil || strings.Contains(schemaRun.Stdout, "Authoritative tool outcome") {
+	if schemaRun.Err != nil || json.Unmarshal([]byte(strings.TrimSpace(schemaRun.Stdout)), &structured) != nil || strings.Contains(schemaRun.Stdout, "Tool attempt failures") {
 		t.Fatalf("output schema: err=%v stdout=%q stderr=%q", schemaRun.Err, schemaRun.Stdout, schemaRun.Stderr)
 	}
 	d08AssertProvider(t, schemaProvider)

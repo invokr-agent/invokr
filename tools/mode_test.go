@@ -10,6 +10,7 @@ import (
 
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -63,14 +64,14 @@ func TestCallerAutoEditsAndPlanRejectsWrites(t *testing.T) {
 	a := &modeTestApprover{}
 	c := NewCaller(core.CallerDeps{App: config.AppConfig{Workspace: config.WorkspaceConfig{Root: root, AllowHiddenPaths: true}}, Policy: p, Approver: a})
 	defer c.Close()
-	call := &core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"new.txt","edits":[{"old":"","new":"hello"}]}`)}
+	call := &core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"new.txt","content":"hello"}`)}
 	if _, err := c.HandleCall(context.Background(), call); err != nil {
 		t.Fatal(err)
 	}
 	if len(a.requests) != 0 {
 		t.Fatal("workspace edit prompted")
 	}
-	call.Arguments = []byte(`{"path":".invokr/settings.json","edits":[{"old":"","new":"{}"}]}`)
+	call.Arguments = []byte(`{"path":".invokr/settings.json","content":"{}"}`)
 	if _, err := c.HandleCall(context.Background(), call); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestCallerAutoEditsAndPlanRejectsWrites(t *testing.T) {
 	if err := p.SetMode(approval.Plan); err != nil {
 		t.Fatal(err)
 	}
-	call.Arguments = []byte(`{"path":"other.txt","edits":[{"old":"","new":"blocked"}]}`)
+	call.Arguments = []byte(`{"path":"other.txt","content":"blocked"}`)
 	if _, err := c.HandleCall(context.Background(), call); err == nil {
 		t.Fatal("Plan wrote a source file")
 	}
@@ -91,7 +92,7 @@ func TestCallerAutoEditsAndPlanRejectsWrites(t *testing.T) {
 
 func TestLSPHostExecutionNeedsApprovalAndIsUnavailableInPlan(t *testing.T) {
 	p := approval.NewPolicy(approval.Auto, false)
-	c := NewCaller(core.CallerDeps{Policy: p, Approver: approval.StaticApprover{}})
+	c := NewCaller(core.CallerDeps{Policy: p, Approver: testutil.StaticApprover{}})
 	defer c.Close()
 	core.Register(c, core.Tool[struct{}]{Spec: core.ToolSpec{Name: "test_lsp", Metadata: core.ReadWorkspaceMetadata("lsp", core.ToolCapabilities{ReadsWorkspace: true})}, Execute: func(context.Context, struct{}) (string, error) { t.Fatal("LSP ran without approval"); return "", nil }})
 	for _, mode := range []approval.Mode{approval.Auto, approval.Plan} {

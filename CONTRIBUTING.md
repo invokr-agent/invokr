@@ -1,67 +1,104 @@
 # Contributing to Invokr
 
-Invokr is a Go CLI agent (module `github.com/antonikliment/invokr`, Go 1.26). This is the
-human-facing summary; `AGENTS.md`, `CLAUDE.md`, and `docs/agents/README.md`
-carry the full detail and are the source of truth if anything here disagrees.
+Thanks for wanting to help. Read this before you open anything. It's short, and PRs
+are held to it.
+
+> [!NOTE]
+> Invokr is still an early release. The TUI and the core can change under you,
+> sometimes in big ways. If you're building on top of it, expect to rebase.
+
+## The rules
+
+1. **Open an issue first.** Describe the problem clearly: what you did, what
+   happened and what you expected. A PR without an issue behind it will be
+   closed. Small typo fixes are fine without one.
+2. **A human leads every change.** Use agents to write code if you like, but
+   you decide what the change is for, you've read the whole diff and you can
+   explain it in review. Automated, minimal-effort PRs will be closed.
+3. **Write as little code as you can.** Reuse what's already in the codebase
+   before adding anything new. Prefer the stdlib and existing helpers. The
+   smallest diff that solves the issue wins.
+4. **Fundamentals need regression testing.** Changes to tools, the default
+   prompt or the agent loop affect everything the agent does. Run `make e2e`
+   and include before/after runs on a real task in the PR. Show it doesn't make
+   things worse, not just that your case works.
+
+## Build from source
+
+You need Go 1.26+.
+
+```bash
+git clone https://github.com/invokr-ai/invokr && cd invokr
+make install        # builds with version info, copies to ~/.local/bin
+go build -o invokr . && ./invokr   # or run it in place
+```
+
+`invokr --version` reports the build's tag, commit and date.
 
 ## Before you commit
 
-```
-make verify   # go test ./... + lint — must pass
+```bash
+make verify   # go test ./... + lint, must pass
+gofmt -w . && go mod tidy
 ```
 
-CI runs the same checks. Also run `gofmt -w . && go mod tidy`.
+CI runs the same checks.
 
-## Budgets — a PR can fail on size alone
+## Budgets: a PR can fail on size alone
 
 Lint enforces hard budgets, not suggestions:
 
 - `gocyclo` ≤ 12, `gocognit` ≤ 15, `funlen` 80 lines / 50 statements,
   `nestif` ≤ 5, `dupl` 100.
-- `goclocbudget`: total implementation Go is capped. A correct, well-written
-  feature can still fail CI because it pushed the repo over the line. Budget
-  for deletions alongside additions.
+- `goclocbudget`: total implementation Go is capped. A correct feature can
+  still fail CI because it pushed the repo over the line, so look for things to
+  delete alongside what you add.
 
 `_test.go` files are exempt from the complexity linters, not from the rest.
+`make lint-ci` builds and runs the custom linter. Stock `golangci-lint` doesn't
+enforce `goclocbudget`.
 
-Use `make lint-ci` to build and run the custom linter (the stock
-`golangci-lint` binary does not enforce `goclocbudget`).
+## Before adding logic
 
-## Before adding logic, answer these four questions
-
-Put the answers in the PR description when the change is non-trivial:
+For anything non-trivial, answer these in the PR description:
 
 1. Which existing package owns this behaviour?
-2. Which existing types or functions can be reused or extended?
+2. What existing types or functions can you reuse or extend?
 3. Why is new logic necessary?
-4. What can be removed or consolidated to stay under the LOC budget?
+4. What can you remove or consolidate to stay under the budget?
 
-## Package ownership
-
-`docs/architecture/services.md` is the ownership map. Extend the existing owner
-rather than adding a package. A new package is allowed only when no existing
-owner fits — and then you must update `services.md` and explain in the PR why
-extension was not enough.
+[docs/architecture/services.md](docs/architecture/services.md) is the ownership
+map. Extend the existing owner instead of adding a package. If nothing fits,
+update `services.md` and explain in the PR why extending wasn't enough.
 
 ## Code style
 
-- Wrap errors: `fmt.Errorf("ctx: %w", err)`. Classify with typed errors via
-  `errors.As` (e.g. `approval.DeniedError`, `core.ToolError`) — never
+- Wrap errors with `fmt.Errorf("ctx: %w", err)`. Classify them with typed
+  errors via `errors.As` (`approval.DeniedError`, `core.ToolError`). Never
   string-match error messages.
 - `panic` only for registration-time invariants, never for runtime errors.
-- Tests use stdlib `testing` with direct `t.Fatalf` assertions. testify is not
-  the house style. Shared helpers live in `support/testutil/`.
+- Tests use stdlib `testing` with direct `t.Fatalf` assertions, not testify.
+  Shared helpers live in `support/testutil/`.
 - Native tools live in their own subpackage:
   `tools/system/<tool>/<name>.go` + `<name>_test.go`.
 
-## Architecture decisions
+## Design decisions
 
-Decisions that constrain future work are recorded as ADRs in `docs/adr/`.
-Read the existing ones before changing agent-loop, tool-outcome, sandbox, or
-package-layout behaviour. If your change contradicts an ADR, add a new ADR
-superseding it rather than quietly diverging.
+Decisions that constrain future work are written up as ADRs in
+[docs/agents/adr/](docs/agents/adr/). Read them before changing the agent loop,
+tool outcomes, sandboxing or package layout. If your change goes against one,
+say so in the issue first.
 
-## Releasing
+## Pull requests
+
+Target `dev`, not `main`. Link the issue and keep the diff to one concern.
+
+## Security
+
+Don't open a public issue for a suspected vulnerability. See
+[SECURITY.md](SECURITY.md).
+
+## Releasing (maintainers)
 
 Tag and run [goreleaser](https://goreleaser.com) (`.goreleaser.yaml`):
 
@@ -71,38 +108,23 @@ goreleaser release
 ```
 
 This builds `linux/{amd64,arm64}` and `darwin/{amd64,arm64}`, injects
-version/commit/date into `platform/version` via `-ldflags -X`, and publishes
-checksummed archives to GitHub Releases. `invokr-agent --version` reports
-what was injected.
+version/commit/date into `platform/version` and publishes checksummed archives
+to GitHub Releases.
 
-`modernc.org/sqlite` is pure Go, so three of the four targets cross-compile
-CGO-free. The exception is `linux/arm64`: `github.com/zerfoo/zerfoo`'s
-optional CUDA support resolves `dlopen`/`dlsym` via a `//go:linkname` into
-`runtime.dlopen` on that target when `CGO_ENABLED=0`, and that runtime symbol
-doesn't exist in this Go toolchain — a link-time failure, not a runtime one
-(Invokr never touches CUDA). `.goreleaser.yaml` builds `linux/arm64` with
-`CGO_ENABLED=1` instead, which routes zerfoo through its real cgo `dlopen`
-path. That build needs an aarch64 cross toolchain on the release host:
+`linux/arm64` builds with `CGO_ENABLED=1`. With CGO off, zerfoo's optional CUDA
+support links `dlopen` into a runtime symbol this Go toolchain doesn't have, so
+the build fails at link time. That build needs an aarch64 cross toolchain on the
+release host:
 
 ```bash
 sudo apt-get install gcc-aarch64-linux-gnu   # Debian/Ubuntu
 ```
 
-Dry-run without publishing or requiring a tag:
+Dry run without publishing or a tag:
 
 ```bash
 goreleaser release --snapshot --clean --skip=publish
 ```
-
-## Pull requests
-
-Target `dev`, not `main`. Fill in `.github/pull_request_template.md`. Keep the
-diff to one concern.
-
-## Security
-
-Do not open a public issue for a suspected vulnerability — see
-[SECURITY.md](SECURITY.md).
 
 ## License
 

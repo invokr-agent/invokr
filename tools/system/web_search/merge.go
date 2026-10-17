@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/invokr-ai/invokr/support/mathutil"
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -27,14 +28,14 @@ func dedupeResults(results []ProviderResult) []SearchResult {
 		}
 		existing := &merged[idx]
 		if result.Score > existing.ProviderScores[existing.Provider] {
-			existing.Title = core.FirstNonEmptyTrimmed(result.Title, existing.Title)
-			existing.URL = core.FirstNonEmptyTrimmed(result.URL, existing.URL)
-			existing.Snippet = core.FirstNonEmptyTrimmed(result.Snippet, existing.Snippet)
+			existing.Title = strutil.FirstNonEmptyTrimmed(result.Title, existing.Title)
+			existing.URL = strutil.FirstNonEmptyTrimmed(result.URL, existing.URL)
+			existing.Snippet = strutil.FirstNonEmptyTrimmed(result.Snippet, existing.Snippet)
 			existing.Provider = result.Provider
-			existing.Domain = core.FirstNonEmptyTrimmed(result.Domain, existing.Domain)
+			existing.Domain = strutil.FirstNonEmptyTrimmed(result.Domain, existing.Domain)
 			existing.PublishedAt = newerTime(existing.PublishedAt, result.PublishedAt)
 			existing.RetrievedAt = newerValueTime(existing.RetrievedAt, result.RetrievedAt)
-			existing.CanonicalURL = core.FirstNonEmptyTrimmed(canonical, existing.CanonicalURL)
+			existing.CanonicalURL = strutil.FirstNonEmptyTrimmed(canonical, existing.CanonicalURL)
 		}
 		existing.ProviderScores[result.Provider] = math.Max(existing.ProviderScores[result.Provider], result.Score)
 		if !slices.Contains(existing.ProvidersReturnedBy, result.Provider) {

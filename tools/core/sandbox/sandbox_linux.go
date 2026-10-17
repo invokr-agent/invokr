@@ -30,18 +30,20 @@ import (
 	"time"
 
 	"github.com/invokr-ai/invokr/tools/core"
+	"golang.org/x/sys/unix"
 )
 
 // Plan describes the bind mounts and Network/resource posture for one
 // toolbox tool invocation, derived from its declared capabilities.
 type Plan struct {
 	// Sealed mounts are applied last, so writable ancestors cannot shadow them.
-	Sealed      []string
-	RO          []string // host paths bind-mounted read-only at the same path
-	RW          []string // host paths bind-mounted read-write at the same path
-	Network     bool
-	MemoryLimit int64
-	CommandPath string // absolute path to the resolved interpreter/binary
+	Sealed             []string
+	RO                 []string // host paths bind-mounted read-only at the same path
+	RW                 []string // host paths bind-mounted read-write at the same path
+	PinnedRW, PinnedRO []string // No-symlink fd binds: RW directories, RO regular files.
+	Network            bool
+	MemoryLimit        int64
+	CommandPath        string // absolute path to the resolved interpreter/binary
 	// TmpDir, when set, is bind-mounted at /tmp in place of the private
 	// tmpfs, so scratch files outlive a single call and are shared with
 	// whatever else mounts the same directory.
@@ -81,12 +83,7 @@ func BuildPlan(cmdPath string, toolDir string, venvDir string, workspaceDir stri
 			plan.RO = append(plan.RO, "/etc/resolv.conf", "/etc/hosts")
 		}
 	}
-	if venvDir != "" {
-		plan.RO = append(plan.RO, venvDir)
-	}
-	if workspaceDir == "" {
-		return DedupPlan(plan)
-	}
+	plan.RO = append(plan.RO, venvDir)
 	if caps.WritesWorkspace {
 		plan.RW = append(plan.RW, workspaceDir)
 	} else if caps.ReadsWorkspace {
@@ -108,8 +105,9 @@ func BuildPlan(cmdPath string, toolDir string, venvDir string, workspaceDir stri
 func caCertDirs() []string { return []string{"/etc/ssl", "/etc/ca-certificates", "/etc/pki"} }
 
 func DedupPlan(plan Plan) Plan {
-	plan.RO = dedupExistingPaths(plan.RO)
-	plan.RW = dedupExistingPaths(plan.RW)
+	plan.RO, plan.RW = dedupExistingPaths(plan.RO), dedupExistingPaths(plan.RW)
+	// Pins must match RW entries and never fail a run for a path RW dropped.
+	plan.PinnedRW = dedupExistingPaths(plan.PinnedRW)
 	return plan
 }
 
@@ -120,13 +118,69 @@ func dedupExistingPaths(paths []string) []string {
 	return slices.DeleteFunc(core.DedupPreserveOrder(cleaned), func(p string) bool { _, err := os.Stat(p); return err != nil })
 }
 
+func openPinnedPath(path string, directory bool) (*os.File, error) {
+	if !filepath.IsAbs(path) || filepath.Clean(path) == "/" {
+		return nil, fmt.Errorf("pin path %q: expected non-root absolute path", path)
+	}
+	parent, err := os.Open("/")
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(strings.TrimPrefix(filepath.Clean(path), "/"), "/")
+	for index, part := range parts {
+		flags := unix.O_PATH | unix.O_NOFOLLOW | unix.O_CLOEXEC
+		if directory || index < len(parts)-1 {
+			flags |= unix.O_DIRECTORY
+		}
+		fd, openErr := unix.Openat(int(parent.Fd()), part, flags, 0)
+		_ = parent.Close()
+		if openErr != nil {
+			return nil, fmt.Errorf("pin path %q: %w", path, openErr)
+		}
+		parent = os.NewFile(uintptr(fd), part)
+	}
+	if info, err := parent.Stat(); !directory && (err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o111 == 0) {
+		_ = parent.Close()
+		return nil, fmt.Errorf("pin file %q: expected executable regular file: %w", path, os.ErrInvalid)
+	}
+	return parent, nil
+}
+
+func reopenPinned(plan Plan) ([]*os.File, error) {
+	var files []*os.File
+	for index, path := range slices.Concat(plan.PinnedRW, plan.PinnedRO) {
+		file, err := openPinnedPath(path, index < len(plan.PinnedRW))
+		if err != nil {
+			closePinned(files)
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	return files, nil
+}
+
+func closePinned(files []*os.File) {
+	for _, file := range files {
+		_ = file.Close()
+	}
+}
+
 // Command wraps command/args so they run inside the namespace
 // sandbox described by plan, returning a ready-to-configure *exec.Cmd. The
 // caller is still responsible for Env/Stdin/Stdout/Stderr/Dir.
 func command(ctx context.Context, plan Plan, dir string, args []string) (*exec.Cmd, func(), error) {
-	script, cleanup, err := writeSandboxScript(plan, dir)
+	pinned, err := reopenPinned(plan)
 	if err != nil {
 		return nil, nil, err
+	}
+	script, cleanup, err := writeSandboxScript(plan, dir)
+	if err != nil {
+		closePinned(pinned)
+		return nil, nil, err
+	}
+	cleanupPinned := func() {
+		cleanup()
+		closePinned(pinned)
 	}
 
 	unshareArgs := []string{"--user", "--map-root-user", "--mount", "--pid", "--fork", "--uts", "--ipc"}
@@ -138,16 +192,22 @@ func command(ctx context.Context, plan Plan, dir string, args []string) (*exec.C
 	if !plan.Network {
 		unshareArgs = append(unshareArgs, "--net")
 	}
-	unshareArgs = append(unshareArgs, "--", "/bin/sh", script)
+	initShell := "/bin/sh"
+	if len(plan.PinnedRO) > 0 {
+		initShell = "/bin/bash" // Shell tool caller already requires bash; dash cannot close fd >= 10.
+	}
+	unshareArgs = append(unshareArgs, "--", initShell, script)
 	unshareArgs = append(unshareArgs, plan.CommandPath)
 	unshareArgs = append(unshareArgs, args...)
 
 	if plan.Detached {
 		cmd := exec.Command("unshare", unshareArgs...)
+		cmd.ExtraFiles = pinned
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-		return cmd, cleanup, nil
+		return cmd, cleanupPinned, nil
 	}
 	cmd := exec.CommandContext(ctx, "unshare", unshareArgs...)
+	cmd.ExtraFiles = pinned
 	// Pdeathsig kills the sandbox child when the agent dies for any reason,
 	// including an external SIGKILL that never runs cmd.Cancel below.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
@@ -157,23 +217,15 @@ func command(ctx context.Context, plan Plan, dir string, args []string) (*exec.C
 		}
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
-	return cmd, cleanup, nil
+	return cmd, cleanupPinned, nil
 }
 
 // unshareSupportsKillChild reports whether the host util-linux is new enough
 // for --kill-child; older builds reject the flag outright.
-func unshareSupportsKillChild() bool {
-	killChildOnce.Do(func() {
-		out, err := exec.Command("unshare", "--help").CombinedOutput()
-		killChildOK = err == nil && strings.Contains(string(out), "--kill-child")
-	})
-	return killChildOK
-}
-
-var (
-	killChildOnce sync.Once
-	killChildOK   bool
-)
+var unshareSupportsKillChild = sync.OnceValue(func() bool {
+	out, err := exec.Command("unshare", "--help").CombinedOutput()
+	return err == nil && strings.Contains(string(out), "--kill-child")
+})
 
 // loopbackEnabled reports whether a no-network sandbox still gets a working
 // loopback interface. Default-on; set INVOKR_SANDBOX_LOOPBACK=0 to opt out.
@@ -220,17 +272,20 @@ func writeSandboxScript(plan Plan, toolDir string) (string, func(), error) {
 	// openpty finds none without a devpts instance: it fails the fork with
 	// ENOENT. newinstance keeps the pts namespace private to the sandbox.
 	b.WriteString("mkdir -p \"$ROOT/dev/pts\" && mount -t devpts -o nosuid,noexec,newinstance,ptmxmode=0666 devpts \"$ROOT/dev/pts\" 2>/dev/null && ln -sf pts/ptmx \"$ROOT/dev/ptmx\" || echo 'invokr: no pty in sandbox' >&2\n")
-	for _, p := range plan.RO {
-		writeSandboxBind(&b, root, p, true)
-	}
-	for _, p := range plan.RW {
-		writeSandboxBind(&b, root, p, false)
+	pins := slices.Concat(plan.PinnedRW, plan.PinnedRO)
+	for index, p := range slices.Concat(plan.RO, plan.RW) {
+		source := p
+		if index := slices.Index(pins, p); index >= 0 {
+			source = fmt.Sprintf("/proc/self/fd/%d", 3+index)
+		}
+		writeSandboxBind(&b, root, p, source, index < len(plan.RO))
 	}
 	writeSealedBinds(&b, root, plan)
 	if err := writeAllowedHosts(&b, root, plan.AllowHosts); err != nil {
 		cleanup()
 		return "", nil, err
 	}
+	writePinnedClose(&b, len(pins))
 	// Everything the sandbox needs exists by now, so seal the root itself: a
 	// write outside a mounted RW path (child mounts keep their own rw flag)
 	// must fail loudly rather than land in a tmpdir that is deleted at exit.
@@ -250,6 +305,12 @@ func writeSandboxScript(plan Plan, toolDir string) (string, func(), error) {
 		return "", nil, fmt.Errorf("write sandbox script: %w", err)
 	}
 	return scriptPath, cleanup, nil
+}
+
+func writePinnedClose(b *strings.Builder, count int) {
+	for index := range count {
+		fmt.Fprintf(b, "exec %d<&-\n", 3+index)
+	}
 }
 
 // writeAllowedHosts gives the sandbox a generated /etc/hosts holding only the
@@ -276,14 +337,14 @@ func writeAllowedHosts(b *strings.Builder, root string, allowHosts []string) err
 	return nil
 }
 
-func writeSandboxBind(b *strings.Builder, root string, hostPath string, readOnly bool) {
+func writeSandboxBind(b *strings.Builder, root string, hostPath string, source string, readOnly bool) {
 	target := filepath.Join(root, hostPath)
 	if info, err := os.Stat(hostPath); err == nil && !info.IsDir() {
 		fmt.Fprintf(b, "mkdir -p %s && touch %s\n", shellEscape(filepath.Dir(target)), shellEscape(target))
 	} else {
 		fmt.Fprintf(b, "mkdir -p %s\n", shellEscape(target))
 	}
-	fmt.Fprintf(b, "mount --bind %s %s\n", shellEscape(hostPath), shellEscape(target))
+	fmt.Fprintf(b, "mount --bind %s %s\n", shellEscape(source), shellEscape(target))
 	ro := ""
 	if readOnly {
 		ro = "ro,"

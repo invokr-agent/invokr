@@ -6,26 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/events"
 
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"
 )
 
-// #559: does #558 (read pin 4→16 KB, plus carrying pinned reads verbatim
-// through summarization) raise the compaction rate on a workload whose reads
-// sit in the newly pinned 4-16 KB band? Marathon M3 suggested roughly 2x on
-// n=2 vs n=3, which the bench cannot resolve (score SD ≈ 1.7). This is the
-// deterministic, no-model stand-in: a fixed 200-turn transcript replayed under
-// three configurations, counting compactions.
-//
-// The three configurations separate the two mechanisms #558 bundled:
-//
-// Only the restored 4 KB cap is a shipped configuration on this branch, so
-// that is what is reported. #558's own shape — a 16 KB cap under a 32 KB total
-// budget, plus the compaction carry — is not reachable here; the numbers
-// measured against main are quoted on the PR instead.
+// Fixed workloads track compaction cost across read sizes and path counts.
 const (
 	pinRunTurns      = 200
 	pinRunPaths      = 20
@@ -88,27 +75,21 @@ func countCompactions(t *testing.T, summaryBytes, readBytes, paths int) (int, []
 		windowSize: pinRunWindow, events: dispatcher, logger: zap.NewNop(),
 		gateway:         &pinRunGateway{summary: strings.Repeat("s", summaryBytes)},
 		writesWorkspace: func(name string) bool { return name == "edit" },
-		resultKeepTurns: constants.ToolResultKeepTurns, resultAgeTurns: constants.ToolResultAgeTurns,
 	}
 	messages := []inference.Message{inference.SystemMessage("system"), inference.UserMessage("task")}
 	state := contextWindowState{}
 	for turn := range pinRunTurns {
 		current = turn
-		messages, state = budget.Prepare(context.Background(), "s", pinRunTurn(messages, turn, readBytes, paths), state, nil)
+		messages, state = budget.Prepare(context.Background(), "s", pinRunTurn(messages, turn, readBytes, paths), state)
 	}
 	return compactions, at
 }
 
-// TestReadPinCompactionRate reports the compaction count on two workloads. It
-// is a report, not a threshold: the numbers that decided this revert came from
-// the ndjson replay of recorded runs, where the 4 KB cap was never worse than
-// a larger one. On main the 200-path workload compacts 108 times against
-// single digits here — the compaction carry was the dominant effect.
+// TestReadPinCompactionRate reports the compaction count on two workloads.
 func TestReadPinCompactionRate(t *testing.T) {
 	const summaryBytes = 600
-	// paths=20 re-reads every path every 20 turns, so a pinned read is always
-	// fresh and sits in the retained tail. paths=200 reads each path once, the
-	// broad-exploration shape, so pinned reads sit in the summarizable middle.
+	// paths=20 revisits each path every 20 turns. paths=200 reads each path
+	// once, modeling broad exploration with older reads in the summarizable middle.
 	for _, paths := range []int{pinRunPaths, pinRunTurns} {
 		for _, readBytes := range []int{3 << 10, 6 << 10, 9 << 10, 12 << 10} {
 			count, at := countCompactions(t, summaryBytes, readBytes, paths)

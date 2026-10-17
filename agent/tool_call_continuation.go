@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"strings"
+	"time"
 
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
@@ -56,8 +57,8 @@ func (g *OpenAIModelGateway) maybeContinueToolCall(ctx context.Context, messages
 }
 
 // continueToolCall asks the model for the rest of the truncated call's
-// arguments. The continuation runs without tool definitions and without
-// streaming — its output is the tail of an argument string, not prose for the
+// arguments. The continuation keeps the session's tool definitions with tool
+// choice none and runs without streaming — its output is the tail, not prose for the
 // user. One attempt only; failure returns ok=false and the caller keeps the
 // truncated output as it was.
 func (g *OpenAIModelGateway) continueToolCall(ctx context.Context, messages []inference.Message, output completionOutput) (completionOutput, bool) {
@@ -65,8 +66,11 @@ func (g *OpenAIModelGateway) continueToolCall(ctx context.Context, messages []in
 	g.logger.Warn("continuing truncated tool call", zap.String("tool", call.Name), zap.Int("partial_bytes", len(call.Arguments)))
 	continuation := append(append([]inference.Message{}, messages...),
 		inference.AssistantMessage(call.Arguments), inference.UserMessage(fmt.Sprintf(toolCallContinuePrompt, call.Name)))
-	req := g.buildRequest(g.Model(), withThinkingPrefill(continuation), nil)
+	req := g.buildRequest(g.Model(), withThinkingPrefill(continuation), g.stableToolDefs())
+	req.ToolChoice = inference.ToolChoiceNone
+	started := time.Now()
 	resp, err := g.provider.Completion(ctx, req)
+	g.logCompletionOverflow(req, resp, err, started)
 	if err != nil || resp == nil || len(resp.Message.ToolCalls) > 0 {
 		g.logger.Warn("tool call continuation failed", zap.Error(err))
 		return output, false
@@ -107,7 +111,6 @@ func withThinkingPrefill(messages []inference.Message) []inference.Message {
 	return append(append([]inference.Message(nil), messages...), inference.AssistantMessage("\n"))
 }
 
-// withExtra copies extra with key set, leaving the shared cache markers untouched.
 func withExtra(extra map[string]any, key string, value any) map[string]any {
 	out := maps.Clone(extra)
 	if out == nil {
@@ -202,8 +205,6 @@ func scanStructural(c byte, stack []byte) (bool, []byte) {
 	return false, stack
 }
 
-// outerObject returns the span from the first '{' to the last '}' of s, or
-// "" when there is no such span.
 func outerObject(s string) string {
 	start, end := strings.IndexByte(s, '{'), strings.LastIndexByte(s, '}')
 	if start < 0 || end <= start {
@@ -238,7 +239,11 @@ func addTurnUsage(base, extra turn.TokenUsage) turn.TokenUsage {
 	if !extra.Available {
 		return base
 	}
+	if !base.Available {
+		return extra
+	}
 	base.Available, base.LatestPromptTokens, base.LatestCompletionTokens = true, extra.LatestPromptTokens, extra.LatestCompletionTokens
+	base.LatestCachedPromptTokens, base.LatestReasoningTokens = extra.LatestCachedPromptTokens, extra.LatestReasoningTokens
 	base.TurnPromptTokens += extra.TurnPromptTokens
 	base.TurnCompletionTokens += extra.TurnCompletionTokens
 	base.TurnTotalTokens += extra.TurnTotalTokens

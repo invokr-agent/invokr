@@ -5,6 +5,12 @@ import "testing"
 // A tool with no primaryArgKeys entry falls back to firstStringField. That
 // fallback must not depend on Go's randomised map iteration order, or the
 // preview chip flickers between fields on every re-render.
+func TestPrimaryArgReadPaths(t *testing.T) {
+	if got := primaryArg("read", `{"paths":["src/main.go","README.md"],"offset":4}`); got != "src/main.go, README.md" {
+		t.Fatalf("read preview = %q", got)
+	}
+}
+
 func TestPrimaryArgFallbackIsStable(t *testing.T) {
 	const args = `{"action":"kill","session":"m-a82a75","target":"pane-0"}`
 

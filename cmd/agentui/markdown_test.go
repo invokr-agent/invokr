@@ -70,7 +70,8 @@ func TestStreamingAnswerRendersAsItArrives(t *testing.T) {
 	}
 
 	// Settling the message re-renders it through glamour.
-	log.messages[0] = message{role: "assistant", text: "## Head\n\n```go\nfunc main() {}\n```"}
+	log.messages[0].text = "## Head\n\n```go\nfunc main() {}\n```"
+	log.messages[0].streaming = false
 	settled := ansi.Strip(log.Content(60, ""))
 	if strings.Contains(settled, "## Head") || strings.Contains(settled, "```") {
 		t.Fatalf("settled answer kept raw syntax: %q", settled)

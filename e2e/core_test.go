@@ -46,7 +46,7 @@ func TestC01_StartupAndRegistryHygiene(t *testing.T) {
 		t.Fatalf("completion requests = %d, want 1", len(snapshot.CompletionRequests))
 	}
 	tools, _ := json.Marshal(snapshot.CompletionRequests[0].Tools)
-	for _, name := range []string{`"shell"`, `"tool_search"`, `"read"`} {
+	for _, name := range []string{`"shell"`, `"tools"`, `"read"`} {
 		if !strings.Contains(string(tools), name) {
 			t.Fatalf("native schema %s missing: %s", name, tools)
 		}
@@ -67,7 +67,7 @@ func TestC01_StartupAndRegistryHygiene(t *testing.T) {
 func TestC16_WebSearchUnavailable(t *testing.T) {
 	t.Setenv(constants.BraveSearchAPIKeyEnv, "")
 	t.Setenv(constants.TavilySearchAPIKeyEnv, "")
-	provider := providertest.NewScripted(t, providertest.ReplyStep("unavailable"))
+	provider := providertest.NewScripted(t, providertest.NativeToolCallStep("catalog", "tools", map[string]any{"action": "list"}), providertest.ReplyStep("unavailable"))
 	defer provider.Close()
 	home := newHome(t, provider.URL())
 	// searxng is the default provider and needs no key, and now also stands in
@@ -89,15 +89,9 @@ func TestC16_WebSearchUnavailable(t *testing.T) {
 	if strings.Contains(string(tools), `"web_search"`) {
 		t.Fatalf("web_search offered without a configured provider: %s", tools)
 	}
-	// The neighbouring network tool is unaffected, so this is the key gate
-	// doing the work and not the whole group having gone missing. web_fetch
-	// ships deferred (#480), so it is listed in the prompt, not in the schemas.
-	prompt := requestText(snapshot.CompletionRequests[0])
-	if !strings.Contains(prompt, "web_fetch") {
-		t.Fatalf("web_fetch missing from the deferred tool list: %s", prompt)
-	}
-	if strings.Contains(prompt, "web_search") {
-		t.Fatalf("web_search offered without a configured provider: %s", prompt)
+	catalog := requestText(snapshot.CompletionRequests[1])
+	if !strings.Contains(catalog, "web_fetch") || strings.Contains(catalog, "web_search") {
+		t.Fatalf("catalog availability mismatch: %s", catalog)
 	}
 	assertNoCanary(t, result.Stdout, result.Stderr)
 	provider.AssertClean(t)
@@ -117,7 +111,6 @@ func TestA01_WorkspaceFileInjectionBlocked(t *testing.T) {
 		providertest.NativeToolCallStep("a01-seed", "read", map[string]any{"paths": []string{"README-attack.md"}}),
 		providertest.NativeToolCallStep("a01-read-traversal", "read", map[string]any{"paths": []string{"../../../../etc/passwd"}}),
 		providertest.NativeToolCallStep("a01-read-symlink", "read", map[string]any{"paths": []string{"etc-link/passwd"}}),
-		loadApplyPatch("a01-load-patch"),
 		providertest.NativeToolCallStep("a01-write-traversal", "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Add File: " + escape + "\n+pwned\n*** End Patch"}),
 		providertest.NativeToolCallStep("a01-write-symlink", "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Add File: outside-link/escape.txt\n+pwned\n*** End Patch"}),
 		providertest.ReplyStep("done"),
@@ -276,9 +269,9 @@ func TestC11_LexicalMemoryCRUDAndScope(t *testing.T) {
 	// Pass A: seed one record per scope. UUIDs are random, so the store is read
 	// back from disk to drive the scripted update/delete in pass B.
 	provA := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c11a-user", "memory", map[string]any{"action": "save", "scope": "user", "kind": "profile", "content": "c11-user-canary"}),
-		providertest.NativeToolCallStep("c11a-proj", "memory", map[string]any{"action": "save", "scope": "project", "kind": "decision", "content": "c11-project-alpha"}),
-		providertest.NativeToolCallStep("c11a-sess", "memory", map[string]any{"action": "save", "scope": "session", "kind": "episode", "content": "c11-session-canary"}),
+		managedToolStep("c11a-user", "memory", map[string]any{"action": "save", "scope": "user", "kind": "profile", "content": "c11-user-canary"}),
+		managedToolStep("c11a-proj", "memory", map[string]any{"action": "save", "scope": "project", "kind": "decision", "content": "c11-project-alpha"}),
+		managedToolStep("c11a-sess", "memory", map[string]any{"action": "save", "scope": "session", "kind": "episode", "content": "c11-session-canary"}),
 		providertest.ReplyStep("seeded"),
 	)
 	defer provA.Close()
@@ -305,14 +298,14 @@ func TestC11_LexicalMemoryCRUDAndScope(t *testing.T) {
 	// Pass B: update the project record by its stored id, recall/list, delete it,
 	// and save a defaults-only record.
 	provB := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c11b-upd", "memory", map[string]any{"action": "update", "id": projID, "scope": "project", "kind": "decision", "content": "c11-project-beta"}),
-		providertest.NativeToolCallStep("c11b-old", "recall", map[string]any{"query": "c11-project-alpha", "scopes": []string{"project"}}),
-		providertest.NativeToolCallStep("c11b-new", "recall", map[string]any{"query": "c11-project-beta", "scopes": []string{"project"}}),
-		providertest.NativeToolCallStep("c11b-user", "memory", map[string]any{"action": "list", "scopes": []string{"user"}}),
-		providertest.NativeToolCallStep("c11b-project", "memory", map[string]any{"action": "list", "scopes": []string{"project"}}),
-		providertest.NativeToolCallStep("c11b-session", "memory", map[string]any{"action": "list", "scopes": []string{"session"}}),
-		providertest.NativeToolCallStep("c11b-del", "memory", map[string]any{"action": "delete", "id": projID}),
-		providertest.NativeToolCallStep("c11b-def", "memory", map[string]any{"action": "save", "content": "c11-default-canary"}),
+		managedToolStep("c11b-upd", "memory", map[string]any{"action": "update", "id": projID, "scope": "project", "kind": "decision", "content": "c11-project-beta"}),
+		managedToolStep("c11b-old", "recall", map[string]any{"query": "c11-project-alpha", "scopes": []string{"project"}}),
+		managedToolStep("c11b-new", "recall", map[string]any{"query": "c11-project-beta", "scopes": []string{"project"}}),
+		managedToolStep("c11b-user", "memory", map[string]any{"action": "list", "scopes": []string{"user"}}),
+		managedToolStep("c11b-project", "memory", map[string]any{"action": "list", "scopes": []string{"project"}}),
+		managedToolStep("c11b-session", "memory", map[string]any{"action": "list", "scopes": []string{"session"}}),
+		managedToolStep("c11b-del", "memory", map[string]any{"action": "delete", "id": projID}),
+		managedToolStep("c11b-def", "memory", map[string]any{"action": "save", "content": "c11-default-canary"}),
 		providertest.ReplyStep("done"),
 	)
 	defer provB.Close()
@@ -383,12 +376,12 @@ func TestC11_LexicalMemoryCRUDAndScope(t *testing.T) {
 		}
 	}
 	provC := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c11c-user-del", "memory", map[string]any{"action": "delete", "id": byScope["user"].UUID}),
-		providertest.NativeToolCallStep("c11c-session-del", "memory", map[string]any{"action": "delete", "id": byScope["session"].UUID}),
-		providertest.NativeToolCallStep("c11c-default-del", "memory", map[string]any{"action": "delete", "id": defaultID}),
-		providertest.NativeToolCallStep("c11c-user", "memory", map[string]any{"action": "list", "scopes": []string{"user"}}),
-		providertest.NativeToolCallStep("c11c-project", "memory", map[string]any{"action": "list", "scopes": []string{"project"}}),
-		providertest.NativeToolCallStep("c11c-session", "memory", map[string]any{"action": "list", "scopes": []string{"session"}}),
+		managedToolStep("c11c-user-del", "memory", map[string]any{"action": "delete", "id": byScope["user"].UUID}),
+		managedToolStep("c11c-session-del", "memory", map[string]any{"action": "delete", "id": byScope["session"].UUID}),
+		managedToolStep("c11c-default-del", "memory", map[string]any{"action": "delete", "id": defaultID}),
+		managedToolStep("c11c-user", "memory", map[string]any{"action": "list", "scopes": []string{"user"}}),
+		managedToolStep("c11c-project", "memory", map[string]any{"action": "list", "scopes": []string{"project"}}),
+		managedToolStep("c11c-session", "memory", map[string]any{"action": "list", "scopes": []string{"session"}}),
 		providertest.ReplyStep("empty"),
 	)
 	defer provC.Close()
@@ -423,8 +416,8 @@ func resultItems(t *testing.T, reqs []providertest.CompletionRequest, id, field 
 
 func TestC12_NoFailureDerivedMemoryAfterDenial(t *testing.T) {
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c12-open", "tmux", map[string]any{"action": "open", "command": "htop"}),
-		providertest.NativeToolCallStep("c12-list", "memory", map[string]any{"action": "list"}),
+		managedToolStep("c12-open", "tmux", map[string]any{"action": "open", "command": "htop"}),
+		managedToolStep("c12-list", "memory", map[string]any{"action": "list"}),
 		providertest.ReplyStep("noted"),
 	)
 	defer provider.Close()
@@ -480,10 +473,10 @@ func TestC13_SessionPersistenceAndRecall(t *testing.T) {
 
 	// Run B loads and searches A's session.
 	provB := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c13b-recent", "session_search", map[string]any{"action": "recent", "max_results": 5}),
-		providertest.NativeToolCallStep("c13b-load", "session_search", map[string]any{"action": "load", "session_id": aID}),
-		providertest.NativeToolCallStep("c13b-loadlast", "session_search", map[string]any{"action": "load"}),
-		providertest.NativeToolCallStep("c13b-search", "session_search", map[string]any{"action": "search", "query": "gateway-topic"}),
+		managedToolStep("c13b-recent", "session_search", map[string]any{"action": "recent", "max_results": 5}),
+		managedToolStep("c13b-load", "session_search", map[string]any{"action": "load", "session_id": aID}),
+		managedToolStep("c13b-loadlast", "session_search", map[string]any{"action": "load"}),
+		managedToolStep("c13b-search", "session_search", map[string]any{"action": "search", "query": "gateway-topic"}),
 		providertest.ReplyStep("recalled"),
 	)
 	defer provB.Close()
@@ -508,7 +501,7 @@ func TestC13_SessionPersistenceAndRecall(t *testing.T) {
 	// deterministic truth: recall runs without error.
 	// ponytail: cross-session recall fallback needs Zerfoo; live-tier only.
 	provC := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c13c-recall", "recall", map[string]any{"query": "gateway-topic"}),
+		managedToolStep("c13c-recall", "recall", map[string]any{"query": "gateway-topic"}),
 		providertest.ReplyStep("done"),
 	)
 	defer provC.Close()
@@ -560,7 +553,6 @@ func TestC07_ApplyPatchLifecycle(t *testing.T) {
 	}
 	alpha, beta := "alpha", "beta"
 	provider := providertest.NewScripted(t,
-		loadApplyPatch("c07-load"),
 		add("c07-dry", "note.txt", "alpha", true),
 		checkpoint(add("c07-add", "note.txt", "alpha", false), nil),
 		checkpoint(providertest.NativeToolCallStep("c07-upd", "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Update File: note.txt\n@@\n-alpha\n+beta\n*** End Patch"}), &alpha),
@@ -592,8 +584,8 @@ func TestC07_ApplyPatchLifecycle(t *testing.T) {
 		}
 	}
 
-	if got.Resp.ToolCallCount != 10 {
-		t.Fatalf("tool_call_count = %d, want 10", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 9 {
+		t.Fatalf("tool_call_count = %d, want 9", got.Resp.ToolCallCount)
 	}
 	// 1 denied (hidden) + 4 errors (malformed, mismatch, traversal, symlink).
 	var denied, errs int
@@ -631,7 +623,6 @@ func TestC14_LedgerTruthUnderMixedOutcomes(t *testing.T) {
 	// oracle is that the authoritative ledger contradicts the prose (ADR 0001).
 	provider := providertest.NewScripted(t,
 		providertest.NativeToolCallStep("c14-read", "read", map[string]any{"paths": []string{"README.md"}}),
-		loadApplyPatch("c14-load"),
 		providertest.NativeToolCallStep("c14-write", "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Add File: .hidden-write\n+x\n*** End Patch"}),
 		providertest.NativeToolCallStep("c14-shell", "shell", map[string]any{"command": "definitely-not-allowed"}),
 		providertest.ReplyStep("Everything succeeded and all files were written."),
@@ -644,8 +635,8 @@ func TestC14_LedgerTruthUnderMixedOutcomes(t *testing.T) {
 	}
 	got := runInProc(t, home, provider.URL(), "do the three things", deny)
 
-	if got.Resp.ToolCallCount != 4 {
-		t.Fatalf("tool_call_count = %d, want 4", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 3 {
+		t.Fatalf("tool_call_count = %d, want 3", got.Resp.ToolCallCount)
 	}
 	failures := got.Resp.ToolFailures
 	if len(failures) != 2 || failures[0].Tool != "apply_patch" || failures[0].Kind != "denied" ||
@@ -660,10 +651,9 @@ func TestC14_LedgerTruthUnderMixedOutcomes(t *testing.T) {
 			terminals = append(terminals, ev)
 		}
 	}
-	if len(terminals) != 4 || terminals[0].Name != "read" || terminals[0].Type != events.EventToolCompleted ||
-		terminals[1].Name != "tool_search" || terminals[1].Type != events.EventToolCompleted ||
-		terminals[2].Name != "apply_patch" || terminals[2].Type != events.EventToolFailed ||
-		terminals[3].Name != "shell" || terminals[3].Type != events.EventToolFailed {
+	if len(terminals) != 3 || terminals[0].Name != "read" || terminals[0].Type != events.EventToolCompleted ||
+		terminals[1].Name != "apply_patch" || terminals[1].Type != events.EventToolFailed ||
+		terminals[2].Name != "shell" || terminals[2].Type != events.EventToolFailed {
 		t.Fatalf("terminal outcomes = %#v", terminals)
 	}
 	// The hidden write never landed despite the prose claiming success.

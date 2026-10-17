@@ -75,7 +75,7 @@ func TestContextBudgetUsesConfiguredWarningThreshold(t *testing.T) {
 		events: events.NewOrderedDispatcher(zap.NewNop()), logger: zap.NewNop(),
 	}
 	messages := []inference.Message{inference.UserMessage(strings.Repeat("x", 220))}
-	_, state := budget.Prepare(context.Background(), "s1", messages, contextWindowState{}, nil)
+	_, state := budget.Prepare(context.Background(), "s1", messages, contextWindowState{})
 	if !state.warningSent {
 		t.Fatal("configured 50% warning threshold was not applied")
 	}
@@ -96,7 +96,7 @@ func TestWarningSkipsPrefetchWithoutRoomForTheSummaryCompletion(t *testing.T) {
 	for range 60 {
 		messages = append(messages, inference.AssistantMessage(strings.Repeat("x", 4000)))
 	}
-	_, state := budget.Prepare(context.Background(), "s1", messages, contextWindowState{}, nil)
+	_, state := budget.Prepare(context.Background(), "s1", messages, contextWindowState{})
 	if !state.warningSent {
 		t.Fatal("fixture did not cross the warning threshold")
 	}
@@ -210,7 +210,7 @@ func TestCompactionReducesContextWhenSummarizationFails(t *testing.T) {
 	}
 	state := contextWindowState{tokenEstimateScale: 1}
 	before := estimatedMessageTokens(messages)
-	compacted, _ := budget.Prepare(context.Background(), "s1", messages, state, nil)
+	compacted, _ := budget.Prepare(context.Background(), "s1", messages, state)
 	after := estimatedMessageTokens(compacted)
 	if after >= before {
 		t.Fatalf("context not reduced: %d -> %d", before, after)
@@ -365,8 +365,8 @@ func TestSummarizeMessagesListsReadFiles(t *testing.T) {
 	messages := []inference.Message{
 		inference.SystemMessage("system"), inference.UserMessage("request"),
 		read("a", "README.md"), inference.ToolMessage("a", "one"),
-		read("b", "docs/RELEASE.md"), inference.ToolMessage("b", strings.Repeat("x", pinnedReadMaxBytes)),
-		read("c", "docs/CHANGELOG.md"), inference.ToolMessage("c", strings.Repeat("y", pinnedReadMaxBytes)),
+		read("b", "docs/RELEASE.md"), inference.ToolMessage("b", strings.Repeat("x", 4096)),
+		read("c", "docs/CHANGELOG.md"), inference.ToolMessage("c", strings.Repeat("y", 4096)),
 		read("d", "README.md"), inference.ToolMessage("d", "three"),
 		inference.AssistantMessage("done"), inference.UserMessage("more"),
 		inference.AssistantMessage("tail"), inference.UserMessage("tail"),
@@ -603,7 +603,7 @@ func TestPrepareElidesBeforeSummarizingWhenAlreadyOverWindow(t *testing.T) {
 	}))()
 	budget := &contextBudget{windowSize: window, gateway: gateway, events: bus, logger: zap.NewNop()}
 
-	compacted, state := budget.Prepare(context.Background(), "s1", messages, contextWindowState{tokenEstimateScale: 1}, nil)
+	compacted, state := budget.Prepare(context.Background(), "s1", messages, contextWindowState{tokenEstimateScale: 1})
 
 	joined := strings.Join(notices, "|")
 	if strings.Contains(joined, "could not be reduced") || strings.Contains(joined, "summarization failed") {
@@ -794,7 +794,7 @@ func TestCompactionMakesProgressWhenPrefetchCoversOnlyAPrefix(t *testing.T) {
 	var compactions int
 	for range 6 {
 		before := percent()
-		messages, state = budget.Prepare(context.Background(), "s1", messages, state, nil)
+		messages, state = budget.Prepare(context.Background(), "s1", messages, state)
 		if percent() < before {
 			compactions++
 		}
@@ -815,7 +815,7 @@ func TestSummaryFilesSurvivesRepeatedCompaction(t *testing.T) {
 	messages := []inference.Message{
 		inference.SystemMessage("system"), inference.UserMessage("implement RELEASE-2.0.md"),
 		inference.AssistantMessage("", inference.ToolCall{ID: "a", Name: readFileToolName, Arguments: `{"path":"/ws/RELEASE-2.0.md"}`}),
-		inference.ToolMessage("a", strings.Repeat("spec text ", pinnedReadMaxBytes/8)),
+		inference.ToolMessage("a", strings.Repeat("spec text ", 4096/8)),
 		inference.AssistantMessage("one"), inference.UserMessage("two"),
 		inference.AssistantMessage("three"), inference.UserMessage("four"),
 	}
@@ -857,7 +857,7 @@ func TestAfterRewriteKeepsWarningInTheTriggerBasis(t *testing.T) {
 	if !state.warningSent {
 		t.Fatal("warningSent cleared for a context the trigger still sees above the warning threshold")
 	}
-	if _, state = budget.Prepare(context.Background(), "s1", messages, state, nil); budget.summaryFuture != nil {
+	if _, state = budget.Prepare(context.Background(), "s1", messages, state); budget.summaryFuture != nil {
 		t.Fatal("compaction was followed by a redundant summary prefetch")
 	}
 }

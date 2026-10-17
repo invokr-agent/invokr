@@ -11,13 +11,6 @@ import (
 	"github.com/invokr-ai/invokr/tools/system/workspace"
 )
 
-func (c *Caller) ModeInstructions() string {
-	if c.app.Policy == nil {
-		return ""
-	}
-	return c.app.Policy.ModeInstructions()
-}
-
 func operation(spec core.ToolSpec, call *core.ToolCall) approval.Request {
 	caps := spec.Metadata.Capabilities
 	readOnly := spec.Metadata.Source == "native" && !caps.WritesWorkspace && !caps.ExecutesCode

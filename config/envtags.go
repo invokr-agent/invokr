@@ -29,7 +29,7 @@ func applyEnv(ptr any) {
 			return
 		}
 		for _, name := range strings.Split(names, ",") {
-			if value := env(name); value != "" {
+			if value := Env(name); value != "" {
 				setFromString(field, value)
 			}
 		}

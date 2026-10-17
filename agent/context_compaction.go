@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/invokr-ai/invokr/capability/agentprompt"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	inference "github.com/rivt-ai/go-inference-router"
 )
@@ -79,7 +79,7 @@ func calibratedMessageTokens(messages []inference.Message, scale float64) int64 
 }
 
 func summaryKey(messages []inference.Message) string {
-	return core.HashHex(agentprompt.SummaryTranscript(messages))
+	return strutil.HashHex(agentprompt.SummaryTranscript(messages))
 }
 
 func summarySegment(messages []inference.Message, plan retentionPlan) []inference.Message {

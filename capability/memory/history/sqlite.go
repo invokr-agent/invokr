@@ -4,10 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/strutil"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	"github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/capability/memory/sqlite"
@@ -63,12 +64,7 @@ func NewStore(cfg Config) (*Store, error) {
 	return &Store{db: db, cwd: cfg.Cwd, limit: limit}, nil
 }
 
-func (s *Store) Close() error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.Close()
-}
+func (s *Store) Close() error { return sqlite.CloseDB(s.db) }
 
 func (s *Store) Append(ctx context.Context, text string) error {
 	if err := s.check(); err != nil {
@@ -151,9 +147,4 @@ func (s *Store) Recent(ctx context.Context, limit int) ([]string, error) {
 	return history, nil
 }
 
-func (s *Store) check() error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("prompt history: nil store")
-	}
-	return nil
-}
+func (s *Store) check() error { return sqlite.CheckOpen(s.db, "prompt history") }

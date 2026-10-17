@@ -188,7 +188,7 @@ func (s *fetchService) audit(ctx context.Context, resp toolResponse, err error) 
 	core.DispatchAudit(ctx, s.dispatcher, &events.AuditPayload{
 		Action: constants.WebFetchToolName, Tool: constants.WebFetchToolName, Outcome: core.Outcome(err),
 		Details: map[string]any{
-			"policy_tier": constants.WebSearchPolicyTier, "url_hash": core.HashHexTrimmed(resp.URL),
+			"policy_tier": constants.WebSearchPolicyTier, "url_hash": strutil.HashHexTrimmed(resp.URL),
 			"status": resp.Status, "truncated": resp.Truncated, "content_type": resp.ContentType,
 		},
 	}, err)

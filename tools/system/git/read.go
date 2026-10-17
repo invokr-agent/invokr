@@ -22,7 +22,7 @@ type diffResult struct {
 	Diff string `json:"diff"`
 }
 
-const readDescription = "Inspect the git repository: status, log, diff, show, branch (list). diff/show return {stat, diff}; when the diff is too large for context, only the diff text is spilled to a file while the stat summary stays — re-call with op:\"diff\" and paths:[...] from the stat list to fetch just the files you need instead of paging the spill file."
+const readDescription = "Inspect git: status, log, diff, show, branch (list). Use git_write for commits. diff/show return {stat, diff}; oversized diff text spills to a file. Narrow paths using the retained stat instead of paging the spill."
 
 func registerReadTool(c core.NativeRegistrar, root string) {
 	core.Register(c, core.Tool[readArgs]{

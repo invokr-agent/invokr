@@ -22,7 +22,6 @@ func patchCall(id, patch string) providertest.CompletionStep {
 func TestP01_ApplyPatchAmbiguityRejected(t *testing.T) {
 	t.Run("two matching locations are rejected", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			loadApplyPatch("p01-dup-load"),
 			patchCall("p01-dup", "*** Begin Patch\n*** Update File: dup.txt\n@@\n dup\n+added\n*** End Patch"),
 			providertest.ReplyStep("p01-done"),
 		)
@@ -51,7 +50,6 @@ func TestP01_ApplyPatchAmbiguityRejected(t *testing.T) {
 
 	t.Run("match count caps at the enumeration limit", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
-			loadApplyPatch("p01-many-load"),
 			patchCall("p01-many", "*** Begin Patch\n*** Update File: many.txt\n@@\n dup\n+added\n*** End Patch"),
 			providertest.ReplyStep("p01-many-done"),
 		)

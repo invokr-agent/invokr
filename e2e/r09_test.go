@@ -16,8 +16,8 @@ import (
 
 func TestR09_CorruptSQLiteFailsIntegrityCheck(t *testing.T) {
 	seedProvider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("r09-a", "memory", map[string]any{"action": "save", "content": "r09-alpha"}),
-		providertest.NativeToolCallStep("r09-b", "memory", map[string]any{"action": "save", "content": "r09-beta"}),
+		managedToolStep("r09-a", "memory", map[string]any{"action": "save", "content": "r09-alpha"}),
+		managedToolStep("r09-b", "memory", map[string]any{"action": "save", "content": "r09-beta"}),
 		providertest.ReplyStep("seeded"),
 	)
 	defer seedProvider.Close()

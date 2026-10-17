@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/invokr-ai/invokr/config"
 	inference "github.com/rivt-ai/go-inference-router"
 	"github.com/rivt-ai/go-inference-router/provider/openaicompat"
 )
@@ -362,4 +363,20 @@ func (c *Client) Embed(ctx context.Context, input EmbeddingInput) ([][]float32, 
 		return nil, fmt.Errorf("llama embed returned %d vectors for %d texts", len(vectors), len(input.Texts))
 	}
 	return vectors, nil
+}
+
+// ApplyModelOptions overlays only explicit per-model settings on a main-turn
+// request. Auxiliary requests keep their own budgets and sampling policy.
+func ApplyModelOptions(req inference.Request, settings config.AgentConfig) (inference.Request, error) {
+	for _, option := range config.ModelOptionRegistry {
+		value, _ := option.Override(settings, req.Model)
+		if value == "" {
+			continue
+		}
+		if err := option.Validate(value); err != nil {
+			return req, fmt.Errorf("model %q options: %w", req.Model, err)
+		}
+		option.Apply(&req, value)
+	}
+	return req, nil
 }

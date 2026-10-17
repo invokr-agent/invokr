@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/invokr-ai/invokr/capability/syntax"
+	"github.com/invokr-ai/invokr/clients"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/tools"
@@ -18,6 +19,86 @@ func lengthCutResponse(content string) *inference.Response {
 	return &inference.Response{
 		Message:      inference.Message{Content: content},
 		FinishReason: inference.FinishLength,
+	}
+}
+
+func TestLengthCutOtherProviderKeepsPlanWithoutLlamaOption(t *testing.T) {
+	provider := &scriptedProvider{outputs: []*inference.Response{
+		{Message: inference.Message{Reasoning: "Keep this plan."}, FinishReason: inference.FinishLength, Usage: inference.Usage{PromptTokens: 100, CompletionTokens: 16384}},
+		{Message: inference.Message{ToolCalls: []inference.ToolCall{{ID: "c1", Name: "edit", Arguments: `{}`}}}, FinishReason: inference.FinishToolCalls},
+	}}
+	gateway := testModelGateway(provider)
+	gateway.settings.NPredict = 16384
+	gateway.providerContext = NewProviderContext(65536, "test")
+	gateway.events = events.NewOrderedDispatcher(zap.NewNop())
+
+	output, _, err := gateway.complete(context.Background(), []inference.Message{inference.UserMessage("run")}, "s1", false, false, 0)
+	if err != nil || provider.calls != 2 || output.reasoning != "Keep this plan." {
+		t.Fatalf("calls=%d output=%#v err=%v", provider.calls, output, err)
+	}
+	if _, ok := provider.requests[1].Extra["continue_final_message"]; ok {
+		t.Fatalf("sent llama option to another provider: %#v", provider.requests[1].Extra)
+	}
+}
+
+func setLlamaReasoning(t *testing.T, gateway *OpenAIModelGateway) {
+	t.Helper()
+	gateway.settings.NPredict = 16384
+	gateway.providerContext = NewProviderContext(0, "test")
+	if !gateway.providerContext.ApplyMetadata("test", clients.ProviderMetadata{Reasoning: clients.ReasoningLlamaCpp, ContextWindowTokens: 65536}) {
+		t.Fatal("could not set provider metadata")
+	}
+}
+
+func cutReasoningResponse(reason string) *inference.Response {
+	return &inference.Response{Message: inference.Message{Reasoning: reason}, FinishReason: inference.FinishLength,
+		Usage: inference.Usage{PromptTokens: 100, CompletionTokens: 16384, TotalTokens: 16484}}
+}
+
+func TestLengthCutTruncatedContinuationRetries(t *testing.T) {
+	provider := &scriptedProvider{rawFinish: true, outputs: []*inference.Response{
+		cutReasoningResponse("A"), {Message: inference.Message{Content: "unfinished partial reply"}},
+		{Message: inference.Message{ToolCalls: []inference.ToolCall{{ID: "c1", Name: "edit", Arguments: `{}`}}}, FinishReason: inference.FinishToolCalls},
+	}}
+	gateway := testModelGateway(provider)
+	setLlamaReasoning(t, gateway)
+	gateway.events = events.NewOrderedDispatcher(zap.NewNop())
+	output, _, err := gateway.complete(context.Background(), []inference.Message{inference.UserMessage("run")}, "s1", false, false, 0)
+	if err != nil || provider.calls != 3 || len(output.toolCalls) != 1 {
+		t.Fatalf("truncated continuation accepted: calls=%d output=%#v err=%v", provider.calls, output, err)
+	}
+}
+
+func TestLengthCutEmptyContinuationAccountsUsage(t *testing.T) {
+	provider := &scriptedProvider{outputs: []*inference.Response{
+		cutReasoningResponse("A"), {FinishReason: inference.FinishStop, Usage: inference.Usage{PromptTokens: 16500, CompletionTokens: 100, TotalTokens: 16600}},
+		{Message: inference.Message{ToolCalls: []inference.ToolCall{{ID: "c1", Name: "edit", Arguments: `{}`}}}, FinishReason: inference.FinishToolCalls,
+			Usage: inference.Usage{CompletionTokens: 10}},
+	}}
+	gateway := testModelGateway(provider)
+	setLlamaReasoning(t, gateway)
+	gateway.events = events.NewOrderedDispatcher(zap.NewNop())
+	output, _, err := gateway.complete(context.Background(), []inference.Message{inference.UserMessage("run")}, "s1", false, false, 0)
+	if err != nil || output.usage.TurnCompletionTokens != 16494 {
+		t.Fatalf("continuation usage lost: output=%#v err=%v", output, err)
+	}
+}
+
+func TestLengthCutAtContextBoundaryDoesNotOverflowRetry(t *testing.T) {
+	provider := &scriptedProvider{outputs: []*inference.Response{
+		{Message: inference.Message{Reasoning: "partial plan"}, FinishReason: inference.FinishLength,
+			Usage: inference.Usage{PromptTokens: 64581, CompletionTokens: 955, TotalTokens: 65536}},
+		{Message: inference.Message{ToolCalls: []inference.ToolCall{{ID: "c1", Name: "edit", Arguments: `{}`}}}, FinishReason: inference.FinishToolCalls},
+	}}
+	gateway := testModelGateway(provider)
+	setLlamaReasoning(t, gateway)
+	gateway.events = events.NewOrderedDispatcher(zap.NewNop())
+	output, _, err := gateway.complete(context.Background(), []inference.Message{inference.UserMessage("run")}, "s1", false, false, 0)
+	if err != nil || provider.calls != 2 || len(output.toolCalls) != 1 {
+		t.Fatalf("boundary retry failed: calls=%d output=%#v err=%v", provider.calls, output, err)
+	}
+	if len(provider.requests[1].Messages) != 3 || provider.requests[1].Messages[1].Role != inference.RoleUser {
+		t.Fatalf("boundary retry added partial reasoning: %#v", provider.requests[1].Messages)
 	}
 }
 
@@ -57,10 +138,12 @@ func TestLengthCutRetriesWithoutThinking(t *testing.T) {
 // TestLengthCutTwiceKeepsTheTurnOpen covers #443: when the retry is cut too,
 // the turn is not final — the loop sees a parse-error outcome and continues.
 func TestLengthCutTwiceKeepsTheTurnOpen(t *testing.T) {
-	provider := &scriptedProvider{outputs: []*inference.Response{
-		lengthCutResponse(""),
-		lengthCutResponse("My rstrip() approach is wrong — it strips genuine spaces (e.g. \""),
-	}}
+	// One cut, then one per retry: the last one exhausts the retries.
+	cuts := []*inference.Response{lengthCutResponse("")}
+	for range maxLengthRetries {
+		cuts = append(cuts, lengthCutResponse("My rstrip() approach is wrong — it strips genuine spaces (e.g. \""))
+	}
+	provider := &scriptedProvider{outputs: cuts}
 	gateway := testModelGateway(provider)
 	gateway.events = events.NewOrderedDispatcher(zap.NewNop())
 
@@ -69,7 +152,7 @@ func TestLengthCutTwiceKeepsTheTurnOpen(t *testing.T) {
 		t.Fatalf("complete: %v", err)
 	}
 	if !output.lengthExhausted {
-		t.Fatalf("second cut not flagged as exhausted: %#v", output)
+		t.Fatalf("last cut not flagged as exhausted: %#v", output)
 	}
 
 	processor := &TurnProcessor{

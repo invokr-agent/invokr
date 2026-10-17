@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 	"os"
@@ -382,7 +383,7 @@ func TestApplyPatchRequestsApprovalForHiddenPath(t *testing.T) {
 			Toolbox:   config.ToolboxConfig{Dir: t.TempDir()},
 			Workspace: config.WorkspaceConfig{Root: root},
 		},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: false, Reason: "denied by test"}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: false, Reason: "denied by test"}},
 	})
 	_, err := caller.HandleCall(context.Background(), &core.ToolCall{
 		Name:      "apply_patch",
@@ -447,7 +448,7 @@ func TestApplyPatchEmitsAuditEvent(t *testing.T) {
 			Tools: config.ToolsConfig{Allowlist: []string{"apply_patch"}},
 		},
 		Dispatcher: dispatcher,
-		Approver:   approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		Approver:   testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 	})
 
 	_, err := caller.HandleCall(core.WithSessionID(context.Background(), "session-1"), &core.ToolCall{
@@ -478,7 +479,7 @@ func newApplyPatchTestCaller(t *testing.T, root string) *tools.Caller {
 			Toolbox:   config.ToolboxConfig{Dir: t.TempDir()},
 			Workspace: config.WorkspaceConfig{Root: root},
 		},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 	})
 }
 

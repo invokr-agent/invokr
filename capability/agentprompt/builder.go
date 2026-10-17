@@ -1,14 +1,16 @@
 package agentprompt
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/syntax"
 	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/invokr-ai/invokr/capability/syntax"
 
 	"github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/capability/skills"
@@ -107,9 +109,7 @@ type PromptSection struct {
 }
 
 func NewBuilder(config Config, deps Deps) (*Builder, error) {
-	if config.BudgetChars == 0 {
-		config.BudgetChars = defaultBudgetChars
-	}
+	config.BudgetChars = cmp.Or(config.BudgetChars, defaultBudgetChars)
 	for _, dep := range []struct {
 		missing bool
 		name    string
@@ -223,48 +223,44 @@ func (b *Builder) gateBlock(ctx context.Context, req Request, blocks core.Prompt
 }
 
 func (b *Builder) renderSystemPrompt(skillSpecs []skills.Spec, toolSpecs []toolcore.ToolSpec) (string, []PromptSection) {
+	persona := strings.TrimSpace(b.basePrompt())
+	persona = cmp.Or(persona, "You are an agent.")
+	if source, ok := b.tools.(interface{ ModeInstructions() string }); ok {
+		persona += "\n\n" + source.ModeInstructions()
+	}
+
+	responseContract := strings.TrimSpace(b.syntax.RenderResponseInstructions(syntax.ResponseInstructionsInput{
+		NativeToolCalling: b.config.NativeToolCalling}))
+	if responseContract != "" {
+		responseContract = "\n\n" + responseContract + "\n"
+	}
+	var toolText string
+	if b.config.NativeToolCalling {
+		toolText = b.renderNativeTools(toolSpecs)
+	} else {
+		if hasTool(toolSpecs, "tools") {
+			coreSpecs := slices.DeleteFunc(slices.Clone(toolSpecs), func(spec toolcore.ToolSpec) bool { return spec.Parameters == nil })
+			toolText = renderTools(coreSpecs, b.syntax) + b.renderNativeTools(toolSpecs)
+		} else {
+			toolText = renderTools(toolSpecs, b.syntax)
+		}
+	}
+	parts := []struct{ name, text string }{
+		{"persona", persona},
+		{"working rules", "\n" + workRules},
+		{"response contract", responseContract},
+		{"environment", renderEnvironment(b.config.Environment)},
+		{"skills", renderSkills(skillSpecs, toolSpecs)},
+		{"tool specs", toolText},
+	}
 	var out strings.Builder
 	var sections []PromptSection
-	// mark records how much the section named grew the prompt since the last mark.
-	marked := 0
-	mark := func(name string) {
-		if grown := out.Len() - marked; grown > 0 {
-			sections = append(sections, PromptSection{Name: name, Chars: grown})
+	for _, part := range parts {
+		out.WriteString(part.text)
+		if part.text != "" {
+			sections = append(sections, PromptSection{Name: part.name, Chars: len(part.text)})
 		}
-		marked = out.Len()
 	}
-	basePrompt := strings.TrimSpace(b.basePrompt())
-	if basePrompt == "" {
-		basePrompt = "You are an agent."
-	}
-	out.WriteString(basePrompt)
-	if source, ok := b.tools.(interface{ ModeInstructions() string }); ok {
-		out.WriteString("\n\n" + source.ModeInstructions())
-	}
-
-	mark("persona")
-	renderWorkRules(&out, toolSpecs)
-	mark("working rules")
-
-	instructions := strings.TrimSpace(b.syntax.RenderResponseInstructions(syntax.ResponseInstructionsInput{
-		NativeToolCalling: b.config.NativeToolCalling}))
-	if instructions != "" {
-		out.WriteString("\n\n")
-		out.WriteString(instructions)
-		out.WriteString("\n")
-	}
-	mark("response contract")
-
-	renderEnvironment(&out, b.config.Environment)
-	mark("environment")
-	renderSkills(&out, skillSpecs, toolSpecs)
-	mark("skills")
-	if b.config.NativeToolCalling {
-		renderNativeTools(&out, toolSpecs)
-	} else {
-		renderTools(&out, toolSpecs, b.syntax)
-	}
-	mark("tool specs")
 	return out.String(), sections
 }
 
@@ -275,56 +271,63 @@ func (b *Builder) renderSystemPrompt(skillSpecs []skills.Spec, toolSpecs []toolc
 // check; these lines exist to make "run the check first" the default.
 const workRules = `
 Working rules:
-- A reply with no tool call ends the task. Before replying, run the task's own check (its tests, script, or the command it names) and make sure it passes. If there is no check, run the code you changed once.
+- A reply with no tool call ends the task. Before replying, ensure the task's own check (its tests, script, or the command it names) passed after the last relevant change. Do not repeat a passing check when its inputs have not changed. If there is no check, run the code you changed once.
 - When a check fails, read the failing assertion or traceback and fix that cause; do not rewrite the whole file.
+- Treat the user's specification as the source of truth. Before changing behavior to satisfy a test you wrote, re-read the relevant requirement; before finishing, check every requested deliverable against that source, including documentation.
 - Write files with paths relative to the working directory.
 - When an API gains an error return, propagate it to the caller; never panic on it and never discard it. Emit output in exactly the shape the task specifies.
 `
-
-// renderWorkRules writes workRules when the model can act on them: it needs a
-// way to run something, so a prompt with no shell-like tool skips the block.
-func renderWorkRules(out *strings.Builder, specs []toolcore.ToolSpec) {
-	if !hasTool(specs, "shell") && !hasTool(specs, "code_interpreter") {
-		return
-	}
-	out.WriteString("\n")
-	out.WriteString(workRules)
-}
 
 // renderEnvironment emits the trusted, sanitized harness facts. It is
 // deliberately not routed through BudgetChars: that budget arbitrates
 // variable-length recalled content, and a fixed statement of where the agent
 // stands must not be evictable by a long memory hit (ADR 0012).
-func renderEnvironment(out *strings.Builder, env Environment) {
+func renderEnvironment(env Environment) string {
 	if env.Cwd == "" {
-		return
+		return ""
 	}
-	fmt.Fprintf(out, "\nEnvironment:\n- Working directory: %s\n- Platform: %s/%s\n- Date: %s\n",
+	var out strings.Builder
+	fmt.Fprintf(&out, "\nEnvironment:\n- Working directory: %s\n- Platform: %s/%s\n- Date: %s\n",
 		env.Cwd, env.OS, env.Arch, env.Date)
 	if env.Branch != "" {
-		fmt.Fprintf(out, "- Git branch: %s\n", env.Branch)
+		fmt.Fprintf(&out, "- Git branch: %s\n", env.Branch)
 	}
+	return out.String()
 }
 
 // renderNativeTools is the native-tool-calling half of the tool contract: the
 // tool definitions themselves ride the request's native tools array, so the
 // prompt carries only what that array cannot say — the deferred tools a
-// tool_search must fetch, and the behavioural rules. Rendering the tagged-JSON
+// tool_search must fetch (excluding schemas already provided), plus examples. Rendering the tagged-JSON
 // listing here too would duplicate ~3k tokens of every turn's prompt with a
 // second, contradictory instruction set (#446).
-func renderNativeTools(out *strings.Builder, specs []toolcore.ToolSpec) {
-	renderDeferredTools(out, specs)
-	renderNativeExamples(out, specs)
-	renderToolRules(out, specs)
+func (b *Builder) renderNativeTools(specs []toolcore.ToolSpec) string {
+	var out strings.Builder
+	if hasTool(specs, "tools") {
+		out.WriteString("\nUse tools to list, search, enable, disable, create, and run optional tools. Optional tools start disabled; enable returns their schemas, then call one with tools {\"action\":\"run\",\"name\":\"<tool>\",\"arguments\":{...}}. When an optional tool fits the task (e.g. schedule for recurring jobs, delegate_task for independent sub-tasks), prefer it over a shell workaround. Call protected core tools directly.\n")
+		var optional []string
+		for _, spec := range specs {
+			if !hasCallableTool(specs, spec.Name) {
+				line, _, _ := strings.Cut(spec.Description, "\n")
+				sentence, _, _ := strings.Cut(line, ". ")
+				optional = append(optional, "- "+spec.Name+": "+strings.TrimSuffix(strings.TrimSpace(sentence), "."))
+			}
+		}
+		if len(optional) > 0 {
+			out.WriteString("Optional tools:\n" + strings.Join(optional, "\n") + "\n")
+		}
+	}
+	renderNativeExamples(&out, specs)
+	return out.String()
 }
 
 // nativeToolExamples are the argument shapes worth spelling out even when the
 // native schema already lists the fields: the ones whose *usage* the schema
-// cannot state (an empty "old" creates a file) or that the model otherwise
+// cannot state (a write creates a file) or that the model otherwise
 // under-uses. Arguments only — the tagged call syntax has no place under the
 // native contract (#446 follow-up). Fixed order keeps the prompt cacheable.
 var nativeToolExamples = []struct{ name, example string }{
-	{"edit", `{"path":"src/app.go","edits":[{"old":"","new":"package main\n"}]} (one edit with empty "old" creates the file)`},
+	{"edit", `{"path":"src/app.go","content":"package main\n"} (creates or overwrites the file)`},
 	{"shell", `{"command":"go test ./... 2>&1 | tail -20","cwd":"."}`},
 	{"code_interpreter", `{"code":"open('artifacts/out.json','w').write('{}')","input_files":["data/in.csv"],"output_files":["out.json"]}`},
 }
@@ -336,42 +339,28 @@ func renderNativeExamples(out *strings.Builder, specs []toolcore.ToolSpec) {
 		if hasTool(specs, entry.name) {
 			out.WriteString(header)
 			header = ""
-			fmt.Fprintf(out, "- %s: %s\n", entry.name, entry.example)
+			if entry.name == "code_interpreter" && hasTool(specs, "tools") {
+				fmt.Fprintf(out, "- tools: enable code_interpreter first, then {\"action\":\"run\",\"name\":\"code_interpreter\",\"arguments\":%s}\n", entry.example)
+			} else {
+				fmt.Fprintf(out, "- %s: %s\n", entry.name, entry.example)
+			}
 		}
 	}
 }
 
-func renderDeferredTools(out *strings.Builder, specs []toolcore.ToolSpec) {
-	deferred := slices.DeleteFunc(slices.Clone(specs), func(spec toolcore.ToolSpec) bool {
-		return spec.Metadata.AlwaysVisible || spec.Parameters != nil
-	})
-	if len(deferred) == 0 {
-		return
-	}
-	out.WriteString("\nDeferred tools (call tool_search with include_schema=true before use):\n\n")
-	for i, spec := range deferred {
-		fmt.Fprintf(out, "%d. %s: %s\n", i+1, spec.Name, firstSentence(spec.Description))
-	}
-}
-
-// firstSentence keeps a deferred tool's listing to one line: the full
-// description arrives with tool_search, and the listing rides every request
-// (#577: 4.3k chars per turn for tools M1 never loaded).
 func firstSentence(description string) string {
-	description = strings.TrimSpace(description)
-	if i := strings.IndexAny(description, "\n"); i >= 0 {
-		description = description[:i]
-	}
-	if i := strings.Index(description, ". "); i >= 0 {
-		description = description[:i+1]
+	description, _, _ = strings.Cut(strings.TrimSpace(description), "\n")
+	if sentence, _, found := strings.Cut(description, ". "); found {
+		description = sentence + "."
 	}
 	return description
 }
 
-func renderSkills(out *strings.Builder, specs []skills.Spec, tools []toolcore.ToolSpec) {
+func renderSkills(specs []skills.Spec, tools []toolcore.ToolSpec) string {
 	if len(specs) == 0 {
-		return
+		return ""
 	}
+	var out strings.Builder
 	out.WriteString("\nAvailable skills:\n\n")
 	count := 1
 	for _, spec := range specs {
@@ -380,7 +369,7 @@ func renderSkills(out *strings.Builder, specs []skills.Spec, tools []toolcore.To
 			continue
 		}
 		description := strings.ReplaceAll(strings.TrimSpace(spec.Description), "\n", " ")
-		fmt.Fprintf(out, "%d. %s: %s\n", count, name, description)
+		fmt.Fprintf(&out, "%d. %s: %s\n", count, name, description)
 		count++
 	}
 	out.WriteString(`
@@ -389,8 +378,13 @@ Rules for skills:
 - Do not assume unloaded skill details.
 `)
 	if hasTool(tools, "load_skill") {
-		out.WriteString("- Use load_skill before applying a skill's instructions.\n")
+		if hasTool(tools, "tools") {
+			out.WriteString("- Enable load_skill through tools, then use tools.run before applying a skill's instructions.\n")
+		} else {
+			out.WriteString("- Use load_skill before applying a skill's instructions.\n")
+		}
 	}
+	return out.String()
 }
 
 // renderToolSchema writes a plugin-declared argument schema into the listing:
@@ -402,7 +396,7 @@ Rules for skills:
 // tool set works against prefix stability for prompt caching.
 func renderToolSchema(out *strings.Builder, spec toolcore.ToolSpec) {
 	schema, err := json.Marshal(spec.Parameters)
-	if err == nil && len(spec.Parameters) > 0 && spec.Metadata.Source == constants.ToolboxSource {
+	if err == nil && len(spec.Parameters) > 0 && (spec.Metadata.Source == constants.ToolboxSource || spec.Name == "tools") {
 		fmt.Fprintf(out, "   Arguments schema: %s\n", schema)
 	}
 }
@@ -416,11 +410,10 @@ func toolRules(specs []toolcore.ToolSpec) []string {
 		applies bool
 		rule    string
 	}{
-		{slices.ContainsFunc(specs, func(spec toolcore.ToolSpec) bool { return !spec.Metadata.AlwaysVisible }), "When asked to list tools, include relevant deferred tools and never invent names."},
 		{hasTool(specs, "read"), "Before editing, obtain the current relevant span if it is not already in context or may have changed; do not reread unchanged content. When reading several files, put their paths in one read call."},
 		{hasTool(specs, "file_search") || hasTool(specs, "shell"), "Before referencing a task-supplied file path, verify it exists; list the working directory first."},
 		{patchable, "Use apply_patch for file edits: Add File creates new files, Update File edits existing files, Delete File removes files."},
-		{!patchable && hasTool(specs, "edit"), "Use edit with an `edits` list. Copy small, unique `old` spans verbatim from the file; batch same-file changes. Entries apply in order to updated content, so merge overlaps. One entry with empty `old` creates or overwrites the file."},
+		{!patchable && hasTool(specs, "edit"), "Use edit with an `edits` list for replacements, or `content` to create or overwrite a whole file. Copy small, unique `oldText` spans verbatim and supply replacements in `newText`; batch same-file changes. Every entry matches the original file; overlapping edits are rejected together."},
 		{hasTool(specs, "todo"), todoRule},
 		{hasTool(specs, "shell"), "shell runs one full bash line (pipes, redirects, heredocs, python3 -c all work). Use it to run tests and scripts; use edit to change files."},
 		{hasTool(specs, "code_interpreter"), "Run inline code with code_interpreter; declare every input and output file in input_files/output_files. Run existing scripts with shell in the workspace sandbox."},
@@ -433,20 +426,22 @@ func toolRules(specs []toolcore.ToolSpec) []string {
 	return rules
 }
 
-func renderTools(out *strings.Builder, specs []toolcore.ToolSpec, syntax syntax.PromptSyntax) {
+func renderTools(specs []toolcore.ToolSpec, syntax syntax.PromptSyntax) string {
 	if len(specs) == 0 {
-		return
+		return ""
 	}
+	var out strings.Builder
 	out.WriteString("\nAvailable tools:\n\n")
 	for i, spec := range specs {
-		fmt.Fprintf(out, "%d. %s: %s\n", i+1, spec.Name, firstSentence(spec.Description))
-		renderToolSchema(out, spec)
+		fmt.Fprintf(&out, "%d. %s: %s\n", i+1, spec.Name, firstSentence(spec.Description))
+		renderToolSchema(&out, spec)
 		if example := syntax.RenderToolExample(spec.Example); strings.TrimSpace(example) != "" {
 			out.WriteString(example)
 			out.WriteString("\n\n")
 		}
 	}
-	renderToolRules(out, specs)
+	renderToolRules(&out, specs)
+	return out.String()
 }
 
 // renderToolRules writes the behavioural tool rules, shared by both tool

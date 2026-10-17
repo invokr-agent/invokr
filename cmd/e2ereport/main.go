@@ -35,21 +35,7 @@ func main() {
 	out := flag.String("out", "", "report output path (stdout when empty)")
 	tier := flag.String("tier", "fake", "expected case catalog: fake or live")
 	flag.Parse()
-	expected, err := expectedCases(*tier)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-	report, failed, err := buildReportFor(os.Stdin, expected)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
-	}
-	if *out == "" {
-		_, err = io.WriteString(os.Stdout, report)
-	} else {
-		err = os.WriteFile(*out, []byte(report), 0o600)
-	}
+	failed, err := run(*out, *tier)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -57,6 +43,21 @@ func main() {
 	if failed {
 		os.Exit(1)
 	}
+}
+
+// run writes the report to out (stdout when empty) and reports whether any case failed.
+func run(out, tier string) (bool, error) {
+	expected, err := expectedCases(tier)
+	if err != nil {
+		return false, err
+	}
+	report, failed, err := buildReportFor(os.Stdin, expected)
+	if err == nil && out == "" {
+		_, err = io.WriteString(os.Stdout, report)
+	} else if err == nil {
+		err = os.WriteFile(out, []byte(report), 0o600)
+	}
+	return failed, err
 }
 
 func buildReportFor(in io.Reader, expected []string) (string, bool, error) {

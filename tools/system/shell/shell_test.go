@@ -16,6 +16,7 @@ import (
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/testutil"
 )
 
 func hasSpec(specs []core.ToolSpec, name string) bool {
@@ -353,7 +354,7 @@ func TestShellToolWriteTierRunsAfterApproval(t *testing.T) {
 			Workspace: config.WorkspaceConfig{Root: root},
 			Shell:     config.ShellConfig{AllowedCommands: []string{"writer"}},
 		},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 	})
 
 	output, err := caller.HandleCall(context.Background(), &core.ToolCall{

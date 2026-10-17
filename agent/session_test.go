@@ -1,10 +1,44 @@
 package agent
 
 import (
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/core"
+	"encoding/json"
+	"slices"
 	"testing"
+
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/tools"
+	"github.com/invokr-ai/invokr/tools/core"
+	"go.uber.org/zap"
 )
+
+func TestProviderCreateToolSchemaRequiresCapabilities(t *testing.T) {
+	caller := tools.NewCaller(core.CallerDeps{App: config.AppConfig{
+		Toolbox: config.ToolboxConfig{Dir: t.TempDir()}, Workspace: config.WorkspaceConfig{Root: t.TempDir()},
+	}}, zap.NewNop())
+	defs := (OpenAINativeToolCodec{}).NativeToolDefinitions(caller.Specs())
+	for _, def := range defs {
+		if def.Name != "create_tool" {
+			continue
+		}
+		wire, err := json.Marshal(def)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var exposed struct {
+			Parameters struct {
+				Required []string `json:"required"`
+			} `json:"parameters"`
+		}
+		if err := json.Unmarshal(wire, &exposed); err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(exposed.Parameters.Required, "capabilities") {
+			t.Fatalf("provider create_tool required = %v, want capabilities", exposed.Parameters.Required)
+		}
+		return
+	}
+	t.Fatal("provider does not expose create_tool")
+}
 
 func TestNativeToolDefinitionsUseSpecParameters(t *testing.T) {
 	defs := (OpenAINativeToolCodec{}).NativeToolDefinitions([]core.ToolSpec{{

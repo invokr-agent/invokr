@@ -15,6 +15,7 @@ This document defines where responsibilities belong. New logic should extend the
 | Built-in system tools | `tools/system/` |
 | Workspace path policy and shared workspace file-read primitives | `tools/system/workspace/` |
 | Dynamic toolbox plugin loading, sandboxed execution, Python supply-chain checks | `tools/system/toolbox/` |
+| Session tool availability and management | `tools.Caller`, `tools/system/tool_search/`; metadata in `capability/sessionstore/` |
 | Agent-authored tool creation (writes+registers a new toolbox plugin) | `tools/system/create_tool/` |
 | Tool argument/result schemas | `tools/core/` |
 | Workspace doc indexing + search over the memory store (ADR 0015) | `tools/system/retrieval/` |

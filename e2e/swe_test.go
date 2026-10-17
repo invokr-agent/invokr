@@ -120,7 +120,6 @@ const sweScriptedPatch = `*** Begin Patch
 
 func TestS01_ScriptedPatchSatisfiesSWEOracles(t *testing.T) {
 	provider := providertest.NewScripted(t,
-		loadApplyPatch("s01-load"),
 		providertest.NativeToolCallStep("s01-patch", "apply_patch", map[string]any{"patch": sweScriptedPatch}),
 		providertest.ReplyStep("word_frequencies now lowercases each word before counting"),
 	)

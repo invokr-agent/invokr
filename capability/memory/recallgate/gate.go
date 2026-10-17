@@ -7,6 +7,7 @@
 package recallgate
 
 import (
+	"cmp"
 	"context"
 	"strings"
 	"time"
@@ -47,9 +48,7 @@ type Gate struct {
 // New builds a Gate. The caller only constructs one when the feature is enabled;
 // New does not re-check cfg.Enabled.
 func New(cfg config.RecallGateConfig, c completer, r recaller, dispatcher events.Dispatcher, logger *zap.Logger) *Gate {
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = cmp.Or(logger, zap.NewNop())
 	return &Gate{cfg: cfg, completer: c, recaller: r, events: dispatcher, logger: logger}
 }
 
@@ -117,12 +116,7 @@ func (g *Gate) gatherHits(ctx context.Context, sessionID string, queries []strin
 			continue
 		}
 		for _, hit := range found {
-			key := recall.RecordKey(hit.Record)
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			hits = append(hits, hit)
+			hits = recall.AppendUniqueHit(max(1, g.cfg.MaxHits), hits, seen, hit)
 			if len(hits) >= g.cfg.MaxHits {
 				return hits
 			}

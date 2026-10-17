@@ -60,12 +60,12 @@ func prepareCommand(ctx context.Context, plan Plan, dir string, args []string, o
 	if err == nil && !oneShot {
 		err = approveSeals(ctx, missing)
 	}
-	if err != nil {
-		closeRoots()
-		return nil, nil, err
+	var cmd *exec.Cmd
+	var cleanup func()
+	if err == nil {
+		plan.Sealed = existing
+		cmd, cleanup, err = command(ctx, plan, dir, args)
 	}
-	plan.Sealed = existing
-	cmd, cleanup, err := command(ctx, plan, dir, args)
 	if err != nil {
 		closeRoots()
 		return nil, nil, err

@@ -28,9 +28,7 @@ func TestRenderToolsInlinesOnlyToolboxSchemas(t *testing.T) {
 		Metadata:    toolcore.ToolMetadata{Source: "native"},
 	}}
 
-	var out strings.Builder
-	renderTools(&out, specs, syntax.NewTaggedJSONSyntax())
-	got := out.String()
+	got := renderTools(specs, syntax.NewTaggedJSONSyntax())
 
 	want := "1. plugin_tool: A manifest-declared tool.\n" +
 		`   Arguments schema: {"properties":{"path":{"type":"string"}},"type":"object"}` + "\n" +

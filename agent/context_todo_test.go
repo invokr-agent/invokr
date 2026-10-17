@@ -63,7 +63,7 @@ func TestCompactionRestoresCurrentTodoOnlyAfterRewrite(t *testing.T) {
 			beforeReads := reads
 			list = "- [x] current task\n"
 			budget.windowSize = 1000000
-			again, _ := budget.Prepare(context.Background(), "s", got, state, nil)
+			again, _ := budget.Prepare(context.Background(), "s", got, state)
 			if reads != beforeReads || !reflect.DeepEqual(again, got) {
 				t.Fatal("ordinary turn refreshed todo state")
 			}

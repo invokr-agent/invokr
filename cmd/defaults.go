@@ -33,7 +33,8 @@ func rootCommandGroups() []*cobra.Group {
 // binds the same variables the child's RunE closes over. Only ever called at
 // registration time, so a missing child is a programming error, not a runtime
 // one.
-func useDefaultSubcommand(parent *cobra.Command, name string) {
+func useDefaultSubcommand(parent *cobra.Command, name string, subs ...*cobra.Command) {
+	parent.AddCommand(subs...)
 	child, _, err := parent.Find([]string{name})
 	if err != nil || child == parent {
 		panic("cmd: default subcommand " + name + " is not registered on " + parent.Name())

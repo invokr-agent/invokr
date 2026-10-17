@@ -37,12 +37,17 @@ func NewProviderContext(window int64, model ...string) *ProviderContext {
 }
 
 func (c *ProviderContext) ContextWindowTokens() int64 {
+	return readLocked(c, func() int64 { return c.window })
+}
+
+// readLocked runs get under the read lock; a nil context yields T's zero value.
+func readLocked[T any](c *ProviderContext, get func() T) (value T) {
 	if c == nil {
-		return 0
+		return value
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.window
+	return get()
 }
 
 // ApplyMetadata records the probe result for model; stale results (another
@@ -139,14 +144,7 @@ func (c *ProviderContext) ReasoningSupport() (kind clients.ReasoningKind, templa
 	return c.caps.Reasoning, c.caps.ReasoningEffort, c.caps.EnableThinking
 }
 
-func (c *ProviderContext) Model() string {
-	if c == nil {
-		return ""
-	}
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.model
-}
+func (c *ProviderContext) Model() string { return readLocked(c, func() string { return c.model }) }
 
 // SetModel resets the limit to configured fallback until discovery completes.
 func (c *ProviderContext) SetModel(model string) {

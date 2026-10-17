@@ -323,7 +323,7 @@ func (w *policyWalker) call(c *syntax.CallExpr) error {
 	// into the sandbox is not on the allowlist, and `PYTHONPATH=. python3 x.py`
 	// is how the model runs a script that imports the workspace.
 	w.allowBuildPrefixes(c)
-	if _, allowed := w.allowed[root]; !allowed {
+	if _, allowed := w.allowed[root]; !allowed || slices.Contains(sandboxInterpreters, root) {
 		return w.route(root)
 	}
 	tier := classifyShellCommand(root, args)
@@ -427,16 +427,17 @@ func cdLeavesWorkspace(args []string, argsLiteral bool) bool {
 // allowlist, as before.
 func (w *policyWalker) route(root string) error {
 	label := shellCommandLabel(w.line)
-	if w.allowAny {
-		w.demote(shellTierWrite, root+" is not on the allowlist")
-		return nil
-	}
-	if sandboxExecCandidate(root, w.wsp, w.baseDir) {
+	// allowAny without a sandbox runs project code on the host, like any other root.
+	if sandboxExecCandidate(root, w.wsp, w.baseDir) && (sandboxExecReady() || !w.allowAny) {
 		if !sandboxExecReady() {
 			return fmt.Errorf("command %q is not allowed; %s", label, interpreterNote(root))
 		}
 		w.pol.sandboxExec = true
 		w.demote(shellTierWrite, root+" runs project code")
+		return nil
+	}
+	if w.allowAny {
+		w.demote(shellTierWrite, root+" is not on the allowlist")
 		return nil
 	}
 	msg := fmt.Sprintf(`command %q is not allowed: %q is not an allowed executable. Allowed executables: %s`, label, root, strings.Join(w.allowedList, ", "))

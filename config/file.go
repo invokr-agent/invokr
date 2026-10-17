@@ -1,6 +1,7 @@
 package config
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,20 +19,27 @@ func DefaultConfigPath() string {
 }
 
 // LoadDefaultFileWithProfile loads the default config file and overlays the
-// named markdown or router profile. Empty name loads plain.
+// named file or router profile. Empty name loads plain.
 func LoadDefaultFileWithProfile(profile string) (AppConfig, error) {
-	return loadFile(DefaultConfigPath(), profile)
+	return loadFile(DefaultConfigPath(), profile, false)
 }
 
-func LoadFile(path string) (AppConfig, error) { return loadFile(path, "") }
+// LoadDefaultFileWithoutProfile lets recovery commands run when the selected
+// profile is malformed, so setup can reset the shipped JSON files.
+func LoadDefaultFileWithoutProfile() (AppConfig, error) {
+	return loadFile(DefaultConfigPath(), "", true)
+}
 
-func loadFile(path, profile string) (AppConfig, error) {
+func loadFile(path, profile string, ignoreStoredProfile bool) (AppConfig, error) {
 	cfg, existed, err := fsutil.ReadJSON[AppConfig](path)
 	if err != nil {
 		if existed {
 			return AppConfig{}, fmt.Errorf("parse config %s: %w", path, err)
 		}
 		return AppConfig{}, err
+	}
+	if ignoreStoredProfile {
+		cfg.Profile = ""
 	}
 	return resolveLoadedConfig(cfg, profile)
 }
@@ -42,7 +50,7 @@ func loadFile(path, profile string) (AppConfig, error) {
 func resolveLoadedConfig(cfg AppConfig, profile string) (AppConfig, error) {
 	home := InvokrHomeDir()
 	cfg = cfg.withDefaults(home).withPersonaFile(home)
-	if profile != "" {
+	if profile = cmp.Or(profile, cfg.Profile); profile != "" {
 		var err error
 		if cfg, err = ApplyNamedProfile(cfg, home, profile); err != nil {
 			return AppConfig{}, err
@@ -77,8 +85,6 @@ func EnsureRouterProvider(path, providerID, providerType, model string) error {
 	})
 }
 
-// childMap returns the nested object at key, creating an empty one when the key
-// is absent or holds something else.
 func childMap(parent map[string]any, key string) map[string]any {
 	child, _ := parent[key].(map[string]any)
 	if child == nil {
@@ -93,13 +99,8 @@ func childMap(parent map[string]any, key string) map[string]any {
 // stays selected.
 func seedRouterTable(provider map[string]any) map[string]any {
 	baseURL, _ := provider["base_url"].(string)
-	if baseURL == "" {
-		baseURL = constants.DefaultProviderBaseURL
-	}
+	baseURL = cmp.Or(baseURL, constants.DefaultProviderBaseURL)
 	model, _ := provider["model"].(string)
-	if model == "" {
-		model = constants.DefaultProviderModel
-	}
 	return map[string]any{
 		"active": "local",
 		"providers": map[string]any{
@@ -116,7 +117,7 @@ func seedRouterTable(provider map[string]any) map[string]any {
 // SetProviderAPIKey stores a credential on one provider definition, replacing
 // any api_key_env reference so the stored key is the one that takes effect.
 func SetProviderAPIKey(path, providerID, apiKey string) error {
-	return editRouterTable(path, func(router map[string]any) error {
+	return editRouterTable(path, func(_, router map[string]any) error {
 		providers, _ := router["providers"].(map[string]any)
 		definition, _ := providers[providerID].(map[string]any)
 		if definition == nil {
@@ -132,7 +133,7 @@ func SetProviderAPIKey(path, providerID, apiKey string) error {
 // every other key's value unchanged. It edits the raw JSON
 // rather than re-marshalling an AppConfig because LoadFile resolves defaults
 // and environment overrides, which would otherwise be baked into the file.
-func editRouterTable(path string, edit func(router map[string]any) error) error {
+func editRouterTable(path string, edit func(raw, router map[string]any) error) error {
 	return editRawConfig(path, false, func(raw map[string]any) error {
 		provider, _ := raw["provider"].(map[string]any)
 		if provider == nil {
@@ -142,18 +143,30 @@ func editRouterTable(path string, edit func(router map[string]any) error) error 
 		if router == nil {
 			return fmt.Errorf("config %s defines no provider.router table", path)
 		}
-		return edit(router)
+		return edit(raw, router)
 	})
 }
 
-// SetActiveProfile rewrites provider.router.active in the config file.
+// SetActiveProfile persists the active profile, resolving names the way
+// --profile does: a file profile under <home>/profiles first (stored as
+// the top-level "profile" key, since it may set only the prompt and so needs
+// no router table), then provider.router.active.
 func SetActiveProfile(path, profile string) error {
-	return editRouterTable(path, func(router map[string]any) error {
+	if file, err := IsFileProfile(InvokrHomeDir(), profile); err != nil {
+		return err
+	} else if file {
+		return editRawConfig(path, false, func(raw map[string]any) error {
+			raw["profile"] = profile
+			return nil
+		})
+	}
+	return editRouterTable(path, func(raw, router map[string]any) error {
 		profiles, _ := router["profiles"].(map[string]any)
 		if _, ok := profiles[profile]; !ok {
-			return fmt.Errorf("profile %q is not defined in %s", profile, path)
+			return fmt.Errorf("profile %q is not defined in %s or %s", profile, path, ProfilesDir(InvokrHomeDir()))
 		}
 		router["active"] = profile
+		delete(raw, "profile") // a router pick replaces an earlier markdown one
 		return nil
 	})
 }

@@ -16,7 +16,7 @@ type stubCaller struct {
 
 func (s *stubCaller) Specs() []core.ToolSpec                 { return s.specs }
 func (s *stubCaller) PromptSpecs(_ string) []core.ToolSpec   { return s.specs }
-func (s *stubCaller) CallableSpecs(_ string) []core.ToolSpec { return s.specs }
+func (s *stubCaller) StableSpecs() []core.ToolSpec           { return s.specs }
 func (s *stubCaller) HasNative(name string) bool             { return name == "a" }
 func (s *stubCaller) NativeSource(_ string) string           { return "test" }
 func (s *stubCaller) MarkSchemasLoaded(_ string, _ []string) {}
@@ -45,6 +45,10 @@ func TestFilteredCallerSpecs(t *testing.T) {
 	specs := fc.Specs()
 	if len(specs) != 1 || specs[0].Name != "a" {
 		t.Errorf("expected [a], got %v", specs)
+	}
+	stable := fc.StableSpecs()
+	if len(stable) != 1 || stable[0].Name != "a" {
+		t.Errorf("stable specs escaped filter: %v", stable)
 	}
 }
 

@@ -29,7 +29,7 @@ scan code:
 - **Docker/podman sandbox** (`capability/docker_sandbox/`) — the agent can self-re-exec
   inside a container before bootstrap.
 - **Chat transports** (`surface/messaging/`) — Telegram and Signal front ends
-  driven by `invokr chat serve`.
+  driven by `invokr bot serve`.
 - **Scheduled jobs** (`capability/jobs/`, `capability/jobs/jobrun/`) — a crontab-backed
   job store with an agent-facing `schedule` tool.
 - **Model selection** — startup availability check against `/v1/models` with a

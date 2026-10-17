@@ -14,7 +14,7 @@ import (
 )
 
 // A settled shell block collapses to its output tail plus a fold indicator;
-// ctrl+x + enter expands it to the full recorded result.
+// alt+x + enter expands it to the full recorded result.
 func TestTUITranscriptFolds(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("BLOCKED: tmux not installed")
@@ -37,10 +37,13 @@ func TestTUITranscriptFolds(t *testing.T) {
 	s.waitFor(regexp.MustCompile(`▸ 7 more lines`), 10*time.Second)
 	s.waitFor(regexp.MustCompile(`fold turn done`), 10*time.Second)
 
-	s.send("C-x")   // transcript focus (lands on the shell block)
+	s.send("M-r")
+	s.waitFor(regexp.MustCompile(`Execution history`), 5*time.Second)
+	s.send("q")
+	s.send("M-x")   // transcript focus starts on the settled shell block
 	s.send("Enter") // toggle -> expanded
 	s.waitFor(regexp.MustCompile(`(?s)\b1\b.*\b2\b.*\b12\b`), 5*time.Second)
-	if pane := s.capture(); strings.Contains(pane, "more lines") {
+	if pane := s.capture(); strings.Contains(pane, "▸ 7 more lines") {
 		t.Fatalf("fold indicator still visible after expanding:\n%s", pane)
 	}
 	s.send("Escape")

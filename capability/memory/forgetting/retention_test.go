@@ -65,32 +65,6 @@ func TestRetentionZeroHalfLifeDisablesDecay(t *testing.T) {
 	}
 }
 
-func TestReinforceCapsAtMaxStrength(t *testing.T) {
-	cfg := testConfig()
-	now := time.Now().UTC()
-	rec := Record{Kind: "fact", Strength: 8.0, RecallCount: 3}
-	got := Reinforce(rec, now, cfg)
-	if got.Strength != cfg.MaxStrength {
-		t.Fatalf("strength = %v, want capped at %v", got.Strength, cfg.MaxStrength)
-	}
-	if got.RecallCount != 4 {
-		t.Fatalf("recall_count = %d, want 4", got.RecallCount)
-	}
-	if !got.LastRecalledAt.Equal(now) {
-		t.Fatalf("last_recalled_at = %v, want %v", got.LastRecalledAt, now)
-	}
-}
-
-func TestReinforceMultipliesBelowCap(t *testing.T) {
-	cfg := testConfig()
-	now := time.Now().UTC()
-	rec := Record{Kind: "fact", Strength: 1.0}
-	got := Reinforce(rec, now, cfg)
-	if math.Abs(got.Strength-1.5) > 1e-9 {
-		t.Fatalf("strength = %v, want 1.5", got.Strength)
-	}
-}
-
 func TestShouldForgetBoundary(t *testing.T) {
 	cfg := testConfig()
 	now := time.Now().UTC()
@@ -112,23 +86,5 @@ func TestShouldForgetBoundary(t *testing.T) {
 				t.Fatalf("ShouldForget = %v, want %v (retention %v)", got, tc.want, Retention(rec, now, cfg))
 			}
 		})
-	}
-}
-
-func TestShouldPurge(t *testing.T) {
-	now := time.Now().UTC()
-	cfg := testConfig()
-	if ShouldPurge(now.Add(-30*24*time.Hour), now, cfg) {
-		t.Fatalf("purge disabled when PurgeAfterDays == 0")
-	}
-	cfg.PurgeAfterDays = 10
-	if !ShouldPurge(now.Add(-11*24*time.Hour), now, cfg) {
-		t.Fatalf("expected purge for row older than 10 days")
-	}
-	if ShouldPurge(now.Add(-5*24*time.Hour), now, cfg) {
-		t.Fatalf("did not expect purge for row younger than 10 days")
-	}
-	if ShouldPurge(time.Time{}, now, cfg) {
-		t.Fatalf("zero archivedAt must never purge")
 	}
 }

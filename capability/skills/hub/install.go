@@ -138,10 +138,10 @@ func (s *Service) installURL(ctx context.Context, url string, name string) (stri
 	}
 	defer func() { _ = os.RemoveAll(staging) }()
 	dir := filepath.Join(staging, name)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("stage skill: %w", err)
+	if err = os.MkdirAll(dir, 0o755); err == nil {
+		err = os.WriteFile(filepath.Join(dir, skillFilename), data, 0o644)
 	}
-	if err := os.WriteFile(filepath.Join(dir, skillFilename), data, 0o644); err != nil {
+	if err != nil {
 		return "", fmt.Errorf("stage skill: %w", err)
 	}
 	return s.installDir(dir, name)

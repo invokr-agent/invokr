@@ -18,13 +18,13 @@ func TestC10_SkillCacheRefresh(t *testing.T) {
 	// The install runs mid-turn, just before the model emits its second
 	// load_skill call; skillsDir is populated before the turn starts.
 	var skillsDir string
-	second := providertest.NativeToolCallStep("c10-second", "load_skill", map[string]any{"name": "greet-test"})
+	second := managedToolStep("c10-second", "load_skill", map[string]any{"name": "greet-test"})
 	second.BeforeResponse = func() {
 		mustWrite(t, filepath.Join(skillsDir, "greet-test", "SKILL.md"),
 			"---\nname: greet-test\ndescription: test skill\n---\nReply exactly: skill-canary-73\n")
 	}
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c10-first", "load_skill", map[string]any{"name": "greet-test"}),
+		managedToolStep("c10-first", "load_skill", map[string]any{"name": "greet-test"}),
 		second,
 		providertest.ReplyStep("done"),
 	)
@@ -34,8 +34,8 @@ func TestC10_SkillCacheRefresh(t *testing.T) {
 
 	got := runInProc(t, home, provider.URL(), "load the greet-test skill", grantAll)
 
-	if got.Resp.ToolCallCount != 2 {
-		t.Fatalf("tool_call_count = %d, want 2", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 4 {
+		t.Fatalf("tool_call_count = %d, want 4", got.Resp.ToolCallCount)
 	}
 	// First call fails as unknown; second succeeds after miss-triggered rescan.
 	failures := got.Resp.ToolFailures

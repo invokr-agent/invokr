@@ -27,12 +27,16 @@ func newTestCaller(t *testing.T) *tools.Caller {
 	return tools.NewCaller(core.CallerDeps{
 		App: config.AppConfig{
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
+			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 		},
 	})
 }
 
 func callTodo(t *testing.T, caller *tools.Caller, ctx context.Context, args string) todoResponse {
 	t.Helper()
+	if err := caller.StartToolSession(core.SessionIDFromContext(ctx)); err != nil {
+		t.Fatal(err)
+	}
 	out, err := caller.HandleCall(ctx, &core.ToolCall{
 		Name:      "todo",
 		Arguments: json.RawMessage(args),
@@ -171,7 +175,7 @@ const threePending = `{"items":[{"task":"api","status":"pending"},{"task":"web",
 func TestTodoHintsAtDelegationForThreePendingItems(t *testing.T) {
 	caller := newTestCaller(t)
 	resp := callTodo(t, caller, core.WithSessionID(context.Background(), "s1"), threePending)
-	if !strings.Contains(resp.Hint, "delegate_task can run them as parallel tasks") {
+	if !strings.Contains(resp.Hint, "enable delegate_task through tools") {
 		t.Fatalf("hint = %q, want the delegation nudge", resp.Hint)
 	}
 }
@@ -241,6 +245,7 @@ func TestTodoDelegationHintRespectsAllowlist(t *testing.T) {
 		}
 		caller := tools.NewCaller(core.CallerDeps{App: config.AppConfig{
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
+			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 			Tools:   config.ToolsConfig{Allowlist: allowlist},
 		}})
 		t.Cleanup(caller.Close)

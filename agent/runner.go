@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -62,8 +63,6 @@ const maxNearDuplicateCalls = 5
 // 0.85 tripped the guard on five numbered fixtures in a row.
 const nearDuplicateSimilarity = 0.95
 
-// timeWarningPercent is how much of RunTimeout may elapse before the model is
-// told to finish.
 const timeWarningPercent = 75
 
 // salvagePercent is the share of RunTimeout the wrap-up completion gets once
@@ -108,7 +107,7 @@ const preExhaustionTimeWarning = internalNudgePrefix + "Budget almost spent: tim
 // nearDuplicateNudge names the tool, since the model is not literally
 // repeating itself and the generic wording ("the same call repeated") reads as
 // wrong to it.
-const nearDuplicateNudge = internalNudgePrefix + "Your last %d %s calls were near-identical — the same code with small changes. This is not converging. Step back: state what the output tells you, change the approach, or answer with what you already know."
+const nearDuplicateNudge = internalNudgePrefix + "Your last %d %s calls were near-identical and returned unchanged output. Repeating them has shown no new information. Step back: state what the output tells you, change the approach, or answer with what you already know."
 
 // summaryNudge is sent once when a thread that ran tools ends on an answer
 // with nothing of the task in it — a bare greeting or "Understood." Small
@@ -132,34 +131,19 @@ const maxWorkTerms = 64
 const repeatedToolCallNudge = internalNudgePrefix + "That exact call was already made and returned the same result — repeating it will not change anything, but the task is still worth finishing. Vary it instead: change the arguments (different keywords, another path or pattern), use a different tool for the same goal, or re-read that tool's example for the exact format it expects. Only answer directly from what you already know once you have tried a different call."
 
 type runState struct {
-	usage        turnpkg.TokenUsage
-	failures     []turnpkg.ToolOutcome
-	callCount    int
-	messages     []inference.Message
-	contextState contextWindowState
-	guard        repeatGuard
-	nudges       int
-	// warned marks that the one-shot pre-exhaustion warning has been sent.
-	warned bool
-	// lengthRetried marks that this run has spent its one no-thinking length
-	// retry, so a further cut (or a failing call from the retried turn) ends
-	// the run instead of burning the rest of the wall clock (#443 follow-up).
-	lengthRetried bool
-	// nudgeAppended marks that the last message is a repeat nudge the model
-	// has now seen, so it is dropped from the transcript before processing.
+	usage         turnpkg.TokenUsage
+	failures      []turnpkg.ToolOutcome
+	callCount     int
+	messages      []inference.Message
+	contextState  contextWindowState
+	guard         repeatGuard
+	nudges        int
+	warned        bool
 	nudgeAppended bool
-	// summaryNudged marks that this request has spent its one wrap-up nudge;
-	// whatever the model answers next is final.
 	summaryNudged bool
-	// noToolNudged marks that this request has spent its one inspect-first
-	// nudge (#442).
-	noToolNudged bool
-	// parseStreak counts consecutive turns whose tool call could not be
-	// parsed at all (#490).
-	parseStreak int
-	// workTerms are the tool names and path-like arguments this request has
-	// used, against which a final answer is checked for task-free wording.
-	workTerms []string
+	noToolNudges  int
+	parseStreak   int
+	workTerms     []string
 }
 
 // repeatGuard tracks how often each tool-call signature is issued within a
@@ -177,17 +161,16 @@ type repeatGuard struct {
 	similarCalls              int
 }
 
-// observeNearDuplicate tracks consecutive single calls to one tool whose
-// arguments are near-identical and reports when maxNearDuplicateCalls is
-// reached. A turn with no call, several calls, or a different tool resets the
-// streak. Runs before observe so the exact-signature bookkeeping is untouched.
+// observeNearDuplicate nudges after near-identical single-tool calls return
+// unchanged raw output. Other calls or changed output reset the streak. It runs
+// before observe so exact-signature bookkeeping is untouched.
 func (g *repeatGuard) observeNearDuplicate(calls []toolCallSignature) bool {
 	if len(calls) != 1 {
 		g.lastCall, g.similarCalls = toolCallSignature{}, 0
 		return false
 	}
 	call := calls[0]
-	if call.Name == g.lastCall.Name && bigramJaccard(call.Args, g.lastCall.Args) >= nearDuplicateSimilarity {
+	if call.Name == g.lastCall.Name && call.Result == g.lastCall.Result && bigramJaccard(call.Args, g.lastCall.Args) >= nearDuplicateSimilarity {
 		g.similarCalls++
 	} else {
 		g.similarCalls = 1
@@ -367,9 +350,6 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 	return r.gracefulExhaustion(ctx, req, state, started, exhaustion)
 }
 
-// recordTurn folds one processed turn into the request state: its usage against
-// both the local and the spend-cap accounting, its outcomes and call count into
-// the ADR 0001 ledger, and its transcript.
 func (r *Runner) recordTurn(state *runState, result *turnResult, modelTurn ModelTurn, next []inference.Message) {
 	state.usage = state.usage.AccumulateTurnUsage(result.usage)
 	r.spend.observeTurn(result.usage)
@@ -444,8 +424,7 @@ func (r *Runner) nudgeRepeat(ctx context.Context, req RunRequest, turn int, stat
 		return fmt.Sprintf("%s after %d nudges", repeatExhaustionReasonPrefix, maxRepeatNudges), true
 	}
 	r.logger.Warn("repeated tool call; nudging model to change approach", zap.Int("turn", turn), zap.Bool("near_duplicate", nudge != repeatedToolCallNudge))
-	state.messages, state.nudgeAppended = append(state.messages, inference.UserMessage(nudge)), true
-	events.Notice(ctx, r.events, req.SessionID, r.parentSessionID, "repeated tool call detected; asking model to change approach")
+	r.nudge(ctx, req, state, nudge, "repeated tool call detected; asking model to change approach")
 	return "", false
 }
 
@@ -467,9 +446,8 @@ func (r *Runner) nudgeParseFailure(ctx context.Context, req RunRequest, state *r
 	// No other nudge can be pending here: a parse-failure turn has no calls,
 	// no error outcomes for the repeat guard, and no answer to summarize.
 	if state.parseStreak++; state.parseStreak == 2 {
-		state.messages, state.nudgeAppended = append(state.messages, inference.UserMessage(parseFailureNudge)), true
 		r.logger.Warn("tool calls repeatedly unparseable; nudging model to split the edit")
-		events.Notice(ctx, r.events, req.SessionID, r.parentSessionID, "tool calls repeatedly unparseable; asking model to split the edit")
+		r.nudge(ctx, req, state, parseFailureNudge, "tool calls repeatedly unparseable; asking model to split the edit")
 	}
 	return nudged || state.parseStreak >= 2
 }
@@ -498,24 +476,29 @@ func (r *Runner) nudgeSummary(ctx context.Context, req RunRequest, state *runSta
 	}
 	state.summaryNudged = true
 	r.logger.Warn("final answer names none of the work done; nudging for a summary", zap.Int("answer_len", len(answer)))
-	state.messages, state.nudgeAppended = append(state.messages, inference.UserMessage(summaryNudge)), true
-	events.Notice(ctx, r.events, req.SessionID, r.parentSessionID, "nudging for a task summary")
+	r.nudge(ctx, req, state, summaryNudge, "nudging for a task summary")
 	return true
 }
 
-// noToolNudge is sent once when the model answers a repository task without
+// nudge appends an internal user message for the next turn and tells the UI why.
+func (r *Runner) nudge(ctx context.Context, req RunRequest, state *runState, message, notice string) {
+	state.messages, state.nudgeAppended = append(state.messages, inference.UserMessage(message)), true
+	events.Notice(ctx, r.events, req.SessionID, r.parentSessionID, notice)
+}
+
+// noToolNudge is sent when the model answers a repository task without
 // having called a single tool: the early give-up shape from #442, where a
 // prompt naming a file or a build command is answered from the model's priors.
-const noToolNudge = internalNudgePrefix + "You have not run any tool yet; inspect the repository before answering"
+const noToolNudge = internalNudgePrefix + "You have not run any tool yet; inspect the repository before answering. A copied tool-count footer is history metadata, not an executed tool call."
+
+// Match the observed unexecuted-action reply, not examples quoting the marker.
+var copiedToolCount = regexp.MustCompile(`(?i)^(?:(?:i'll|i will|let me) (?:inspect|read|check|run)\b|(?:inspecting|reading|checking|running)\b)[^\n]*\. \[Tool calls this turn: [1-9][0-9]*\]$`)
 
 // investigableMarkers are the commands whose presence in the prompt makes it a
 // task about this repository rather than a question the model may answer from
 // what it already knows.
 var investigableMarkers = []string{"go test", "go build", "npm", "pytest", "cargo", "make "}
 
-// needsInvestigation reports whether the prompt names a path-like token or a
-// build/test command, so a tool-free answer to it is a give-up rather than a
-// legitimately direct reply.
 func needsInvestigation(prompt string) bool {
 	low := strings.ToLower(prompt)
 	for _, marker := range investigableMarkers {
@@ -532,21 +515,18 @@ func needsInvestigation(prompt string) bool {
 }
 
 // nudgeNoTools catches the run that answers such a prompt with zero tool calls.
-// One nudge per run, and never over a clarification question — asking the user
-// something back is a legitimate tool-free answer.
+// One ordinary nudge, plus one retry for copied positive tool-count metadata.
+// Questions and requests that already ran tools do not need this recovery.
 func (r *Runner) nudgeNoTools(ctx context.Context, req RunRequest, state *runState, result turnResult) bool {
 	answer := strings.TrimSpace(result.answer)
-	if state.noToolNudged || state.callCount > 0 || result.toolCallCount > 0 || answer == "" {
+	if state.noToolNudges >= 2 || (state.noToolNudges == 1 && !copiedToolCount.MatchString(answer)) ||
+		state.callCount > 0 || result.toolCallCount > 0 || answer == "" ||
+		strings.HasSuffix(answer, "?") || !needsInvestigation(req.Message) {
 		return false
 	}
-	if strings.HasSuffix(answer, "?") || !needsInvestigation(req.Message) {
-		return false
-	}
-	state.noToolNudged = true
+	state.noToolNudges++
 	r.logger.Warn("final answer ran no tools on a repository task; nudging to inspect first")
-	state.messages = append(state.messages, inference.UserMessage(noToolNudge))
-	state.nudgeAppended = true
-	events.Notice(ctx, r.events, req.SessionID, r.parentSessionID, "nudging to inspect the repository before answering")
+	r.nudge(ctx, req, state, noToolNudge, "nudging to inspect the repository before answering")
 	return true
 }
 
@@ -562,8 +542,6 @@ var taskFreeMarkers = []string{
 	"what can i do for you", "what are you working on",
 }
 
-// taskFree reports whether the answer reads as a context-free pleasantry. The
-// answer is reduced to its words so punctuation and emoji cannot hide a marker.
 func taskFree(answer string) bool {
 	words := strings.FieldsFunc(strings.ToLower(answer), func(r rune) bool { return !wordRune(r) })
 	joined := " " + strings.Join(words, " ") + " "
@@ -572,8 +550,6 @@ func taskFree(answer string) bool {
 	})
 }
 
-// appendWorkTerms collects the words a real summary of this thread would reuse:
-// each tool's name, and the path-like tokens in its raw arguments.
 func appendWorkTerms(terms []string, calls []toolCallSignature) []string {
 	for _, call := range calls {
 		if len(terms) >= maxWorkTerms {
@@ -629,14 +605,10 @@ func (r *Runner) warnNearExhaustion(turn int, state *runState, started time.Time
 	state.messages, state.nudgeAppended = append(state.messages, inference.UserMessage(warning)), true
 }
 
-// timeBudgetSpent reports whether the request's wall-clock budget is used up;
-// always false when RunTimeout is unset.
 func (r *Runner) timeBudgetSpent(started time.Time) bool {
 	return r.settings.RunTimeout > 0 && time.Since(started) >= r.settings.RunTimeout
 }
 
-// withRunDeadline bounds ctx at started+budget; a zero budget leaves ctx as
-// is. The returned cancel is a no-op in that case.
 func (r *Runner) withRunDeadline(ctx context.Context, started time.Time, budget time.Duration) (context.Context, context.CancelFunc) {
 	if budget <= 0 {
 		return ctx, func() {}
@@ -654,20 +626,16 @@ func (r *Runner) cutByTimeBudget(ctx context.Context, started time.Time) (string
 	return fmt.Sprintf("time budget reached (%s) during a completion", r.settings.RunTimeout), true
 }
 
-// timeNearlySpent reports whether timeWarningPercent of RunTimeout has elapsed.
 func (r *Runner) timeNearlySpent(started time.Time) bool {
 	return r.settings.RunTimeout > 0 && time.Since(started)*100 >= r.settings.RunTimeout*timeWarningPercent
 }
 
-// stopAfterTurn reports the exhaustion reason, if any, that ends the run after
-// a turn completed without an answer: the wall-clock budget, the spend cap, or
-// a spent length retry that did not pay off.
 func (r *Runner) stopAfterTurn(state *runState, completion completionOutput, result turnResult, started time.Time) (string, bool) {
 	if r.timeBudgetSpent(started) {
 		return fmt.Sprintf("time budget reached (%s)", r.settings.RunTimeout), true
 	}
-	if reason, stop := lengthRetryExhausted(state, completion, result); stop {
-		r.logger.Warn("ending run after the one length retry did not pay off", zap.String("reason", reason))
+	if reason, stop := lengthRetryExhausted(completion, result); stop {
+		r.logger.Warn("ending run after length retry did not pay off", zap.String("reason", reason))
 		return reason, true
 	}
 	if reason := r.spend.exceeded(state.usage); reason != "" {
@@ -676,21 +644,11 @@ func (r *Runner) stopAfterTurn(state *runState, completion completionOutput, res
 	return "", false
 }
 
-// lengthRetryExhausted reports whether this run's single no-thinking length
-// retry has been spent without paying off — either the retried turn produced
-// no usable tool call, or a completion was cut on the output limit again.
-// Either way the run ends through the wrap-up path rather than continuing
-// (#443). A tool that ran and returned an error result does not count: that is
-// an ordinary outcome the model is fed back and can recover from.
-func lengthRetryExhausted(state *runState, completion completionOutput, result turnResult) (string, bool) {
-	if completion.lengthRetried {
-		state.lengthRetried = true
-	}
-	if !state.lengthRetried {
-		return "", false
-	}
+// lengthRetryExhausted ends a turn whose length retries did not produce a
+// usable call. A tool that ran and failed remains an ordinary recoverable turn.
+func lengthRetryExhausted(completion completionOutput, result turnResult) (string, bool) {
 	if completion.lengthExhausted {
-		return "output limit reached again after the one length retry", true
+		return "output limit reached after length retries", true
 	}
 	if completion.lengthRetried && !completion.parseRecovered && hasParseFailure(result.outcomes) {
 		return "the tool call made after the length retry was unusable", true
@@ -717,7 +675,7 @@ func stripTrailingInternalNudge(messages []inference.Message) []inference.Messag
 }
 
 func (r *Runner) prepareAndStoreContext(ctx context.Context, sessionID string, messages []inference.Message, state contextWindowState) ([]inference.Message, contextWindowState) {
-	messages, state = r.budget.Prepare(ctx, sessionID, messages, state, r.turnProcessor.spillRefSnapshot())
+	messages, state = r.budget.Prepare(ctx, sessionID, messages, state)
 	r.mu.Lock()
 	r.contextState = state
 	r.mu.Unlock()
@@ -813,7 +771,6 @@ func (r *Runner) tagModels(resp turnpkg.AgentResponse) turnpkg.AgentResponse {
 	return resp
 }
 
-// applyPendingModel applies any queued model switch at the turn boundary.
 func (r *Runner) applyPendingModel() {
 	p := r.pendingModel.Load()
 	if p == nil {
@@ -977,7 +934,6 @@ const (
 // scorer) sees the run was cut short without parsing the ledger.
 const incompleteNotice = "\u26a0 %s: work may be incomplete"
 
-// stepLimitReason names the turn ceiling as gracefulExhaustion's reason.
 func stepLimitReason(maxTurns int) string {
 	if maxTurns == 1 {
 		return "step limit reached (1 turn)"
@@ -1006,8 +962,6 @@ func (r *Runner) dispatchAfterResponse(ctx context.Context, req RunRequest, resp
 	})
 }
 
-// turnSignatureKey joins a turn's tool-call keys into one identity for the
-// repetition guard; empty when the turn made no (parseable) tool calls.
 func turnSignatureKey(calls []toolCallSignature) string {
 	// The result hash is part of the identity: an identical call that returns
 	// different output (a rebuild after an edit) is verification, not a loop.

@@ -68,7 +68,7 @@ func TestR06_SIGKILLMidTurnRestartsCleanly(t *testing.T) {
 	}
 
 	restartProvider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("r06-recent", "session_search", map[string]any{"action": "recent", "max_results": 10}),
+		managedToolStep("r06-recent", "session_search", map[string]any{"action": "recent", "max_results": 10}),
 		providertest.ReplyStep("restart clean"),
 	)
 	defer restartProvider.Close()

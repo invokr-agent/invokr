@@ -39,7 +39,7 @@ reported as a notice).
 
 | Front end | Can set policy? |
 |---|---|
-| `invokr jobs add --schedule … --prompt … [--approve-all]` | yes — `--approve-all` ⇒ `allow` (with a loud warning) |
+| `invokr jobs add --schedule … --prompt … [--allow <tier>] [--allow-all]` | yes — `--allow` stores a comma list of tiers matched like `exec --allow`; `--allow-all` ⇒ `allow` (with a loud warning) |
 | `schedule` tool (agent) | no — always `deny`; every action itself approval-gated; add/modify/remove roll back the DB on crontab failure |
 | `/jobs` in the TUI | run/list only |
 

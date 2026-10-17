@@ -195,7 +195,6 @@ func TestBuilderBuildsTaggedTurnPrompt(t *testing.T) {
 		`{"name":"shell"`,
 		"Use load_skill before applying a skill's instructions.",
 		"Use apply_patch for file edits",
-		"When asked to list tools, include relevant deferred tools",
 	} {
 		if !strings.Contains(prompt.System, want) {
 			t.Fatalf("expected system prompt to contain %q\nprompt:\n%s", want, prompt.System)
@@ -276,9 +275,9 @@ func TestBuilderBuildsNativePromptWithoutTextToolCatalog(t *testing.T) {
 	}
 }
 
-func TestBuilderBuildsNativePromptWithDeferredToolCatalog(t *testing.T) {
+func TestBuilderBuildsManagerPromptWithOptionalCatalog(t *testing.T) {
 	tools := &fakeTools{specs: []toolcore.ToolSpec{{
-		Name:        "tool_search",
+		Name:        "tools",
 		Description: "Search tools.",
 		Metadata:    toolcore.ToolMetadata{AlwaysVisible: true},
 	}, {
@@ -298,18 +297,15 @@ func TestBuilderBuildsNativePromptWithDeferredToolCatalog(t *testing.T) {
 		t.Fatalf("Build() error = %v", err)
 	}
 	for _, want := range []string{
-		"Deferred tools (call tool_search with include_schema=true before use):",
-		"mcp_fixture_echo: Echo fixture text.",
-		"When asked to list tools, include relevant deferred tools and never invent names.",
+		"Use tools to list, search, enable, disable, create, and run optional tools.",
+		"prefer it over a shell workaround",
+		"Optional tools:\n- mcp_fixture_echo: Echo fixture text\n",
 	} {
 		if !strings.Contains(prompt.System, want) {
 			t.Fatalf("expected native prompt to contain %q\nprompt:\n%s", want, prompt.System)
 		}
 	}
-	if strings.Contains(prompt.System, "tool_search: Search tools.") {
-		t.Fatalf("expected callable tool omitted from deferred catalog\nprompt:\n%s", prompt.System)
-	}
-	if strings.Contains(prompt.System, "loaded_fixture: Already loaded.") {
+	if strings.Contains(prompt.System, "loaded_fixture: Already loaded") {
 		t.Fatalf("expected loaded tool omitted from deferred catalog\nprompt:\n%s", prompt.System)
 	}
 }

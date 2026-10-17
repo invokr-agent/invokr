@@ -14,6 +14,7 @@ import (
 
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/core/sandbox"
@@ -33,7 +34,7 @@ func sandboxCaller(t *testing.T, root string, allowed ...string) *tools.Caller {
 func sandboxCallerNet(t *testing.T, root string, allowNetwork bool, allowed ...string) *tools.Caller {
 	t.Helper()
 	return tools.NewCaller(core.CallerDeps{
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: true}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}},
 		App: config.AppConfig{
 			Toolbox:   config.ToolboxConfig{Dir: t.TempDir()},
 			Workspace: config.WorkspaceConfig{Root: root},

@@ -27,7 +27,6 @@ func TestM4ShellReplayHeadroom(t *testing.T) {
 				gate := newResultGate(config.AppConfig{}.WithDefaults().Agent, "replay", zap.NewNop())
 				gate.spill = &fileSpillStore{dir: t.TempDir(), pruneOnce: &sync.Once{}}
 				b.spill = gate.spill
-				refs := make(map[string]string)
 				b.writesWorkspace = func(name string) bool {
 					return name == "shell" || name == "write_file" || name == "edit_file" || name == "apply_patch"
 				}
@@ -37,10 +36,10 @@ func TestM4ShellReplayHeadroom(t *testing.T) {
 				for _, exchange := range replayMessages(run.Segments[0]) {
 					for i := 1; i < len(exchange); i++ {
 						call := exchange[0].ToolCalls[i-1]
-						exchange[i].Content, refs[call.ID] = gate.cap(call.Name, json.RawMessage(call.Arguments), exchange[i].Content)
+						exchange[i].Content, _ = gate.cap(call.Name, json.RawMessage(call.Arguments), exchange[i].Content)
 					}
 					before := counts.complete
-					messages, state = b.Prepare(context.Background(), "m4", append(messages, exchange...), state, refs)
+					messages, state = b.Prepare(context.Background(), "m4", append(messages, exchange...), state)
 					state = replayUsage(state, messages, scale)
 					if counts.complete > before {
 						streak++

@@ -5,6 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"slices"
+	"strings"
+	"time"
+
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/capability/syntax"
 	"github.com/invokr-ai/invokr/tools/core"
@@ -12,12 +17,6 @@ import (
 	mcpsystem "github.com/invokr-ai/invokr/tools/system/mcp"
 	tmuxsystem "github.com/invokr-ai/invokr/tools/system/tmux"
 	toolboxsystem "github.com/invokr-ai/invokr/tools/system/toolbox"
-	"io"
-	"os"
-	"slices"
-	"strings"
-	"sync/atomic"
-	"time"
 
 	"github.com/invokr-ai/invokr/agent"
 	"github.com/invokr-ai/invokr/capability/agentdef"
@@ -58,6 +57,9 @@ type Options struct {
 	// ModelFlagSet reports that --model was given on the command line, which
 	// makes the model explicit even when a router profile pins one.
 	ModelFlagSet bool
+	// ModelOptional lets commands that never send a turn (sessions, index)
+	// start without a served model.
+	ModelOptional bool
 }
 
 // ChatSessionFunc creates a fresh agent session with its own approval broker.
@@ -65,18 +67,19 @@ type Options struct {
 type ChatSessionFunc func(sessionID string) (turn.IdentifiedSession, *approval.Broker, error)
 
 type Services struct {
-	App            config.AppConfig
-	Logger         *zap.Logger
-	Events         events.Bus
-	Approvals      *approval.Broker
-	Memory         memory.Manager
-	Session        turn.IdentifiedSession
-	PromptHistory  turn.PromptHistory
-	Logs           LogSource
-	LogView        bool
-	NewChatSession ChatSessionFunc
-	Commands       CommandBackend
-	Grants         *approval.Store
+	App             config.AppConfig
+	Logger          *zap.Logger
+	Events          events.Bus
+	Approvals       *approval.Broker
+	Memory          memory.Manager
+	Session         turn.IdentifiedSession
+	PromptHistory   turn.PromptHistory
+	Logs            LogSource
+	LogView         bool
+	NewChatSession  ChatSessionFunc
+	NewAgentSession func() (Services, error)
+	Commands        CommandBackend
+	Grants          *approval.Store
 }
 
 func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
@@ -86,30 +89,37 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Keep dependency stdlib/slog output from corrupting the interactive TUI.
-	zap.RedirectStdLog(l.Named("stdlog"))
-
 	provider, app := newProvider(app, opts, l)
+	if explicitModelSource(opts) == "" {
+		// Resolve before the session exists so turn 1 already uses a served
+		// model. An explicitly requested model is never swapped for whatever
+		// the provider lists: the run fails loudly instead.
+		if app.Provider.Model = resolveModel(context.Background(), provider, app.Provider.Model, l.Named("runtime")); app.Provider.Model == "" && !opts.ModelOptional {
+			return nil, errors.New("no model configured; run invokr setup or pass --model")
+		}
+	}
 	providerContext := agent.NewProviderContext(int64(app.Provider.ContextWindowTokens), app.Provider.Model)
 	providerContext.SetLogger(l)
 	backgroundCtx, cancelBackground := context.WithCancel(context.Background())
 	keepBackground := false
-	defer cancelOnFailure(&keepBackground, cancelBackground)()
-	resolvedModel, configuredModel := &atomic.Pointer[string]{}, app.Provider.Model
-	resolvedModel.Store(&configuredModel)
+	defer func() {
+		if !keepBackground {
+			cancelBackground()
+		}
+	}()
 
 	eventDispatcher, approvalBroker := events.NewOrderedDispatcher(l.Named("events")), approval.NewBroker()
 	approvalBroker.Policy = opts.Policy
 	zerfooWorker, embeddingProvider := startZerfooWorker(app)
 	memoryManager, err := newMemoryManager(app, eventDispatcher, zerfooWorker, provider, providerContext, l)
 	if err != nil {
-		_ = closeZerfooWorker(zerfooWorker)
+		_ = zerfooWorker.Close()
 		return nil, err
 	}
 	promptHistory, err := history.NewStore(history.Config{Dir: app.Memory.Dir, Cwd: app.Workspace.Root})
 	if err != nil {
 		_ = memoryManager.Close()
-		_ = closeZerfooWorker(zerfooWorker)
+		_ = zerfooWorker.Close()
 		return nil, err
 	}
 	eventDispatcher.Register(memory.NewEventHandler(memoryManager))
@@ -118,12 +128,11 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 		policy: opts.Policy,
 		app:    app, logger: l, provider: provider, dispatcher: eventDispatcher,
 		mem: memoryManager, embeddings: embeddingProvider, skills: skillManager,
-		agentReg: loadAgentRegistry(app.Agents.Dir, l), resolvedModel: resolvedModel, providerContext: providerContext, backgroundContext: backgroundCtx,
+		recallGate: newRecallGate(app, provider, memoryManager, eventDispatcher, l),
+		agentReg:   loadAgentRegistry(app.Agents.Dir, l), providerContext: providerContext, backgroundContext: backgroundCtx,
 	}
 	toolCaller, promptSyntax := layer.buildToolLayer(approvalBroker)
-	sessionDeps := layer.sessionDeps("", toolCaller, promptSyntax)
-	sessionDeps.ProviderContext, sessionDeps.RecallGate = providerContext, newRecallGate(app, provider, memoryManager, eventDispatcher, l)
-	session, err := agent.NewSession(sessionDeps, app)
+	session, err := agent.NewSession(layer.sessionDeps("", toolCaller, promptSyntax), app)
 	if err != nil {
 		return nil, closeRuntimeDeps(err, promptHistory, memoryManager, zerfooWorker)
 	}
@@ -136,26 +145,23 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 		Commands: layer.commandService(session.SessionID(), memoryManager, newChatSession),
 		Grants:   newStandingGrants(backgroundCtx, app, session, eventDispatcher, l, opts.Policy),
 	}
+	services.NewAgentSession = func() (Services, error) {
+		freshLayer, next := layer, services
+		var err error
+		next.Session, next.Approvals, err = freshLayer.newSession("")
+		if err != nil {
+			return Services{}, err
+		}
+		next.Commands = freshLayer.commandService(next.Session.SessionID(), memoryManager, newChatSession)
+		next.Grants = newStandingGrants(backgroundCtx, app, next.Session, eventDispatcher, l, opts.Policy)
+		return next, nil
+	}
 	if err := validateServices(services); err != nil {
 		return nil, closeRuntimeDeps(err, promptHistory, memoryManager, zerfooWorker)
 	}
-	if explicitModelSource(opts) == "" {
-		// An explicitly requested model is never swapped for whatever the
-		// provider happens to list: the run fails loudly instead.
-		resolveModelLater(backgroundCtx, provider, configuredModel, l.Named("runtime"), resolvedModel, session)
-	}
 
 	keepBackground = true
-	cleanup := runtimeCleanup(cancelBackground, promptHistory, memoryManager, zerfooWorker)
-	return &Runtime{services: services, cleanup: cleanup}, nil
-}
-
-func cancelOnFailure(keep *bool, cancel context.CancelFunc) func() {
-	return func() {
-		if !*keep {
-			cancel()
-		}
-	}
+	return &Runtime{services: services, cleanup: runtimeCleanup(cancelBackground, promptHistory, memoryManager, zerfooWorker)}, nil
 }
 
 func runtimeCleanup(cancel context.CancelFunc, promptHistory interface{ Close() error }, memoryManager memory.Manager, worker *memzerfoo.Worker) func() error {
@@ -169,8 +175,7 @@ func runtimeCleanup(cancel context.CancelFunc, promptHistory interface{ Close() 
 	}
 }
 
-// newValidatedLogger builds the runtime logger and runs config validation,
-// which needs the logger for its warn-only findings (missing dirs).
+// Config validation needs the logger for its warn-only findings (missing dirs).
 func newValidatedLogger(app config.AppConfig, opts Options) (*zap.Logger, error) {
 	l, err := logging.NewWithSink(app.Log, opts.LogBuffer)
 	if err != nil {
@@ -179,11 +184,11 @@ func newValidatedLogger(app config.AppConfig, opts Options) (*zap.Logger, error)
 	if err := app.Validate(l.Named("config")); err != nil {
 		return nil, err
 	}
+	// Keep dependency stdlib/slog output from corrupting the interactive TUI.
+	zap.RedirectStdLog(l.Named("stdlog"))
 	return l, nil
 }
 
-// newProvider builds the LLM client and loads provider metadata into the
-// returned settings copy. Model discovery is deferred until after first paint.
 func newProvider(app config.AppConfig, opts Options, l *zap.Logger) (*clients.Client, config.AppConfig) {
 	var provider *clients.Client
 	spec := routerSpec(app.Provider.Router)
@@ -222,7 +227,7 @@ func explicitModelSource(opts Options) string {
 	switch {
 	case opts.ModelFlagSet:
 		return "flag"
-	case strings.TrimSpace(os.Getenv("INVOKR_MODEL")) != "":
+	case config.Env("INVOKR_MODEL") != "":
 		return "env"
 	}
 	return ""
@@ -254,7 +259,6 @@ func withProfileSampling(agent config.AgentConfig, provider config.RouterProvide
 	return agent
 }
 
-// routerSpec maps the host provider table onto the clients-facing spec.
 func routerSpec(cfg config.RouterConfig) clients.RouterSpec {
 	spec := clients.RouterSpec{
 		Active: cfg.Active, Providers: make(map[string]clients.RouterProvider, len(cfg.Providers)),
@@ -269,23 +273,6 @@ func routerSpec(cfg config.RouterConfig) clients.RouterSpec {
 	return spec
 }
 
-type modelTarget interface {
-	Model() string
-	QueueModelIfIdle(string) bool
-}
-
-func resolveModelLater(ctx context.Context, provider *clients.Client, configured string, log *zap.Logger, selected *atomic.Pointer[string], target modelTarget) {
-	go func() {
-		resolved := resolveModel(ctx, provider, configured, log)
-		if resolved == configured || target.Model() != configured || !target.QueueModelIfIdle(resolved) {
-			return
-		}
-		selected.Store(&resolved)
-	}()
-}
-
-// resolveModel keeps the configured model unless the provider lists models
-// and the configured one is absent — then falls back to the first listed.
 func resolveModel(ctx context.Context, provider *clients.Client, configured string, log *zap.Logger) string {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
@@ -296,12 +283,13 @@ func resolveModel(ctx context.Context, provider *clients.Client, configured stri
 	if slices.Contains(models, configured) {
 		return configured
 	}
-	log.Warn("configured model unavailable, falling back",
-		zap.String("configured", configured), zap.String("fallback", models[0]))
+	if configured != "" { // none configured is the default, not a fault
+		log.Warn("configured model unavailable, falling back",
+			zap.String("configured", configured), zap.String("fallback", models[0]))
+	}
 	return models[0]
 }
 
-// startZerfooWorker builds the built-in Zerfoo memory worker when enabled.
 // Models load lazily on first use, so this does not download or load anything.
 func startZerfooWorker(app config.AppConfig) (*memzerfoo.Worker, core.EmbeddingProvider) {
 	if !app.Memory.Zerfoo.Enabled {
@@ -335,15 +323,8 @@ func newMemoryManager(app config.AppConfig, dispatcher events.Dispatcher, worker
 	return memory.NewManagerFromConfigWithProvider(app, dispatcher, worker, chat, models, logger.Named("memory"))
 }
 
-func closeZerfooWorker(worker *memzerfoo.Worker) error {
-	if worker == nil {
-		return nil
-	}
-	return worker.Close()
-}
-
 func closeRuntimeDeps(cause error, promptHistory interface{ Close() error }, memoryManager memory.Manager, worker *memzerfoo.Worker) error {
-	return errors.Join(cause, promptHistory.Close(), memoryManager.Close(), closeZerfooWorker(worker))
+	return errors.Join(cause, promptHistory.Close(), memoryManager.Close(), worker.Close())
 }
 
 // toolLayerDeps bundles the shared dependencies for building a tool caller,
@@ -359,8 +340,8 @@ type toolLayerDeps struct {
 	skills            skills.Manager
 	agentReg          agentdef.Registry
 	caller            *tools.Caller
-	resolvedModel     *atomic.Pointer[string]
 	providerContext   *agent.ProviderContext
+	recallGate        agentprompt.RecallGate
 	backgroundContext context.Context
 }
 
@@ -373,7 +354,6 @@ func (d *toolLayerDeps) commandService(sessionID string, mem memory.Manager, new
 	}
 }
 
-// buildToolLayer constructs the tool caller, subagent runner, and prompt syntax.
 func (d *toolLayerDeps) buildToolLayer(approver *approval.Broker) (*tools.Caller, syntax.PromptSyntax) {
 	subagents := &subagentRunner{}
 	caller := tools.NewCaller(
@@ -501,8 +481,6 @@ func validateServices(s Services) error {
 	}
 }
 
-// sessionDeps fills the SessionDeps fields the tool layer already carries.
-// Callers add whatever is session-specific (provider context, recall gate).
 func (d toolLayerDeps) sessionDeps(sessionID string, caller *tools.Caller, promptSyntax syntax.PromptSyntax) agent.SessionDeps {
 	return agent.SessionDeps{
 		// Named so --log-filter agent.session=<level> (the flag's own help
@@ -510,8 +488,10 @@ func (d toolLayerDeps) sessionDeps(sessionID string, caller *tools.Caller, promp
 		// and its turn loop derive from this one carries the name.
 		Logger:            d.logger.Named("agent.session"),
 		Provider:          d.provider,
+		ProviderContext:   d.providerContext,
 		Events:            d.dispatcher,
 		Memory:            d.mem,
+		RecallGate:        d.recallGate,
 		SessionID:         sessionID,
 		Skills:            d.skills,
 		Tools:             caller,
@@ -524,19 +504,20 @@ func (d toolLayerDeps) sessionDeps(sessionID string, caller *tools.Caller, promp
 // with its own approval broker, sharing the runtime tool-layer dependencies.
 func (d toolLayerDeps) chatSessionFactory() ChatSessionFunc {
 	return func(sessionID string) (turn.IdentifiedSession, *approval.Broker, error) {
-		broker := approval.NewBroker()
-		broker.Policy = d.policy
-		caller, promptSyntax := d.buildToolLayer(broker)
-		sess, err := agent.NewSession(d.sessionDeps(sessionID, caller, promptSyntax), d.app)
-		if err != nil {
-			// The caller already registered bus handlers; release them or the
-			// failed session leaks them onto the shared dispatcher (#324).
-			caller.Close()
-			return nil, nil, fmt.Errorf("runtime: new chat session: %w", err)
-		}
-		if resolved := d.resolvedModel.Load(); resolved != nil && *resolved != d.app.Provider.Model {
-			sess.SetModel(*resolved)
-		}
-		return sess, broker, nil
+		fresh := d
+		fresh.providerContext, fresh.recallGate = nil, nil // Keep chat sessions independent of CLI-only context.
+		return fresh.newSession(sessionID)
 	}
+}
+
+func (d *toolLayerDeps) newSession(sessionID string) (turn.IdentifiedSession, *approval.Broker, error) {
+	broker := approval.NewBroker()
+	broker.Policy = d.policy
+	caller, promptSyntax := d.buildToolLayer(broker)
+	sess, err := agent.NewSession(d.sessionDeps(sessionID, caller, promptSyntax), d.app)
+	if err != nil {
+		caller.Close()
+		return nil, nil, fmt.Errorf("runtime: new chat session: %w", err)
+	}
+	return sess, broker, nil
 }

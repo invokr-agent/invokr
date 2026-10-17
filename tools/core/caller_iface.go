@@ -10,13 +10,12 @@ import (
 // calls. *tools.Caller satisfies this interface; so does filteredCaller.
 type ToolCaller interface {
 	PromptSpecs(sessionID string) []ToolSpec
-	CallableSpecs(sessionID string) []ToolSpec
+	StableSpecs() []ToolSpec
 	Specs() []ToolSpec
 	HandleCall(ctx context.Context, call *ToolCall) (string, error)
 	HasNative(name string) bool
 	NativeSource(name string) string
-	MarkSchemasLoaded(sessionID string, names []string)
-	// ForgetSession drops per-session state (schema-loaded tracking) when the
+	// ForgetSession drops per-session state (enabled optional tools) when the
 	// session ends, so long-lived callers shared across sessions do not
 	// accumulate entries.
 	ForgetSession(sessionID string)

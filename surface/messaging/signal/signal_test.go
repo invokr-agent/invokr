@@ -335,8 +335,8 @@ func TestAskApproval_RegistersBeforeSendingPrompt(t *testing.T) {
 
 func TestApprovalRepliesRouteByRequestID(t *testing.T) {
 	c := &Client{}
-	first := &pendingApproval{chatID: "+1test", decision: make(chan bool, 1)}
-	second := &pendingApproval{chatID: "+1test", decision: make(chan bool, 1)}
+	first := &messaging.PendingApproval{ChatID: "+1test", Decision: make(chan bool, 1)}
+	second := &messaging.PendingApproval{ChatID: "+1test", Decision: make(chan bool, 1)}
 	c.pending.Store("req-1", first)
 	c.pending.Store("req-2", second)
 
@@ -346,18 +346,18 @@ func TestApprovalRepliesRouteByRequestID(t *testing.T) {
 	if !c.handleApprovalReply("+1test", "YES req-1") {
 		t.Fatal("expected request-ID reply to be handled")
 	}
-	if approved := <-first.decision; !approved {
+	if approved := <-first.Decision; !approved {
 		t.Fatal("req-1 should be approved")
 	}
 	select {
-	case <-second.decision:
+	case <-second.Decision:
 		t.Fatal("req-2 received req-1 decision")
 	default:
 	}
 	if !c.handleApprovalReply("+1test", "NO req-2") {
 		t.Fatal("expected req-2 denial to be handled")
 	}
-	if approved := <-second.decision; approved {
+	if approved := <-second.Decision; approved {
 		t.Fatal("req-2 should be denied")
 	}
 	if c.handleApprovalReply("+1other", "YES req-1") {

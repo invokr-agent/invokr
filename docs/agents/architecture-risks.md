@@ -16,7 +16,7 @@ Workspace paths, shell execution, dynamic plugins, browser automation, web searc
 
 ## Provider Coupling
 
-OpenAI SDK shapes leak through provider and agent-adjacent code. The current adapter is pragmatic for OpenAI-compatible local servers. New provider features should avoid spreading SDK-specific types further into agent or prompt modules.
+Inference-router message shapes reach provider and agent-adjacent code. The current adapter is pragmatic for OpenAI-compatible local servers. New provider features should avoid spreading router-specific types further into agent or prompt modules.
 
 ## Prompt Budget Realism
 
@@ -24,7 +24,7 @@ Prompt assembly and memory curation can be character-oriented while runtime acco
 
 ## Synchronous Events
 
-Ordered events give deterministic behavior, but slow handlers can block agent progress. Async dispatch exists, but runtime uses ordered dispatch. Any handler doing network, process, or heavy storage work needs extra scrutiny.
+The ordered dispatcher calls handlers synchronously in registration order within each dispatch; concurrent dispatches can overlap. Slow handlers block their caller. There is no async dispatcher: the memory curator owns a separate bounded background worker for summarization. Handlers must tolerate concurrent calls, and network, process, or heavy storage work needs extra scrutiny.
 
 ## Test Gaps To Consider
 

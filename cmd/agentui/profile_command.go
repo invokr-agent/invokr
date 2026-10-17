@@ -36,7 +36,7 @@ func renderProfileList(home string) string {
 		return "error: " + err.Error()
 	}
 	if len(names) == 0 {
-		return fmt.Sprintf("no profiles in %s; create <name>.md there (front matter overrides + prompt body)", config.ProfilesDir(home))
+		return fmt.Sprintf("no profiles in %s; create <name>.md or <name>.json there", config.ProfilesDir(home))
 	}
 	return "profiles: " + strings.Join(names, ", ") + " — /profile <name> switches model and prompt from the next turn"
 }
@@ -63,6 +63,12 @@ func applyProfileToSession(session turn.Session, profile config.Profile) string 
 	}
 	if profile.Temperature != nil {
 		deferred = append(deferred, "temperature")
+	}
+	if profile.Tools != nil && profile.Tools.Allowlist != nil {
+		deferred = append(deferred, "tools")
+	}
+	if profile.Mode != nil {
+		deferred = append(deferred, "mode")
 	}
 	out := "profile " + profile.Name + ": nothing to apply live"
 	if len(applied) > 0 {

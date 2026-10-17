@@ -5,29 +5,31 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/integrations"
-	"github.com/invokr-ai/invokr/tools/system"
 	"maps"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/capability/sessionstore"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/integrations"
+	"github.com/invokr-ai/invokr/tools/system"
+	"github.com/invokr-ai/invokr/tools/system/tool_search"
+
 	"go.uber.org/zap"
 )
 
 type Caller struct {
-	mu            sync.RWMutex
-	specs         []core.ToolSpec
-	native        map[string]nativeEntry
-	loadedSchemas map[string]map[string]struct{}
-	app           core.CallerDeps
-	logger        *zap.Logger
-	filter        core.ResultFilter
-	revision      uint64
-	release       func()
+	mu      sync.RWMutex
+	specs   []core.ToolSpec
+	native  map[string]nativeEntry
+	managed map[string]sessionstore.ToolState
+	app     core.CallerDeps
+	logger  *zap.Logger
+	filter  core.ResultFilter
+	release func()
 }
 
 // Close releases session-scoped registrations made during tool loading —
@@ -44,34 +46,22 @@ func (c *Caller) Close() {
 	}
 }
 
-// Revision changes whenever visible/callable tool definitions may change.
-func (c *Caller) Revision() uint64 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.revision + c.app.Policy.Revision()
-}
-
 type nativeEntry struct {
 	spec    core.ToolSpec
 	handler core.NativeHandler
 }
 
 func NewCaller(deps core.CallerDeps, logger ...*zap.Logger) *Caller {
-	l := callerLogger(logger...)
+	l := cmp.Or(append(slices.Clip(logger), zap.NewNop())...)
 	deps.App = deps.App.WithDefaults()
+	deps.App.Tools.Core = slices.Clone(deps.App.Tools.Core)
 	filter := integrations.ResultFilterForConfig(deps.App.Toolbox, l)
 
-	caller := &Caller{logger: l, specs: []core.ToolSpec{}, native: map[string]nativeEntry{}, loadedSchemas: map[string]map[string]struct{}{}, app: deps, filter: filter}
+	caller := &Caller{logger: l, specs: []core.ToolSpec{}, native: map[string]nativeEntry{}, app: deps, filter: filter}
 
 	caller.release = system.LoadSystemTools(deps, caller, l)
+	tool_search.RegisterManager(caller, caller.manageTools, caller.native["create_tool"].spec.Parameters)
 	return caller
-}
-
-func callerLogger(logger ...*zap.Logger) *zap.Logger {
-	if len(logger) > 0 && logger[0] != nil {
-		return logger[0]
-	}
-	return zap.NewNop()
 }
 
 func (c *Caller) HasNative(name string) bool {
@@ -87,11 +77,7 @@ func (c *Caller) NativeSource(name string) string {
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	entry, ok := c.native[name]
-	if !ok {
-		return ""
-	}
-	return entry.spec.Metadata.Source
+	return c.native[name].spec.Metadata.Source
 }
 
 func (c *Caller) Approver() approval.Approver {
@@ -107,52 +93,46 @@ func (c *Caller) Specs() []core.ToolSpec {
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if len(c.specs) == 0 {
-		return nil
-	}
 	return slices.Clone(c.specs)
 }
 
 func (c *Caller) PromptSpecs(sessionID string) []core.ToolSpec {
-	return c.visibleSpecs(sessionID, false)
+	out := c.StableSpecs()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	for _, item := range c.managed[sessionID].Catalog {
+		if c.advertised(item.Name) && !c.protectedTool(item.Name) {
+			out = append(out, core.ToolSpec{Name: item.Name, Description: item.Description})
+		}
+	}
+	return out
 }
 
-func (c *Caller) CallableSpecs(sessionID string) []core.ToolSpec {
-	return c.visibleSpecs(sessionID, true)
-}
-
-// advertised reports whether name may be shown to, and called by, the model.
-// An unset allowlist (the default) advertises every registered tool.
-func (c *Caller) advertised(name string) bool {
-	allowlist := c.app.App.Tools.Allowlist
-	return len(allowlist) == 0 || slices.Contains(allowlist, name)
-}
-
-func (c *Caller) visibleSpecs(sessionID string, callableOnly bool) []core.ToolSpec {
+// StableSpecs keeps the configured allowlist while ignoring the mutable
+// approval mode and per-session schema-loading state. HandleCall enforces policy.
+func (c *Caller) StableSpecs() []core.ToolSpec {
 	if c == nil {
 		return nil
 	}
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	out := make([]core.ToolSpec, 0, len(c.specs))
-	for _, spec := range c.specs {
-		if c.app.Policy != nil && c.app.Policy.Mode() == approval.Plan && !planEligible(spec) {
-			continue
+	var out []core.ToolSpec
+	for _, name := range c.coreTools() {
+		if entry, ok := c.native[name]; ok && c.advertised(name) {
+			out = append(out, entry.spec)
 		}
-		if !c.advertised(spec.Name) {
-			continue
-		}
-		loaded := spec.Metadata.AlwaysVisible || c.schemaLoadedLocked(sessionID, spec.Name)
-		if callableOnly && !loaded {
-			continue
-		}
-		if !callableOnly && !loaded {
-			spec.Example = ""
-			spec.Parameters = nil
-		}
-		out = append(out, spec)
 	}
 	return out
+}
+
+// advertised reports whether name may be shown to, and called by, the model.
+// An unset allowlist (the default) advertises every registered tool.
+func (c *Caller) advertised(name string) bool {
+	if name == "tools" {
+		return true
+	}
+	allowlist := c.app.App.Tools.Allowlist
+	return len(allowlist) == 0 || slices.Contains(allowlist, name)
 }
 
 func (c *Caller) HandleCall(ctx context.Context, call *core.ToolCall) (result string, err error) {
@@ -171,32 +151,33 @@ func (c *Caller) HandleCall(ctx context.Context, call *core.ToolCall) (result st
 	if !c.advertised(call.Name) {
 		return "", &core.ToolError{Code: "not_advertised", Payload: fmt.Sprintf("tool %q is not available in this session", call.Name)}
 	}
-	sessionID := core.SessionIDFromContext(ctx)
-	// A first call to a deferred tool loads its schema for the next turn, so
-	// a model that already knows the tool is not sent through tool_search;
-	// if the guessed arguments are wrong the retry sees the schema (#480).
-	if sessionID != "" && !c.toolCallable(sessionID, call.Name) {
-		c.MarkSchemasLoaded(sessionID, []string{call.Name})
-	}
 	c.mu.RLock()
 	entry := c.native[call.Name]
 	c.mu.RUnlock()
-	if entry.handler != nil {
-		callCtx, done, policyErr := c.beginCall(ctx, entry, call)
-		defer done()
-		if policyErr != nil {
-			return "", policyErr
-		}
-		ctx = callCtx
-		meta := core.ToolResultMeta{ToolName: call.Name, Runtime: entry.spec.Metadata.Runtime, Source: core.FirstNonEmptyTrimmed(entry.spec.Metadata.Source, "native")}
-		result, err := entry.handler(ctx, call)
-		if err != nil {
-			return c.filterHandlerError(ctx, meta, err)
-		}
-		return c.filterResult(ctx, meta, result)
+	if entry.handler == nil {
+		return "", fmt.Errorf("unknown tool %q", call.Name)
 	}
-
-	return "", fmt.Errorf("unknown tool %q", call.Name)
+	if err := c.checkManagedCall(ctx, call); err != nil {
+		return "", err
+	}
+	callCtx, done, policyErr := c.beginCall(ctx, entry, call)
+	defer done()
+	if policyErr != nil {
+		return "", policyErr
+	}
+	ctx = callCtx
+	meta := core.ToolResultMeta{ToolName: call.Name, Runtime: entry.spec.Metadata.Runtime, Source: strutil.FirstNonEmptyTrimmed(entry.spec.Metadata.Source, "native")}
+	result, err = entry.handler(ctx, call)
+	if err != nil {
+		return c.filterHandlerError(ctx, meta, err)
+	}
+	if call.Name == "create_tool" && call.Managed {
+		result, err = c.createdTool(ctx, call, result)
+		if err != nil {
+			return "", err
+		}
+	}
+	return c.filterResult(ctx, meta, result)
 }
 
 // filterHandlerError handles a tool handler error. A flagged-but-completed
@@ -209,9 +190,7 @@ func (c *Caller) filterHandlerError(ctx context.Context, meta core.ToolResultMet
 		if ferr != nil {
 			return "", ferr
 		}
-		if filtered == "" {
-			filtered = "[output removed by filter]"
-		}
+		filtered = cmp.Or(filtered, "[output removed by filter]")
 		te.Payload = filtered
 		return filtered, err
 	}
@@ -229,13 +208,8 @@ func (c *Caller) RegisterNative(spec core.ToolSpec, handler core.NativeHandler) 
 	if c == nil || handler == nil {
 		return
 	}
-	spec.Metadata.Source = core.FirstNonEmptyTrimmed(spec.Metadata.Source, "native")
-	spec.Metadata.Namespace = core.FirstNonEmptyTrimmed(spec.Metadata.Namespace, defaultNativeNamespace(spec.Name))
-	// Only the core set ships its schema every turn; the rest is deferred
-	// behind tool_search unless an allowlist names it (#480).
-	if len(c.app.App.Tools.Allowlist) == 0 && !slices.Contains(constants.EagerSchemaTools, spec.Name) {
-		spec.Metadata.AlwaysVisible = false
-	}
+	spec.Metadata.Source = strutil.FirstNonEmptyTrimmed(spec.Metadata.Source, "native")
+	spec.Metadata.Namespace = strutil.FirstNonEmptyTrimmed(spec.Metadata.Namespace, defaultNativeNamespace(spec.Name))
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.native == nil {
@@ -243,61 +217,15 @@ func (c *Caller) RegisterNative(spec core.ToolSpec, handler core.NativeHandler) 
 	}
 	c.native[spec.Name] = nativeEntry{spec: spec, handler: handler}
 	c.specs = core.UpsertToolSpec(c.specs, spec)
-	c.revision++
 }
 
-func (c *Caller) MarkSchemasLoaded(sessionID string, names []string) {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
+func (c *Caller) ForgetSession(id string) {
+	if c == nil {
 		return
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.loadedSchemas == nil {
-		c.loadedSchemas = map[string]map[string]struct{}{}
-	}
-	if c.loadedSchemas[sessionID] == nil {
-		c.loadedSchemas[sessionID] = map[string]struct{}{}
-	}
-	maps.Copy(c.loadedSchemas[sessionID], core.StringSet(names))
-	c.revision++
-}
-
-// ForgetSession drops the schema-loaded state tracked for a session. Session
-// owners must call it (via Session.Close) when the session ends so entries do
-// not accumulate on a long-lived Caller shared across sessions (#317 B11).
-// No-op for unknown or blank IDs; idempotent.
-func (c *Caller) ForgetSession(sessionID string) {
-	if c == nil || strings.TrimSpace(sessionID) == "" {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.loadedSchemas[sessionID]; !ok {
-		return
-	}
-	delete(c.loadedSchemas, sessionID)
-	c.revision++
-}
-
-func (c *Caller) toolCallable(sessionID, name string) bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	i := slices.IndexFunc(c.specs, func(spec core.ToolSpec) bool { return spec.Name == name })
-	// Fail-open is intentional: an unregistered spec means this gate can't
-	// evaluate visibility at all, so it defers to the tool dispatcher itself
-	// to reject unknown tool names rather than silently blocking calls here.
-	if i < 0 {
-		return true
-	}
-	return c.specs[i].Metadata.AlwaysVisible || c.schemaLoadedLocked(sessionID, name)
-}
-
-func (c *Caller) schemaLoadedLocked(sessionID, name string) bool {
-	if strings.TrimSpace(sessionID) == "" {
-		return true
-	}
-	_, ok := c.loadedSchemas[sessionID][name]
-	return ok
+	delete(c.managed, id)
 }
 
 func (c *Caller) ReplaceNativeToolsBySource(source string, tools []core.DynamicNativeTool) []string {
@@ -324,7 +252,6 @@ func (c *Caller) ReplaceNativeToolsBySource(source string, tools []core.DynamicN
 		c.native[spec.Name] = nativeEntry{spec: spec, handler: tool.Handler}
 		c.specs = core.UpsertToolSpec(c.specs, spec)
 	}
-	c.revision++
 	return skipped
 }
 
@@ -338,8 +265,8 @@ func validDynamicNativeTool(tool core.DynamicNativeTool) bool {
 }
 
 func normalizedDynamicToolSpec(spec core.ToolSpec, source string) core.ToolSpec {
-	spec.Metadata.Source = core.FirstNonEmptyTrimmed(spec.Metadata.Source, source)
-	spec.Metadata.Namespace = core.FirstNonEmptyTrimmed(spec.Metadata.Namespace, defaultNativeNamespace(spec.Name))
+	spec.Metadata.Source = strutil.FirstNonEmptyTrimmed(spec.Metadata.Source, source)
+	spec.Metadata.Namespace = strutil.FirstNonEmptyTrimmed(spec.Metadata.Namespace, defaultNativeNamespace(spec.Name))
 	return spec
 }
 
@@ -348,3 +275,8 @@ func normalizedDynamicToolSpec(spec core.ToolSpec, source string) core.ToolSpec 
 var nativeNamespaces = map[string]string{"file_search": "workspace", "apply_patch": "workspace", "load_skill": "skill", "memory": "memory", "recall": "memory"}
 
 func defaultNativeNamespace(name string) string { return cmp.Or(nativeNamespaces[name], "system") }
+
+// AvailableSpecs is the live permitted catalog for UI and runtime discovery.
+func (c *Caller) AvailableSpecs() []core.ToolSpec {
+	return slices.DeleteFunc(c.Specs(), func(spec core.ToolSpec) bool { return !c.advertised(spec.Name) || managementHidden(spec.Name) })
+}

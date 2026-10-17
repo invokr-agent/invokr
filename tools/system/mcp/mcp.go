@@ -2,15 +2,10 @@ package mcp
 
 import (
 	"bufio"
-	"bytes"
 	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
 	"io"
 	"maps"
 	"os/exec"
@@ -19,6 +14,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
+
 	"go.uber.org/zap"
 )
 
@@ -26,6 +27,9 @@ const (
 	sourcePrefix       = "mcp:"
 	discoveryTimeout   = 30 * time.Second
 	defaultCallTimeout = 2 * time.Minute
+	maxMessageBytes    = 8 * 1024 * 1024
+	maxDiscoveryPages  = 32
+	maxDiscoveryTools  = 4096
 )
 
 type rpcRequest struct {
@@ -47,7 +51,8 @@ type rpcError struct {
 }
 
 type toolList struct {
-	Tools []mcpTool `json:"tools"`
+	Tools      []mcpTool `json:"tools"`
+	NextCursor string    `json:"nextCursor"`
 }
 
 type mcpTool struct {
@@ -57,6 +62,7 @@ type mcpTool struct {
 }
 
 type callResult struct {
+	IsError bool `json:"isError,omitempty"`
 	Content []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
@@ -65,10 +71,9 @@ type callResult struct {
 
 func RegisterMCPTools(registrar core.NativeRegistrar, deps core.CallerDeps, logger *zap.Logger) {
 	for name, server := range deps.App.MCP.Servers {
-		if !server.Enabled {
-			continue
+		if server.Enabled {
+			go registerServerTools(registrar, name, server, deps.Approver, logger)
 		}
-		go registerServerTools(registrar, name, server, deps.Approver, logger)
 	}
 }
 
@@ -82,12 +87,10 @@ func registerServerTools(registrar core.NativeRegistrar, name string, server con
 		}
 		return
 	}
-	dynamic := make([]core.DynamicNativeTool, 0, len(tools))
-	for _, tool := range filterTools(tools, server) {
-		dynamic = append(dynamic, dynamicTool(name, server, tool, approver))
-	}
-	skipped := registrar.ReplaceNativeToolsBySource(sourcePrefix+name, dynamic)
-	for _, skippedName := range skipped {
+	dynamic := core.MapSlice(filterTools(tools, server), func(tool mcpTool) core.DynamicNativeTool {
+		return dynamicTool(name, server, tool, approver)
+	})
+	for _, skippedName := range registrar.ReplaceNativeToolsBySource(sourcePrefix+name, dynamic) {
 		logger.Warn("MCP tool ignored in favor of native tool", zap.String("name", skippedName))
 	}
 }
@@ -98,25 +101,24 @@ func dynamicTool(serverName string, server config.MCPServerConfig, tool mcpTool,
 	if len(schema) == 0 {
 		schema = map[string]any{"type": "object", "additionalProperties": true}
 	}
-	metadata := core.NativeMetadata("mcp", []string{"mcp_tool"}, approvalMode(server), core.ToolCapabilities{Network: true, ExecutesCode: true})
-	metadata.AlwaysVisible = false
-	metadata.ManagedApproval = true
+	// Remote tool descriptions are untrusted; every transport defaults to ask.
+	mode := strutil.FirstNonEmpty(server.DefaultToolsApprovalMode, constants.ApprovalPolicyAsk)
+	metadata := core.NativeMetadata("mcp", []string{"mcp_tool"}, mode, core.ToolCapabilities{Network: true, ExecutesCode: true})
+	metadata.AlwaysVisible, metadata.ManagedApproval = false, true
 	spec := core.ToolSpec{
-		Name: name, Description: core.FirstNonEmpty(tool.Description, "MCP tool "+tool.Name),
+		Name: name, Description: strutil.FirstNonEmpty(tool.Description, "MCP tool "+tool.Name),
 		Example: fmt.Sprintf(`{"name":"%s","arguments":{}}`, name), Parameters: schema, Metadata: metadata,
 	}
 	return core.DynamicNativeTool{
 		Spec: spec,
 		Handler: func(ctx context.Context, call *core.ToolCall) (string, error) {
-			var args map[string]any
-			if len(call.Arguments) > 0 {
-				if err := json.Unmarshal(call.Arguments, &args); err != nil {
-					return "", fmt.Errorf("parse MCP tool arguments: %w", err)
-				}
+			args, err := core.DecodeOptionalToolArgs[map[string]any](call)
+			if err != nil {
+				return "", fmt.Errorf("parse MCP tool arguments: %w", err)
 			}
 			req := approval.Request{Tool: spec.Name, Tier: "mcp_tool", Summary: "Call MCP tool", Details: "Server: " + serverName + "\nTool: " + tool.Name, Subject: mcpArgsSubject(args), Network: true}
 			decision := core.Ask(req)
-			if approvalMode(server) == constants.ApprovalPolicyAuto {
+			if mode == constants.ApprovalPolicyAuto {
 				decision = core.Automatic(req)
 			}
 			if err := core.EnforceApproval(ctx, approver, spec, decision); err != nil {
@@ -132,25 +134,41 @@ func dynamicTool(serverName string, server config.MCPServerConfig, tool mcpTool,
 // standing grant like `mcp_fixture_echo 1 'hello*'` can match. Nothing
 // beyond the arguments themselves goes here.
 func mcpArgsSubject(args map[string]any) string {
-	keys := slices.Sorted(maps.Keys(args))
-	return strings.Join(core.MapSlice(keys, func(k string) string {
-		return fmt.Sprintf("%s=%v", k, args[k])
-	}), " ")
+	return strings.Join(core.MapSlice(slices.Sorted(maps.Keys(args)), func(k string) string { return fmt.Sprintf("%s=%v", k, args[k]) }), " ")
 }
 
-func loadServerTools(ctx context.Context, name string, server config.MCPServerConfig) ([]mcpTool, error) {
+// Discovery publishes only a complete list and bounds both pages and total tools.
+func loadServerTools(ctx context.Context, name string, server config.MCPServerConfig) (tools []mcpTool, err error) {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
 	client, err := persistentClient(ctx, name, server)
 	if err != nil {
 		return nil, err
 	}
-	var list toolList
-	if err := client.request(ctx, "tools/list", map[string]any{}, &list); err != nil {
-		evictClient(clientKey(name, server), client)
-		return nil, err
+	defer func() {
+		if err != nil {
+			evictClient(clientKey(name, server), client)
+		}
+	}()
+	params, seen := map[string]string{}, map[string]bool{}
+	for range maxDiscoveryPages {
+		var page toolList
+		if err := client.request(ctx, "tools/list", params, &page); err != nil {
+			return nil, err
+		}
+		if len(tools)+len(page.Tools) > maxDiscoveryTools {
+			return nil, fmt.Errorf("MCP discovery exceeds %d tools", maxDiscoveryTools)
+		}
+		tools = append(tools, page.Tools...)
+		if page.NextCursor == "" {
+			return tools, nil
+		}
+		if seen[page.NextCursor] {
+			return nil, fmt.Errorf("MCP discovery repeated cursor")
+		}
+		seen[page.NextCursor], params["cursor"] = true, page.NextCursor
 	}
-	return list.Tools, nil
+	return nil, fmt.Errorf("MCP discovery exceeds %d pages", maxDiscoveryPages)
 }
 
 func callServerTool(ctx context.Context, name string, server config.MCPServerConfig, toolName string, args map[string]any) (string, error) {
@@ -173,9 +191,13 @@ func callServerTool(ctx context.Context, name string, server config.MCPServerCon
 	}
 	if len(parts) == 0 {
 		raw, _ := json.Marshal(result)
-		return string(raw), nil
+		parts = append(parts, string(raw))
 	}
-	return strings.Join(parts, "\n"), nil
+	output := strings.Join(parts, "\n")
+	if result.IsError {
+		return output, &core.ToolError{Code: "mcp_tool_error", Payload: output}
+	}
+	return output, nil
 }
 
 // transport is one MCP connection: stdio subprocess or streamable HTTP.
@@ -188,8 +210,9 @@ type transport interface {
 type stdioClient struct {
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser
-	reader     *bufio.Reader
-	stderr     *bytes.Buffer
+	stdout     io.ReadCloser
+	reader     *bufio.Scanner
+	stderr     *core.TruncatingWriters
 	gate, done chan struct{}
 	nextID     int
 }
@@ -277,7 +300,8 @@ func startClient(server config.MCPServerConfig) (*stdioClient, error) {
 	if strings.TrimSpace(server.Command) == "" {
 		return nil, fmt.Errorf("MCP command is required")
 	}
-	cmd := exec.Command(server.Command, server.Args...)
+	cmd := exec.CommandContext(context.Background(), server.Command, server.Args...)
+	core.ConfigureProcessGroup(cmd)
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -286,8 +310,8 @@ func startClient(server config.MCPServerConfig) (*stdioClient, error) {
 	if err != nil {
 		return nil, err
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	stderr := core.NewTruncatingWriters(64 * 1024)
+	cmd.Stderr = stderr.Stderr()
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start MCP server: %w", err)
 	}
@@ -296,7 +320,9 @@ func startClient(server config.MCPServerConfig) (*stdioClient, error) {
 		_ = cmd.Wait()
 		close(done)
 	}()
-	client := &stdioClient{cmd: cmd, stdin: stdin, reader: bufio.NewReader(stdout), stderr: &stderr, gate: make(chan struct{}, 1), done: done}
+	reader := bufio.NewScanner(stdout)
+	reader.Buffer(make([]byte, 4096), maxMessageBytes+2)
+	client := &stdioClient{cmd: cmd, stdin: stdin, stdout: stdout, reader: reader, stderr: stderr, gate: make(chan struct{}, 1), done: done}
 	client.gate <- struct{}{}
 	return client, nil
 }
@@ -311,17 +337,16 @@ func (c *stdioClient) request(ctx context.Context, method string, params any, ou
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(c.stdin, "%s\n", payload); err != nil {
-		return fmt.Errorf("write MCP request: %w", err)
+	done := make(chan error, 1)
+	go func() { done <- c.exchange(method, payload, out) }()
+	select {
+	case err := <-done:
+		return c.withStderr(err)
+	case <-ctx.Done():
+		c.kill()
+		<-done // Finish pipe I/O and decoding before releasing the gate.
+		return fmt.Errorf("MCP %s: %w", method, ctx.Err())
 	}
-	if strings.HasPrefix(method, "notifications/") {
-		return nil
-	}
-	respBytes, err := c.readResponse(ctx, method, c.nextID)
-	if err != nil {
-		return err
-	}
-	return c.withStderr(decodeRPC(method, respBytes, out))
 }
 
 func (c *stdioClient) acquire(ctx context.Context) error {
@@ -335,34 +360,24 @@ func (c *stdioClient) acquire(ctx context.Context) error {
 	}
 }
 
-func (c *stdioClient) readResponse(ctx context.Context, method string, id int) ([]byte, error) {
-	response := make(chan []byte, 1)
-	readErr := make(chan error, 1)
-	go func() {
-		for {
-			message, err := c.reader.ReadBytes('\n')
-			if err != nil {
-				readErr <- fmt.Errorf("read MCP message: %w", err)
-				return
-			}
-			if !messageMatchesID(message, id) {
-				// Notification or a response to a different in-flight request:
-				// keep reading until the one we're waiting on arrives.
-				continue
-			}
-			response <- message
-			return
-		}
-	}()
-	select {
-	case respBytes := <-response:
-		return respBytes, nil
-	case err := <-readErr:
-		return nil, c.withStderr(err)
-	case <-ctx.Done():
-		c.kill()
-		return nil, fmt.Errorf("MCP %s: %w", method, ctx.Err())
+// exchange runs under the request gate; cancellation closes its pipes and drains it.
+func (c *stdioClient) exchange(method string, payload []byte, out any) error {
+	if _, err := fmt.Fprintf(c.stdin, "%s\n", payload); err != nil {
+		return fmt.Errorf("write MCP request: %w", err)
 	}
+	if strings.HasPrefix(method, "notifications/") {
+		return nil
+	}
+	for c.reader.Scan() {
+		message := c.reader.Bytes()
+		if len(message) > maxMessageBytes {
+			return fmt.Errorf("read MCP message: MCP response exceeds %d bytes", maxMessageBytes)
+		}
+		if messageMatchesID(message, c.nextID) {
+			return decodeRPC(method, message, out)
+		}
+	}
+	return fmt.Errorf("read MCP message: %w", cmp.Or(c.reader.Err(), io.EOF))
 }
 
 // messageMatchesID reports whether a raw JSON-RPC message carries the given
@@ -371,9 +386,7 @@ func (c *stdioClient) readResponse(ctx context.Context, method string, id int) (
 // A message that fails to parse at all is treated as a match so the caller
 // still surfaces the parse error instead of hanging forever.
 func messageMatchesID(message []byte, id int) bool {
-	var probe struct {
-		ID int `json:"id"`
-	}
+	var probe struct{ ID int }
 	return json.Unmarshal(message, &probe) != nil || probe.ID == id
 }
 
@@ -399,16 +412,14 @@ func decodeRPC(method string, respBytes []byte, out any) error {
 }
 
 func (c *stdioClient) withStderr(err error) error {
-	if err == nil || c == nil || c.stderr == nil || strings.TrimSpace(c.stderr.String()) == "" {
-		return err
+	if detail := strings.TrimSpace(c.stderr.StderrString()); err != nil && detail != "" {
+		return fmt.Errorf("%w; stderr: %s", err, detail)
 	}
-	return fmt.Errorf("%w; stderr: %s", err, strings.TrimSpace(c.stderr.String()))
+	return err
 }
 
+// Lifecycle methods only receive clients returned by a successful startClient.
 func (c *stdioClient) close() {
-	if c == nil {
-		return
-	}
 	c.kill()
 	select {
 	case <-c.done:
@@ -417,13 +428,9 @@ func (c *stdioClient) close() {
 }
 
 func (c *stdioClient) kill() {
-	if c == nil {
-		return
-	}
 	_ = c.stdin.Close()
-	if c.cmd != nil && c.cmd.Process != nil {
-		_ = c.cmd.Process.Kill()
-	}
+	_ = c.stdout.Close()
+	_ = c.cmd.Cancel()
 }
 
 func evictClient(key string, failed transport) {
@@ -453,8 +460,7 @@ func ShutdownClients() {
 }
 
 func filterTools(tools []mcpTool, server config.MCPServerConfig) []mcpTool {
-	enabled := core.StringSet(server.EnabledTools)
-	disabled := core.StringSet(server.DisabledTools)
+	enabled, disabled := core.StringSet(server.EnabledTools), core.StringSet(server.DisabledTools)
 	out := slices.DeleteFunc(slices.Clone(tools), func(tool mcpTool) bool {
 		_, allowed := enabled[tool.Name]
 		_, denied := disabled[tool.Name]
@@ -462,16 +468,6 @@ func filterTools(tools []mcpTool, server config.MCPServerConfig) []mcpTool {
 	})
 	slices.SortFunc(out, func(a, b mcpTool) int { return cmp.Compare(a.Name, b.Name) })
 	return out
-}
-
-// approvalMode defaults to ask for every transport. HTTP servers are remote,
-// third-party tool providers whose tool descriptions are model-visible
-// untrusted text, so the default must never relax for them.
-func approvalMode(server config.MCPServerConfig) string {
-	if strings.TrimSpace(server.DefaultToolsApprovalMode) != "" {
-		return server.DefaultToolsApprovalMode
-	}
-	return constants.ApprovalPolicyAsk
 }
 
 func registerErrorTool(registrar core.NativeRegistrar, server string, loadErr error) {
@@ -486,13 +482,7 @@ func registerErrorTool(registrar core.NativeRegistrar, server string, loadErr er
 }
 
 func safeName(name string) string {
-	var b strings.Builder
-	for _, r := range strings.ToLower(name) {
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		} else if b.Len() == 0 || b.String()[b.Len()-1] != '_' {
-			b.WriteByte('_')
-		}
-	}
-	return strings.Trim(b.String(), "_")
+	return strings.Join(strings.FieldsFunc(strings.ToLower(name), func(r rune) bool {
+		return (r < 'a' || r > 'z') && (r < '0' || r > '9')
+	}), "_")
 }

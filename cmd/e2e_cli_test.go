@@ -54,8 +54,8 @@ func TestCLI_E2E_MockedLLM_ExecutesToolWithoutWritingMarkdownMemory(t *testing.T
 	state := newE2EState(t)
 	writeFixtureProbeToolbox(t, state.toolbox, "alpha")
 	provider := providertest.NewScripted(t,
-		providertest.ToolCallStep("tool_search", `{"query":"fixture_probe","include_schema":true}`),
-		providertest.ToolCallStep("fixture_probe", `{"path":"input.txt"}`),
+		providertest.ToolCallStep("tools", `{"action":"enable","names":["fixture_probe"]}`),
+		providertest.ToolCallStep("tools", `{"action":"run","name":"fixture_probe","arguments":{"path":"input.txt"}}`),
 		providertest.ReplyStep("fixture contained: alpha"),
 	)
 	defer provider.Close()
@@ -83,8 +83,9 @@ func TestCLI_E2E_MockedLLM_ExecutesToolWithoutWritingMarkdownMemory(t *testing.T
 	// The seeded PERSONA.md mirrors the constant, so the base prompt is the
 	// same text whether or not setup ran.
 	assertContains(t, firstSystem, constants.DefaultAgentSystemPrompt)
-	assertContains(t, firstSystem, "fixture_probe")
-	assertContains(t, firstSystem, "Read a named fixture file")
+	// Optional tools are named with a one-line purpose; their schemas stay out.
+	assertContains(t, firstSystem, "Optional tools:\n")
+	assertContains(t, firstSystem, "- fixture_probe: ")
 	assertContains(t, messageContent(snapshot.CompletionRequests[0].Messages[1]), "please inspect the fixture")
 
 	firstCompletion := snapshot.CompletionRequests[0]
@@ -145,9 +146,9 @@ func TestCLI_E2E_MockedLLM_RecoversFromRepeatedToolLoop(t *testing.T) {
 	state := newE2EState(t)
 	writeEmptyToolbox(t, state.toolbox)
 	provider := providertest.NewScripted(t,
-		providertest.ToolCallStep("tool_search", `{"query":"missing-fixture"}`),
-		providertest.ToolCallStep("tool_search", `{"query":"missing-fixture"}`),
-		providertest.ToolCallStep("tool_search", `{"query":"missing-fixture"}`),
+		providertest.ToolCallStep("tools", `{"action":"search","query":"missing-fixture"}`),
+		providertest.ToolCallStep("tools", `{"action":"search","query":"missing-fixture"}`),
+		providertest.ToolCallStep("tools", `{"action":"search","query":"missing-fixture"}`),
 		providertest.ReplyStep("loop recovered"),
 		providertest.ReplyStep("follow-up clean"),
 	)
@@ -180,7 +181,8 @@ func TestCLI_E2E_MockedLLM_PersistsMemoryToolAndLoadsPrompt(t *testing.T) {
 	state := newE2EState(t)
 	writeEmptyToolbox(t, state.toolbox)
 	firstProvider := providertest.NewScripted(t,
-		providertest.ToolCallStep("memory", `{"action":"save","scope":"project","kind":"fact","source":"markdown","content":"The fixture keyword is alpha."}`),
+		providertest.ToolCallStep("tools", `{"action":"enable","names":["memory"]}`),
+		providertest.ToolCallStep("tools", `{"action":"run","name":"memory","arguments":{"action":"save","scope":"project","kind":"fact","source":"markdown","content":"The fixture keyword is alpha."}}`),
 		providertest.ReplyStep("remembered"),
 	)
 	defer firstProvider.Close()
@@ -247,7 +249,7 @@ func TestCLI_E2E_MockedLLM_SlashCommandsStayLocal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("invokr agent failed: %v\noutput:\n%s", err, output)
 	}
-	for _, want := range []string{"/jobs [run <name>]", "NATIVE TOOLS", "tool_search", "unknown command, try /help", "normal prompt reached provider"} {
+	for _, want := range []string{"/jobs [run <name>]", "NATIVE TOOLS", "tools", "unknown command, try /help", "normal prompt reached provider"} {
 		assertContains(t, output, want)
 	}
 
@@ -302,7 +304,7 @@ func runInvokrAgent(t *testing.T, baseURL string, state e2eState, stdin string) 
 	ctx, cancel := context.WithTimeout(context.Background(), invokrE2ETimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, invokrBinary(t), "--base-url="+baseURL, "agent")
+	cmd := exec.CommandContext(ctx, invokrBinary(t), "--base-url="+baseURL, "--model=test-model", "agent")
 	cmd.Dir = state.workDir
 	cmd.Env = mergedEnv(os.Environ(), map[string]string{
 		// Isolate from the developer's real ~/.invokr (config.json there can

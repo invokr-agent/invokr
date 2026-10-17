@@ -26,12 +26,7 @@ type Client struct {
 	allowedIDs     map[int64]bool
 	allowAll       bool
 	httpClient     *http.Client
-	pending        sync.Map // map[string]*pendingApproval — approval callbacks
-}
-
-type pendingApproval struct {
-	chatID   string
-	decision chan bool
+	pending        sync.Map // map[string]*messaging.PendingApproval — approval callbacks
 }
 
 // New constructs a Client. Returns an error if token is empty.
@@ -54,7 +49,6 @@ func NewWithBaseURL(token string, allowedChatIDs []int64, allowAll bool, baseURL
 	}, nil
 }
 
-// Name returns "telegram".
 func (c *Client) Name() string { return "telegram" }
 
 // Allowed reports whether the chat is on the allowlist. Fail closed: a chat ID
@@ -67,9 +61,7 @@ func (c *Client) Allowed(chatID string) bool {
 // Listen starts the long-poll loop. Closes the channel when ctx is cancelled
 // or a fatal error occurs (e.g. 401 Unauthorized).
 func (c *Client) Listen(ctx context.Context) (<-chan messaging.Inbound, error) {
-	out := make(chan messaging.Inbound, 32)
-	go c.pollLoop(ctx, out)
-	return out, nil
+	return messaging.StartListen(ctx, c.pollLoop)
 }
 
 func (c *Client) pollLoop(ctx context.Context, out chan<- messaging.Inbound) {
@@ -130,7 +122,7 @@ func (c *Client) handleCallback(ctx context.Context, cq *tgCallbackQuery) {
 	value, ok := c.pending.Load(reqID)
 	_ = c.answerCallbackQuery(ctx, cq.ID)
 	if ok {
-		if value.(*pendingApproval).chatID != strconv.FormatInt(cq.Message.Chat.ID, 10) {
+		if value.(*messaging.PendingApproval).ChatID != strconv.FormatInt(cq.Message.Chat.ID, 10) {
 			return
 		}
 		ok = c.pending.CompareAndDelete(reqID, value)
@@ -144,7 +136,7 @@ func (c *Client) handleCallback(ctx context.Context, cq *tgCallbackQuery) {
 		return
 	}
 	select {
-	case value.(*pendingApproval).decision <- approved:
+	case value.(*messaging.PendingApproval).Decision <- approved:
 	default:
 	}
 	label := "✅ Approved"
@@ -167,29 +159,13 @@ func (c *Client) Send(ctx context.Context, chatID string, text string) error {
 // AskApproval sends an inline-keyboard message and blocks until the user
 // clicks a button or ctx expires.
 func (c *Client) AskApproval(ctx context.Context, chatID string, req messaging.ApprovalRequest) (bool, error) {
-	req.ID = strings.TrimSpace(req.ID)
-	if req.ID == "" {
-		return false, fmt.Errorf("telegram: approval request ID is required")
-	}
-	pending := &pendingApproval{chatID: chatID, decision: make(chan bool, 1)}
-	if _, loaded := c.pending.LoadOrStore(req.ID, pending); loaded {
-		return false, fmt.Errorf("telegram: duplicate approval request ID %q", req.ID)
-	}
-	defer c.pending.CompareAndDelete(req.ID, pending)
-	prompt := messaging.ApprovalPromptText(req)
-	markup := map[string]any{"inline_keyboard": [][]map[string]string{{
-		{"text": "✅ Approve", "callback_data": "approve:" + req.ID}, {"text": "❌ Deny", "callback_data": "deny:" + req.ID},
-	}}}
-
-	if _, err := c.sendMessage(ctx, chatID, prompt, markup); err != nil {
-		return false, err
-	}
-	select {
-	case approved := <-pending.decision:
-		return approved, nil
-	case <-ctx.Done():
-		return false, ctx.Err()
-	}
+	return messaging.AwaitApproval(ctx, &c.pending, c.Name(), chatID, req, func(req messaging.ApprovalRequest) error {
+		markup := map[string]any{"inline_keyboard": [][]map[string]string{{
+			{"text": "✅ Approve", "callback_data": "approve:" + req.ID}, {"text": "❌ Deny", "callback_data": "deny:" + req.ID},
+		}}}
+		_, err := c.sendMessage(ctx, chatID, messaging.ApprovalPromptText(req), markup)
+		return err
+	})
 }
 
 // SetTyping refreshes Telegram's short-lived typing indicator. Telegram has

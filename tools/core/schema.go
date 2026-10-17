@@ -98,9 +98,7 @@ func schemaFieldName(field reflect.StructField) (name string, optional, ok bool)
 	if name == "-" {
 		return "", false, false
 	}
-	if name == "" {
-		name = field.Name
-	}
+	name = cmp.Or(name, field.Name)
 	optional = strings.Contains(rest, "omitempty") || field.Type.Kind() == reflect.Pointer
 	return name, optional, true
 }

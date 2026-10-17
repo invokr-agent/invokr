@@ -108,13 +108,13 @@ func TestApplyEnvLastNameWins(t *testing.T) {
 }
 
 func TestToolQuotasFromEnv(t *testing.T) {
-	t.Setenv("INVOKR_TOOL_QUOTAS", "web_search=2,web_fetch=9")
+	t.Setenv("INVOKR_TOOL_QUOTAS", "web_search=2")
 	cfg := AppConfig{}.withEnv().WithDefaults()
-	if cfg.Agent.ToolQuotas["web_search"] != 2 || cfg.Agent.ToolQuotas["web_fetch"] != 9 {
+	if cfg.Agent.ToolQuotas["web_search"] != 2 || cfg.Agent.ToolQuotas["web_fetch"] != 8 {
 		t.Fatalf("quotas = %v", cfg.Agent.ToolQuotas)
 	}
-	// Tools the override did not name keep their default quota.
-	if cfg.Agent.ToolQuotas["delegate"] != 3 {
-		t.Fatalf("delegate quota = %d, want the default 3", cfg.Agent.ToolQuotas["delegate"])
+	// The stale delegate key must not reappear through defaults.
+	if _, ok := cfg.Agent.ToolQuotas["delegate"]; ok {
+		t.Fatal("stale delegate quota retained")
 	}
 }

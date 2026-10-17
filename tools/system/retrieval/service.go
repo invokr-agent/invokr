@@ -104,11 +104,10 @@ func RegisterRetrievalTool(c core.NativeRegistrar, deps core.CallerDeps, wsp wor
 func (s *Service) RunToolArgs(ctx context.Context, args Args) (string, error) {
 	started := s.now()
 	docHits, sourceCount, err := s.searchDocs(ctx, args)
-	if err != nil {
-		s.dispatchAudit(ctx, ActionSearch, args, sourceCount, 0, 0, s.now().Sub(started), "failed", err)
-		return "", err
+	var memHits []Hit
+	if err == nil {
+		memHits, err = s.memoryHits(ctx, args)
 	}
-	memHits, err := s.memoryHits(ctx, args)
 	if err != nil {
 		s.dispatchAudit(ctx, ActionSearch, args, sourceCount, 0, 0, s.now().Sub(started), "failed", err)
 		return "", err
@@ -200,7 +199,7 @@ func (s *Service) memoryHitFromRecall(hit memorycore.Hit, queryTokens []string) 
 	id := hit.Record.ID
 	return Hit{
 		SourceType: "memory", PathOrID: id, Snippet: snippetFor(content, queryTokens),
-		Score: mathutil.Clamp01(hit.Score), SourceHash: "sha256:" + core.HashHex(content),
+		Score: mathutil.Clamp01(hit.Score), SourceHash: "sha256:" + strutil.HashHex(content),
 		IndexedAt: recordTimestamp(hit.Record), Stale: false, LineStart: 1,
 		LineEnd: countLines([]byte(content)), MemoryRecordID: &id,
 	}
@@ -240,7 +239,7 @@ func (s *Service) dispatchAudit(ctx context.Context, action string, args Args, s
 		details["scope"] = args.Scope
 	}
 	if args.Query != "" {
-		details["query_hash"] = core.HashHexTrimmed(args.Query)
+		details["query_hash"] = strutil.HashHexTrimmed(args.Query)
 	}
 	core.DispatchAudit(ctx, s.dispatcher, &events.AuditPayload{Tool: ToolName, Action: action, Outcome: outcome, Details: details}, err)
 }

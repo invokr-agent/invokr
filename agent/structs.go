@@ -150,6 +150,7 @@ type OpenAIModelGateway struct {
 	codec           OpenAINativeToolCodec
 	events          events.Dispatcher
 	parentSessionID string
+	toolDefsJSON    []byte
 	// promptCacheExtra carries provider-specific explicit cache markers into
 	// every completion body; nil (the default) sends nothing extra.
 	promptCacheExtra map[string]any
@@ -195,12 +196,6 @@ type TurnProcessor struct {
 	// Request-local denial history prevents identical retries from re-prompting.
 	callMu      sync.Mutex
 	deniedCalls map[string]struct{}
-	// spillRefs maps tool call ID → spill file path for results the gate
-	// stubbed; future eviction/search features read it (guarded by callMu).
-	spillRefs map[string]string
-	// editRejects counts consecutive edit hard failures; past the cap the
-	// model is steered to re-read and rewrite whole (guarded by callMu).
-	editRejects int
 	// quotas caps how many times one run may call a tool (config.ToolQuotas);
 	// quotaUsed counts the calls made against it (guarded by callMu).
 	quotas, quotaUsed map[string]int

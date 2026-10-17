@@ -2,6 +2,7 @@ package sessionstore
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,5 +91,16 @@ func TestStoreSearchReturnsSnippets(t *testing.T) {
 	}
 	if len(hits) != 1 || hits[0].SessionID != "s1" || hits[0].Snippet == "" {
 		t.Fatalf("unexpected hits: %+v", hits)
+	}
+}
+
+func TestLoadMissingSessionIsNotFound(t *testing.T) {
+	store := New(t.TempDir())
+	_, err := store.Load(context.Background(), "nope")
+	if !errors.Is(err, ErrSessionNotFound) || err.Error() != `session "nope" not found` {
+		t.Fatalf("Load(missing) error = %v, want ErrSessionNotFound", err)
+	}
+	if err := store.Delete("nope"); !errors.Is(err, ErrSessionNotFound) {
+		t.Fatalf("Delete(missing) error = %v, want ErrSessionNotFound", err)
 	}
 }

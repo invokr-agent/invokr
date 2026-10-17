@@ -22,7 +22,7 @@ flowchart LR
         tui["agent (TUI / plain)"]
         exec["exec / exec resume"]
         jobsrun["jobs run"]
-        serve["chat serve"]
+        serve["bot serve"]
     end
 
     subgraph external["External systems"]

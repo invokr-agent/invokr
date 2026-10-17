@@ -108,7 +108,7 @@ func TestRunExecPromptRendersFailuresAndCanFailExit(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "1 failed or flagged tool result") {
 		t.Fatalf("error = %v", err)
 	}
-	if !strings.Contains(out.String(), "[Authoritative tool outcome]") || !strings.Contains(out.String(), "demo error: boom") {
+	if !strings.Contains(out.String(), "[Tool attempt failures — history, not final task status]") || !strings.Contains(out.String(), "demo error: boom") {
 		t.Fatalf("guard missing: %q", out.String())
 	}
 }
@@ -125,7 +125,7 @@ func TestRunExecPromptOutputSchemaSuppressesGuard(t *testing.T) {
 	if err := runExecPrompt(context.Background(), services, &out, &bytes.Buffer{}, "hello", execOptions{schemaPath: schemaPath, jsonOutput: true}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out.String(), "Authoritative tool outcome") || !strings.Contains(out.String(), `"tool_call_count":1`) || !strings.Contains(out.String(), `"tool_failures"`) {
+	if strings.Contains(out.String(), "Tool attempt failures") || !strings.Contains(out.String(), `"tool_call_count":1`) || !strings.Contains(out.String(), `"tool_failures"`) {
 		t.Fatalf("unexpected JSONL: %q", out.String())
 	}
 }
@@ -264,14 +264,14 @@ func TestRunExecPromptWritesFinalMessage(t *testing.T) {
 }
 
 func TestExecApprovalPolicyRequiresEveryRequestedTier(t *testing.T) {
-	policy := newExecApprovalPolicy(execOptions{allowTiers: []string{"read-only"}})
-	if !policy.approves(approval.Request{Tier: "read_workspace"}) {
+	policy := approval.NewTierPolicy(false, []string{"read-only"})
+	if !policy.Approves(approval.Request{Tier: "read_workspace"}) {
 		t.Fatal("read-only alias did not approve read_workspace")
 	}
-	if policy.approves(approval.Request{Tier: "code_execution, read_workspace"}) {
+	if policy.Approves(approval.Request{Tier: "code_execution, read_workspace"}) {
 		t.Fatal("read-only alias approved a mixed code-execution request")
 	}
-	if policy.approves(approval.Request{Tier: "write_workspace"}) {
+	if policy.Approves(approval.Request{Tier: "write_workspace"}) {
 		t.Fatal("read-only alias approved a write request")
 	}
 }
@@ -464,6 +464,14 @@ func TestRunExecResumeContinuesSameSessionWithoutPreamble(t *testing.T) {
 	for _, msg := range messages {
 		if strings.Contains(msg.Text, "Previous session transcript") {
 			t.Fatalf("transcript stored a resume preamble: %q", msg.Text)
+		}
+	}
+}
+
+func TestExecPromptRejectsEmpty(t *testing.T) {
+	for _, args := range [][]string{nil, {"-"}, {"  "}} {
+		if _, err := execPrompt(strings.NewReader(" \n"), args); err == nil {
+			t.Fatalf("execPrompt(%q) = nil error, want empty-prompt error", args)
 		}
 	}
 }

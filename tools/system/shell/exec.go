@@ -1,25 +1,28 @@
 package shell
 
 import (
+	"cmp"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/config"
+
 	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/core/sandbox"
 	"github.com/invokr-ai/invokr/tools/system/workspace"
 )
 
 // Every line runs as `bash -c <line>`. When the host has a namespace sandbox
-// the line runs inside it — the workspace roots are the only writable paths,
-// /tmp is a per-workspace scratch directory outside the workspace (shared
-// with code_interpreter and persistent across calls), the home directory is not mounted, and there is no
-// network unless the line was approved at the network tier. Without a sandbox,
+// the line runs inside it with writable workspace roots, task scratch, selected
+// caches and Git directories. Network is available for network-tier or
+// operator-allowed lines. Without a sandbox,
 // allowlisted lines run on the host as the argv-only tool did, and routed
 // project code (interpreters, workspace scripts) needs the operator opt-out.
 
@@ -78,7 +81,7 @@ func resolveScriptPath(root string, wsp workspace.Policy, dir string) (string, e
 	if filepath.IsAbs(root) {
 		return wsp.Resolve(root)
 	}
-	base := core.FirstNonEmpty(strings.TrimSpace(dir), wsp.Root)
+	base := strutil.FirstNonEmpty(strings.TrimSpace(dir), wsp.Root)
 	if !filepath.IsAbs(base) {
 		base = filepath.Join(wsp.Root, base)
 	}
@@ -94,15 +97,15 @@ func bashPath() (string, error) {
 	return path, nil
 }
 
-// Capture both statuses before any command overwrites PIPESTATUS. A consumer
-// such as head may close early; retain genuine failures mixed with SIGPIPE.
-const pipelineExitTrap = `trap '__invokr_status=("$?" "${PIPESTATUS[@]}")
-if (( ${#__invokr_status[@]} > 2 )); then
-  for __invokr_code in "${__invokr_status[@]:1}"; do
-    if (( __invokr_code != 0 && __invokr_code != 141 )); then exit "$__invokr_code"; fi
-  done
-fi
-exit "${__invokr_status[0]}"' EXIT
+// Keep failures when a later cleanup command succeeds. Ignore the SIGPIPE a
+// consumer such as head can cause, but retain other failures in that pipeline.
+const pipelineExitTrap = `__invokr_failure=0; __invokr_record_status() {
+  local status=$1 code; shift; if (( $# > 1 )); then status=0; for code in "$@"; do if (( code != 0 && code != 141 )); then status=$code; break; fi; done; fi
+  if (( __invokr_failure == 0 && status != 0 )); then __invokr_failure=$status; fi
+}
+trap '__invokr_status=("$?" "${PIPESTATUS[@]}"); if (( __invokr_status[0] == 0 && ${#__invokr_status[@]} > 2 )); then __invokr_record_status "${__invokr_status[@]}"; fi' DEBUG
+trap '__invokr_record_status "$?" "${PIPESTATUS[@]}"' ERR
+trap '__invokr_record_status "$?" "${PIPESTATUS[@]}"; exit "$__invokr_failure"' EXIT
 `
 
 // processSpec builds the spec that runs plan's line, sandboxed when the host
@@ -169,6 +172,10 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 	// too; the JDK keeps its whole conf directory behind one (#546).
 	sb.RO = append(sb.RO, toolDirs...)
 	sb.RO = append(sb.RO, escapedLinkTargets(toolDirs)...)
+	if slices.ContainsFunc(plan.commands, func(command string) bool { return filepath.Base(command) == "make" }) {
+		sb.PinnedRO = userToolFiles(plan.allowedCommands)
+		sb.RO = append(sb.RO, sb.PinnedRO...)
+	}
 	// The gradle home read-only first, its cache directories read-write on
 	// top: sandbox.Command writes the RO binds before the RW ones, so the
 	// narrower mounts layer over the home rather than being hidden by it.
@@ -199,12 +206,15 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 	// A linked worktree's .git is a pointer file, not a directory, and what it
 	// points at is outside the workspace. Without it git cannot read the
 	// repository at all: every command answers "not a git repository".
+	gitDirs := workspace.GitDirs(plan.workspaceRoot)
 	if slices.Contains(plan.commands, "git") {
-		sb.RW = append(sb.RW, workspace.GitDirs(plan.workspaceRoot)...)
-		if path := filepath.Join(plan.workspaceRoot, ".git"); plan.mode == approval.Auto {
-			if info, err := os.Stat(path); err == nil && info.IsDir() {
-				sb.RW = append(sb.RW, path)
-			}
+		mountDirs := gitDirs
+		if len(mountDirs) == 2 { // A linked worktree lives inside its shared repository.
+			mountDirs = mountDirs[:1]
+		}
+		if plan.mode != approval.Plan {
+			sb.PinnedRW = mountDirs
+			sb.RW = append(sb.RW, mountDirs...)
 		}
 		// HOME is forwarded but the home directory itself is not mounted, so
 		// git inside the sandbox finds no global config and therefore no
@@ -217,7 +227,7 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 	}
 	if plan.mode == approval.Plan {
 		// Concat, not append: appending onto plan.roots could write into its backing array.
-		sources := slices.Concat(plan.roots, workspace.GitDirs(plan.workspaceRoot))
+		sources := slices.Concat(plan.roots, gitDirs)
 		sb.Sealed, sb.RO = append(sb.Sealed, sources...), append(sb.RO, sources...)
 		sb.RW = slices.DeleteFunc(sb.RW, func(path string) bool {
 			return slices.ContainsFunc(sources, func(root string) bool { return workspace.Overlaps(root, path) })
@@ -273,7 +283,7 @@ func unsandboxedJVMEnv(plan preparedShellCommand, env []string) []string {
 // does for go itself; otherwise it is the documented default under the user
 // cache dir.
 func goBuildCache() string {
-	if cache := strings.TrimSpace(os.Getenv("GOCACHE")); cache != "" {
+	if cache := config.Env("GOCACHE"); cache != "" {
 		return cache
 	}
 	cache, err := os.UserCacheDir()
@@ -287,16 +297,12 @@ func goBuildCache() string {
 // wins, as it does for go itself; otherwise it is pkg/mod under the first GOPATH
 // entry, defaulting to ~/go.
 func goModCache() string {
-	if cache := strings.TrimSpace(os.Getenv("GOMODCACHE")); cache != "" {
+	if cache := config.Env("GOMODCACHE"); cache != "" {
 		return cache
 	}
-	gopath := strings.TrimSpace(os.Getenv("GOPATH"))
+	gopath := cmp.Or(config.Env("GOPATH"), userHomeDir("go"))
 	if gopath == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		gopath = filepath.Join(home, "go")
+		return ""
 	}
 	// GOPATH is a list; go builds the module cache under its first entry.
 	first, _, _ := strings.Cut(gopath, string(os.PathListSeparator))
@@ -308,15 +314,35 @@ func goModCache() string {
 // (node/npm and go-installed tools live there). Only existing directories are
 // returned, so a host without them is unaffected.
 func UserBinDirs() []string {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	if userHomeDir() == "" {
 		return nil
 	}
-	dirs := []string{filepath.Join(home, ".local", "bin"), filepath.Join(home, "go", "bin")}
+	dirs := []string{userHomeDir(".local", "bin"), userHomeDir("go", "bin")}
 	return slices.DeleteFunc(dirs, func(dir string) bool {
 		info, err := os.Stat(dir)
 		return err != nil || !info.IsDir()
 	})
+}
+
+// Supply only declared executable files for make's child processes. A toolchain
+// prefix may contain secrets; auxiliary runtime trees need explicit read roots.
+func userToolFiles(allowed []string) []string {
+	var files []string
+	for _, name := range allowed {
+		if filepath.Base(name) != name {
+			continue
+		}
+		for _, bin := range UserBinDirs() {
+			path, err := exec.LookPath(filepath.Join(bin, name))
+			if err != nil {
+				continue
+			}
+			if target, err := filepath.EvalSymlinks(path); err == nil && target != path {
+				files = append(files, target)
+			}
+		}
+	}
+	return files
 }
 
 // lookCommand resolves a command on the host PATH, falling back to the user
@@ -430,9 +456,17 @@ func sandboxEnv(plan preparedShellCommand, sb sandbox.Plan) []string {
 // sandboxConfinement describes, for the approval card and the tool
 // description, what boundary a line actually gets — never claiming a sandbox
 // the host cannot provide.
-func sandboxConfinement() string {
+// perLine reports a specific line's network posture instead of the default.
+func sandboxConfinement(perLine, network bool) string {
 	if sandbox.Available() {
-		return "sandboxed: the workspace is the only writable path and the network is off"
+		state := "network isolated by default; network-tier or operator-allowed lines use the host network"
+		if perLine {
+			state = "network isolated"
+			if network {
+				state = "host network available"
+			}
+		}
+		return "sandboxed: writable workspace roots, task scratch, selected caches and Git directories; " + state
 	}
 	if sandbox.AllowUnsandboxed() {
 		return "runs UNSANDBOXED on the host: namespace sandboxing is unavailable and " + sandbox.AllowUnsandboxedEnv + "=1 is set"
@@ -455,20 +489,17 @@ func scriptRoutingNote() string {
 // config under /etc is already covered by the read-only /usr and /etc mounts.
 func gitConfigFiles() []string {
 	var paths []string
-	if explicit := strings.TrimSpace(os.Getenv("GIT_CONFIG_GLOBAL")); explicit != "" {
+	if explicit := config.Env("GIT_CONFIG_GLOBAL"); explicit != "" {
 		paths = append(paths, explicit)
 	}
-	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
+	if xdg := config.Env("XDG_CONFIG_HOME"); xdg != "" {
 		paths = append(paths, filepath.Join(xdg, "git", "config"))
 	}
-	if home, err := os.UserHomeDir(); err == nil {
-		paths = append(paths, filepath.Join(home, ".config", "git", "config"), filepath.Join(home, ".gitconfig"))
+	if userHomeDir() != "" {
+		paths = append(paths, userHomeDir(".config", "git", "config"), userHomeDir(".gitconfig"))
 	}
 	return slices.DeleteFunc(paths, func(path string) bool {
 		info, err := os.Stat(path)
 		return err != nil || !info.Mode().IsRegular()
 	})
 }
-
-// gitDirs is kept for the internal git-dir tests.
-func gitDirs(root string) []string { return workspace.GitDirs(root) }

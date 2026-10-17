@@ -17,13 +17,15 @@ import (
 // while the notice said otherwise.
 func TestM01_ElisionFallbackReduces(t *testing.T) {
 	home := newHome(t, "")
-	// Keep this narrow enough that the failed summary requires real elision.
-	home.app.Provider.ContextWindowTokens = 3_900
+	// Keep this narrow enough that the failed summary requires real elision
+	// (4,100 leaves room for the optional-tool catalog in the system prompt).
+	home.app.Provider.ContextWindowTokens = 4_100
 	// Exercise the failed-summary path independently of bench defaults.
 	home.app.Agent.ContextWarningPercent = 70
 	home.app.Agent.ContextCompactPercent = 80
+	// Keep payload pressure sufficient even without redundant native tool descriptions.
 	for i := 1; i <= 3; i++ {
-		mustWrite(t, filepath.Join(home.workspace, "m01-large-"+string(rune('0'+i))+".txt"), strings.Repeat(string(rune('a'+i)), 6_000))
+		mustWrite(t, filepath.Join(home.workspace, "m01-large-"+string(rune('0'+i))+".txt"), strings.Repeat(string(rune('a'+i)), 8_000))
 	}
 	// The summarizer shares this provider. An empty completion is the cheapest
 	// deterministic summarizer failure ("summarize conversation: empty
@@ -44,7 +46,7 @@ func TestM01_ElisionFallbackReduces(t *testing.T) {
 			}
 		}})
 	}
-	provider := providertest.New(t, steps, providertest.WithContextWindow(3_900))
+	provider := providertest.New(t, steps, providertest.WithContextWindow(4_100))
 	defer provider.Close()
 
 	got := runInProc(t, home, provider.URL(), "m01-original-request", grantAll)

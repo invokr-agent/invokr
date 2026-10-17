@@ -11,6 +11,7 @@ import (
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 
@@ -81,20 +82,20 @@ func TestRunnerRetainsFailedAttemptAfterLaterSuccess(t *testing.T) {
 		t.Fatalf("ToolFailures = %#v", resp.ToolFailures)
 	}
 	guarded := turn.AppendToolOutcomeGuard(resp.Message, resp.ToolFailures)
-	if !strings.Contains(guarded, "[Authoritative tool outcome]") {
-		t.Fatalf("guard missing: %q", guarded)
+	if !strings.Contains(guarded, "[Tool attempt failures — history, not final task status]") || strings.Contains(guarded, "[Authoritative tool outcome]") {
+		t.Fatalf("recovered attempt presented as final outcome: %q", guarded)
 	}
 	if afterResponse.Response == nil || afterResponse.Response.Text != "done" || len(afterResponse.Response.ToolOutcomes) != 1 {
 		t.Fatalf("after-response payload = %#v, want clean text and structured outcome", afterResponse.Response)
 	}
-	if strings.Contains(afterResponse.Response.Text, "Authoritative tool outcome") {
+	if strings.Contains(afterResponse.Response.Text, "Tool attempt failures") {
 		t.Fatalf("presentation guard leaked into event text: %q", afterResponse.Response.Text)
 	}
 }
 
 func TestRunnerClassifiesDeniedToolAttempt(t *testing.T) {
 	runner := testRunner(t, func(ctx context.Context, _ *core.ToolCall) (string, error) {
-		err := core.EnforceApproval(ctx, approval.StaticApprover{Decision: approval.Decision{Approved: false}}, core.ToolSpec{Name: "demo"}, core.Ask(approval.Request{Tool: "demo"}))
+		err := core.EnforceApproval(ctx, testutil.StaticApprover{Decision: approval.Decision{Approved: false}}, core.ToolSpec{Name: "demo"}, core.Ask(approval.Request{Tool: "demo"}))
 		return "", err
 	}, []string{
 		`<|tool_call>{"name":"demo","arguments":{}}<|tool_call|>`,

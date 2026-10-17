@@ -49,9 +49,9 @@ func TestCommandTableDispatchAndLocalState(t *testing.T) {
 	if m.chatLog.toolProgress != progressOff {
 		t.Fatalf("progress = %v", m.chatLog.toolProgress)
 	}
-	_, _ = m.runCommand("/clear")
-	if got := m.chatLog.messages[len(m.chatLog.messages)-1].text; !strings.Contains(got, "model context unchanged") {
-		t.Fatalf("clear feedback = %q", got)
+	cmd, _ = m.runCommand("/clear")
+	if m.err != ErrNewSession || cmd == nil {
+		t.Fatalf("clear did not request a fresh session: %v", m.err)
 	}
 }
 
@@ -152,12 +152,21 @@ func TestCommandSafetyPolicies(t *testing.T) {
 		m := newTestModelWithQueue(ctx, broker)
 		go func() { _, _ = broker.RequestApproval(ctx, approval.Request{Tool: "shell"}) }()
 		waitForQueueLen(t, m.approvalQueue, 1)
-		m.chatLog.messages = []message{{role: "assistant", text: "keep"}}
+		m.chatLog.messages = nil
+		m.chatLog.Append(message{role: "assistant", text: "keep"})
 		_, _ = m.runCommand("/clear")
 		if len(m.chatLog.messages) != 2 || !strings.Contains(m.chatLog.messages[1].text, "approvals are pending") {
 			t.Fatalf("clear hid pending approval: %#v", m.chatLog.messages)
 		}
 		m.approvalQueue.Close()
+	})
+	t.Run("clear during active turn", func(t *testing.T) {
+		m := newTestModelWithHiddenLogs()
+		m.sending = true
+		cmd, _ := m.runCommand("/clear")
+		if cmd != nil || m.err != nil || !strings.Contains(m.chatContent(), "turn is running") {
+			t.Fatal("clear did not refuse an active turn")
+		}
 	})
 }
 

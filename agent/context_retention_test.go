@@ -165,7 +165,7 @@ func TestPlanRetentionDoesNotCarryReads(t *testing.T) {
 	messages := append(retentionPrefix(),
 		read("r1", "main.go"), inference.ToolMessage("r1", "v1"),
 		read("r2", "main.go"), inference.ToolMessage("r2", "v2"),
-		read("r3", "big.go"), inference.ToolMessage("r3", strings.Repeat("x", pinnedReadMaxBytes)),
+		read("r3", "big.go"), inference.ToolMessage("r3", strings.Repeat("x", 4096)),
 		inference.AssistantMessage("a"), inference.UserMessage("b"),
 		inference.AssistantMessage("c"), inference.UserMessage("d"),
 	)

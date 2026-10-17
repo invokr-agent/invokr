@@ -5,7 +5,9 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -179,10 +181,17 @@ func (s *Store) Load(_ context.Context, sessionID string) ([]Message, error) {
 	return messages, nil
 }
 
+// ErrSessionNotFound reports a session ID with no stored transcript.
+var ErrSessionNotFound = errors.New("not found")
+
 // forEachMessage streams one transcript line by line, handing each decoded
 // message (or the decode error) to fn. Callers decide what a corrupt line costs.
 func (s *Store) forEachMessage(sessionID string, fn func(line int, msg Message, parseErr error)) error {
 	f, err := os.Open(s.path(sessionID))
+	if errors.Is(err, fs.ErrNotExist) {
+		// Reads as `session "<id>" not found`, without the transcript path.
+		return fmt.Errorf("session %q %w", sessionID, ErrSessionNotFound)
+	}
 	if err != nil {
 		return fmt.Errorf("session store: open transcript: %w", err)
 	}
@@ -202,7 +211,6 @@ func (s *Store) forEachMessage(sessionID string, fn func(line int, msg Message, 
 	return nil
 }
 
-// eachTranscript calls fn for every .jsonl transcript in the store directory.
 // A missing directory is an empty store, not an error.
 func (s *Store) eachTranscript(fn func(entry os.DirEntry, id string)) error {
 	entries, err := os.ReadDir(s.dir)
@@ -273,9 +281,7 @@ type transcriptScan struct {
 	interrupted bool
 }
 
-// scanTranscript counts lines and grabs the first user message, the last
-// message of any role, and the recorded workspace root in one pass. The count
-// already required reading the whole file, so the rest is close to free.
+// Listing already reads the whole file; collecting this data is nearly free.
 func (s *Store) scanTranscript(sessionID string) (transcriptScan, error) {
 	var scan transcriptScan
 	err := s.forEachMessage(sessionID, func(line int, msg Message, parseErr error) {
@@ -283,9 +289,7 @@ func (s *Store) scanTranscript(sessionID string) (transcriptScan, error) {
 		if parseErr != nil {
 			return // a corrupt line costs a preview, never the listing
 		}
-		if scan.cwd == "" {
-			scan.cwd = msg.Cwd
-		}
+		scan.cwd = cmp.Or(scan.cwd, msg.Cwd)
 		scan.interrupted = msg.Interrupted
 		if text := truncateLabel(strings.TrimSpace(msg.Text)); text != "" {
 			scan.last = text
@@ -300,8 +304,7 @@ func (s *Store) scanTranscript(sessionID string) (transcriptScan, error) {
 	return scan, nil
 }
 
-// truncateLabel collapses whitespace and clips to a single short line. It cuts
-// on runes, not bytes, so a multi-byte character is never split in half.
+// It cuts on runes, not bytes, so a multi-byte character is never split in half.
 func truncateLabel(text string) string {
 	text = strings.Join(strings.Fields(text), " ")
 	runes := []rune(text)
@@ -330,11 +333,15 @@ func (s *Store) Title(sessionID string) string {
 // sidecar is not an error — most sessions never get one. Curated memory records
 // are a separate tier and are deliberately left alone.
 func (s *Store) Delete(sessionID string) error {
-	if err := os.Remove(s.path(sessionID)); err != nil {
+	if err := os.Remove(s.path(sessionID)); errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("session %q %w", sessionID, ErrSessionNotFound)
+	} else if err != nil {
 		return fmt.Errorf("session store: delete transcript: %w", err)
 	}
-	if err := os.Remove(s.titlePath(sessionID)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("session store: delete title: %w", err)
+	for _, sidecar := range [][2]string{{"tools", s.toolStatePath(sessionID)}, {"title", s.titlePath(sessionID)}} {
+		if err := os.Remove(sidecar[1]); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("session store: delete %s: %w", sidecar[0], err)
+		}
 	}
 	return nil
 }

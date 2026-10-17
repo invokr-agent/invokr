@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"sync"
 	"time"
@@ -349,6 +350,9 @@ func (w *Worker) isClosed() bool {
 // under the same lock and bail with errClosed. w.mu is released first so a slow
 // in-flight inference can't block Close from even starting.
 func (w *Worker) Close() error {
+	if w == nil { // Memory without a local worker has nothing to close.
+		return nil
+	}
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()
@@ -359,20 +363,15 @@ func (w *Worker) Close() error {
 	w.embed, w.gen = nil, nil
 	w.mu.Unlock()
 
-	var errs []error
-	if embed != nil {
-		w.embedMu.Lock()
-		if err := embed.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		w.embedMu.Unlock()
+	return errors.Join(closeUnder(&w.embedMu, embed), closeUnder(&w.genMu, gen))
+}
+
+// closeUnder frees a model while holding its inference lock, so no call is mid-run.
+func closeUnder(mu *sync.Mutex, model io.Closer) error {
+	if model == nil {
+		return nil
 	}
-	if gen != nil {
-		w.genMu.Lock()
-		if err := gen.Close(); err != nil {
-			errs = append(errs, err)
-		}
-		w.genMu.Unlock()
-	}
-	return errors.Join(errs...)
+	mu.Lock()
+	defer mu.Unlock()
+	return model.Close()
 }

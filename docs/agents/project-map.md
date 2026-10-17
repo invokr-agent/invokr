@@ -12,7 +12,7 @@
 
 - `agent` (`agent_cli.go`): interactive TUI / plain-mode session.
 - `exec` / `resume` (`exec_cli.go`): non-interactive one-shot and session-resume runs, JSONL ledger output.
-- `chat serve` (`chat_cli.go`): Telegram/Signal chat transport loop.
+- `bot serve` (`chat_cli.go`): Telegram/Signal chat transport loop.
 - `sessions` (`sessions_cli.go`): list/search/show stored sessions.
 - `jobs` (`jobs_cli.go`): scheduled-job store CRUD + `run`.
 - `index` (`index_cli.go`): sync workspace docs into the memory store as `doc`-kind
@@ -48,10 +48,10 @@
 - `tools/`: central caller, tool specs, and result filtering.
 - `tools/integrations/`: tokf tool-result filter.
 - `support/fsutil/`, `support/testutil/`: atomic-write helper, shared test helpers (incl. the `providertest` fake provider).
-- `tools/system/`: native tools — `tool_search`, `apply_patch`, `file_search`,
+- `tools/system/`: native tools — `tools` manager (in `tool_search/`), `apply_patch`, `file_search`,
   `web_search`, `web_fetch`, `session_search`, `retrieval`, `skill`, `memory`, `shell`,
   `code_interpreter`, `tmux`, `delegate` (subagents), `schedule` (jobs), `mcp`,
-  `toolbox` discovery, `create_tool`, and the `workspace` policy.
+  `toolbox` discovery, internal `create_tool` (via `tools.create`), and the `workspace` policy.
 - `toolbox/`: dynamic plugin examples and built-in plugin specs/runtimes (incl. the browser agent daemon).
 
 ## Tests And Checks

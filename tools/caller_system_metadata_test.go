@@ -26,18 +26,21 @@ func TestSystemToolMetadata(t *testing.T) {
 	if _, ok := findToolSpec(caller.Specs(), "edit_file"); ok {
 		t.Fatal("legacy edit_file tool remains registered")
 	}
+	if _, ok := findToolSpec(caller.Specs(), "write"); ok {
+		t.Fatal("separate write tool remains registered")
+	}
 	assertToolMetadata(t, caller, "edit", "workspace", []string{"write_workspace"}, constants.ApprovalPolicyAsk, core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true})
 	assertToolMetadata(t, caller, "file_search", "workspace", []string{"read_workspace"}, constants.ApprovalPolicyAuto, core.ToolCapabilities{ReadsWorkspace: true})
 	assertToolMetadata(t, caller, constants.WebSearchToolName, "network", []string{constants.WebSearchPolicyTier}, constants.ApprovalPolicyAsk, core.ToolCapabilities{Network: true})
 	assertToolMetadata(t, caller, constants.ShellToolName, "system", []string{constants.ShellTierReadonly, constants.ShellTierWrite, constants.ShellTierNetwork}, constants.ApprovalPolicyAsk, core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true, Network: true, ExecutesCode: true})
 
-	// apply_patch is registered but deferred: one advertised edit mechanism.
+	// apply_patch is protected core while keeping its existing approval policy.
 	spec, ok := findToolSpec(caller.Specs(), "apply_patch")
 	if !ok {
 		t.Fatal("expected apply_patch registered")
 	}
-	if spec.Metadata.AlwaysVisible {
-		t.Fatal("expected apply_patch deferred behind tool_search by default")
+	if _, eager := findToolSpec(caller.StableSpecs(), spec.Name); !eager {
+		t.Fatal("apply_patch missing from native core")
 	}
 }
 
@@ -54,8 +57,8 @@ func TestApplyPatchAdvertisedViaAllowlist(t *testing.T) {
 	if !ok {
 		t.Fatal("expected apply_patch registered")
 	}
-	if !spec.Metadata.AlwaysVisible {
-		t.Fatal("expected allowlisted apply_patch to be advertised")
+	if _, allowed := findToolSpec(caller.AvailableSpecs(), spec.Name); !allowed {
+		t.Fatal("allowlisted apply_patch missing from discovery")
 	}
 }
 
@@ -129,9 +132,8 @@ func assertToolMetadata(t *testing.T, caller *Caller, name string, namespace str
 		t.Fatalf("tool %q not registered", name)
 	}
 	meta := spec.Metadata
-	eager := slices.Contains(constants.EagerSchemaTools, name)
-	if meta.Namespace != namespace || meta.Source != "native" || meta.AlwaysVisible != eager {
-		t.Fatalf("%s metadata = %#v, want namespace %q source native always visible %v", name, meta, namespace, eager)
+	if meta.Namespace != namespace || meta.Source != "native" {
+		t.Fatalf("%s metadata = %#v, want namespace %q source native", name, meta, namespace)
 	}
 	if !slices.Equal(meta.Policy.Tiers, tiers) || meta.Policy.Approval != approval {
 		t.Fatalf("%s policy = %#v, want tiers %#v approval %q", name, meta.Policy, tiers, approval)

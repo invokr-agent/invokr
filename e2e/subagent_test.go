@@ -35,7 +35,7 @@ func writeReviewerDef(t *testing.T, home *testHome) {
 // set filtered to the allowlist, and its final text is surfaced to the parent.
 func TestCustomSubagentDispatch(t *testing.T) {
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("sub-delegate", "delegate_task", map[string]any{
+		managedToolStep("sub-delegate", "delegate_task", map[string]any{
 			"tasks":        []map[string]any{{"label": "rev", "prompt": "review the readme", "agent": "reviewer"}},
 			"max_parallel": 1,
 		}),
@@ -83,7 +83,7 @@ func TestCustomSubagentDispatch(t *testing.T) {
 // any child session runs, with an error naming the available definitions.
 func TestCustomSubagentUnknownName(t *testing.T) {
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("sub-ghost", "delegate_task", map[string]any{
+		managedToolStep("sub-ghost", "delegate_task", map[string]any{
 			"tasks": []map[string]any{{"label": "x", "prompt": "do a thing", "agent": "ghost"}},
 		}),
 		providertest.ReplyStep("acknowledged"),

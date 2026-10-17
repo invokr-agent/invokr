@@ -2,10 +2,7 @@ package approval
 
 import (
 	"cmp"
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -376,14 +373,7 @@ func (s *Store) save() error {
 		return nil
 	}
 	persist := slices.DeleteFunc(append([]Grant{}, s.grants...), func(g Grant) bool { return g.Scope == ScopeSession })
-	data, err := json.MarshalIndent(grantsFile{Version: 2, Rules: persist}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encode grants: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o700); err != nil {
-		return fmt.Errorf("create grants dir: %w", err)
-	}
-	if err := fsutil.WriteFileAtomic(s.path, data, 0o600); err != nil {
+	if err := fsutil.SaveJSON(s.path, grantsFile{Version: 2, Rules: persist}); err != nil {
 		return fmt.Errorf("write grants file: %w", err)
 	}
 	return nil

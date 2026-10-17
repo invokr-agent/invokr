@@ -45,7 +45,9 @@ func newHTTPClient(server config.MCPServerConfig) (*httpClient, error) {
 			headers[header] = value
 		}
 	}
-	return &httpClient{url: parsed.String(), headers: headers, client: &http.Client{}}, nil
+	return &httpClient{url: parsed.String(), headers: headers, client: &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}}, nil
 }
 
 func (c *httpClient) request(ctx context.Context, method string, params any, out any) error {
@@ -99,9 +101,12 @@ func (c *httpClient) setHeaders(req *http.Request) {
 // requests rather than decoding the first frame that arrives.
 func readHTTPMessage(resp *http.Response, id int) ([]byte, error) {
 	if !strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream") {
-		body, err := io.ReadAll(resp.Body)
+		body, err := io.ReadAll(io.LimitReader(resp.Body, maxMessageBytes+1))
 		if err != nil {
 			return nil, fmt.Errorf("read MCP response: %w", err)
+		}
+		if len(body) > maxMessageBytes {
+			return nil, fmt.Errorf("MCP response exceeds %d bytes", maxMessageBytes)
 		}
 		if !messageMatchesID(body, id) {
 			return nil, fmt.Errorf("response ID does not match request %d", id)
@@ -113,8 +118,7 @@ func readHTTPMessage(resp *http.Response, id int) ([]byte, error) {
 
 func readSSEMessage(body io.Reader, id int) ([]byte, error) {
 	scanner := bufio.NewScanner(body)
-	const limit = 8 * 1024 * 1024
-	scanner.Buffer(make([]byte, 0, 64*1024), limit)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxMessageBytes+8)
 	var event []byte
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -126,8 +130,8 @@ func readSSEMessage(body io.Reader, id int) ([]byte, error) {
 		} else if data, ok := strings.CutPrefix(line, "data:"); ok {
 			event = append(event, strings.TrimPrefix(data, " ")...)
 			event = append(event, '\n')
-			if len(event) > limit {
-				return nil, fmt.Errorf("MCP stream event exceeds %d bytes", limit)
+			if len(event)-1 > maxMessageBytes {
+				return nil, fmt.Errorf("MCP stream event exceeds %d bytes", maxMessageBytes)
 			}
 		}
 	}

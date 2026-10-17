@@ -19,7 +19,7 @@ const delegateToolName = "delegate_task"
 // delegateHint is the C10 trigger. delegate_task is advertised on every run and
 // called on none: the schema says what it is, so the nudge has to arrive at the
 // moment the model has just written a list of independent steps.
-const delegateHint = "These pending items look independent; delegate_task can run them as parallel tasks, one self-contained prompt each."
+const delegateHint = "If enabled tools cannot cover these independent tasks, enable delegate_task through tools, then use tools.run with one self-contained prompt per task."
 
 // minPendingForDelegateHint is the list size worth splitting; below it the
 // delegation overhead is not worth a child session.
@@ -74,7 +74,7 @@ type todoResponse struct {
 func RegisterTodoTool(registrar core.NativeRegistrar) {
 	core.Register(registrar, core.Tool[todoArgs]{
 		Spec: core.ToolSpec{
-			Name: toolName, Description: "Track the steps of a multi-step task. Send the complete list every time — it replaces the previous one. Omit items to read the current list. Mark exactly one item in_progress.",
+			Name: toolName, Description: "Track task steps. items replaces the entire list; omit it to read. Mark exactly one item in_progress.",
 			Example:    `{"name":"todo","arguments":{"items":[{"task":"Read the config","status":"in_progress"},{"task":"Summarize gaps","status":"pending"}]}}`,
 			Parameters: core.SchemaFor[todoArgs](),
 			// Zero capabilities: no workspace read/write, no network, no exec —

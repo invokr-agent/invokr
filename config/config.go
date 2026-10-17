@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"errors"
 	"maps"
 	"os"
 	"path/filepath"
@@ -14,6 +15,10 @@ import (
 )
 
 type AppConfig struct {
+	// Profile names the file profile `invokr config use` persisted;
+	// --profile overrides it for one run.
+	Profile         string                `json:"profile,omitempty"`
+	SessionMode     string                `json:"session_mode,omitempty"`
 	Provider        ProviderConfig        `json:"provider"`
 	Agent           AgentConfig           `json:"agent,omitempty"`
 	Log             LoggingConfig         `json:"log,omitempty"`
@@ -46,6 +51,12 @@ type ToolsConfig struct {
 	// from tool_search-deferred to advertised.
 	Allowlist    []string `json:"allowlist,omitempty" env:"INVOKR_TOOLS"`
 	TodoDisabled bool     `json:"todo_disabled,omitempty" env:"INVOKR_TODO_DISABLED"`
+	// Core adds optional tools (e.g. schedule, delegate_task) to the protected
+	// core: their schemas ship natively from turn one, callable directly.
+	Core []string `json:"core,omitempty" env:"INVOKR_CORE_TOOLS"`
+	// TmuxHostServer points the tmux tool at the user's own tmux server,
+	// unsandboxed, so the agent can drive the user's other sessions.
+	TmuxHostServer bool `json:"tmux_host_server,omitempty" env:"INVOKR_TMUX_HOST_SERVER"`
 }
 
 // LSPConfig configures the language servers backing the `lsp` tool. Servers
@@ -67,7 +78,7 @@ type LSPServerConfig struct {
 func (c LSPConfig) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
 
 func (c LSPConfig) withEnv() LSPConfig {
-	if value := env("INVOKR_LSP_ENABLED"); value != "" {
+	if value := Env("INVOKR_LSP_ENABLED"); value != "" {
 		c.Enabled = boolPtr(envBool("INVOKR_LSP_ENABLED", c.IsEnabled()))
 	}
 	return c
@@ -127,7 +138,6 @@ type RouterConfig struct {
 	Profiles  map[string]RouterProfileConfig  `json:"profiles,omitempty"`
 }
 
-// Enabled reports whether the router table describes anything to route to.
 func (c RouterConfig) Enabled() bool { return len(c.Profiles) > 0 }
 
 // ProfileIDs lists the defined profiles in a stable order, for pickers and
@@ -211,7 +221,8 @@ func (p PricingConfig) Cost(promptTokens, cachedPromptTokens, completionTokens i
 }
 
 type AgentConfig struct {
-	SystemPrompt string `json:"system_prompt,omitempty" env:"INVOKR_SYSTEM_PROMPT"`
+	ModelOptions map[string]map[string]string `json:"model_options,omitempty"`
+	SystemPrompt string                       `json:"system_prompt,omitempty" env:"INVOKR_SYSTEM_PROMPT"`
 	// PromptSource records where SystemPrompt came from ("default", "config",
 	// "persona", "env"). Derived by the loader, never read from config JSON;
 	// it exists so a recorded run says which base prompt was in play.
@@ -293,19 +304,6 @@ type AgentConfig struct {
 	// ToolResultStrategies overrides it per tool name.
 	ToolResultStrategy   string            `json:"tool_result_strategy,omitempty" env:"INVOKR_TOOL_RESULT_STRATEGY"`
 	ToolResultStrategies map[string]string `json:"tool_result_strategies,omitempty"`
-	// ToolResultKeepTurns is how many assistant turns a tool result stays in
-	// the context verbatim before it collapses to a one-line stub, ahead of
-	// compaction. A very large value keeps every result until compaction.
-	// Unset, it scales with the effective context window (after headroom;
-	// 5 at 32k, capped at 20), and never exceeds an explicit ToolResultAgeTurns.
-	ToolResultKeepTurns int `json:"tool_result_keep_turns,omitempty" env:"INVOKR_TOOL_RESULT_KEEP_TURNS"`
-	// ToolResultAgeTurns batches that collapse: nothing is rewritten until some
-	// eligible result is older than this many turns, and then everything past
-	// ToolResultKeepTurns is collapsed at once. Editing the transcript every
-	// turn invalidates the prompt-prefix cache every turn; batching keeps the
-	// prefix stable in between. Must be at least ToolResultKeepTurns (so at
-	// least 1). Unset, it scales with the effective window like ToolResultKeepTurns (8 at 32k, capped at 32).
-	ToolResultAgeTurns int `json:"tool_result_age_turns,omitempty" env:"INVOKR_TOOL_RESULT_AGE_TURNS"`
 }
 
 type MemoryConfig struct {
@@ -657,7 +655,7 @@ func (c AppConfig) withEnv() AppConfig {
 	// Non-empty, not merely set: applyEnv ignores an empty value, so marking
 	// the source "env" on INVOKR_SYSTEM_PROMPT="" would attribute the prompt
 	// to an override that never happened.
-	if strings.TrimSpace(os.Getenv("INVOKR_SYSTEM_PROMPT")) != "" {
+	if Env("INVOKR_SYSTEM_PROMPT") != "" {
 		c.Agent.PromptSource = "env"
 	}
 	c.Agent.ParallelToolCalls = !c.Agent.ParallelToolCallsDisabled
@@ -669,7 +667,7 @@ func (c AppConfig) withEnv() AppConfig {
 
 // withEnv covers the ToolboxConfig cases the `env:` tags cannot express.
 func (c ToolboxConfig) withEnv() ToolboxConfig {
-	if value := env("INVOKR_TOOLBOX_ISOLATE_ENV"); value != "" {
+	if value := Env("INVOKR_TOOLBOX_ISOLATE_ENV"); value != "" {
 		c.IsolateEnv = boolPtr(envBool("INVOKR_TOOLBOX_ISOLATE_ENV", c.IsolateHostEnv()))
 	}
 	c.PythonPipArgs = envFields("INVOKR_PYTHON_PIP_ARGS", c.PythonPipArgs)
@@ -680,13 +678,13 @@ func (c ToolboxConfig) withEnv() ToolboxConfig {
 
 // withEnv covers the ShellConfig cases the `env:` tags cannot express.
 func (c ShellConfig) withEnv() ShellConfig {
-	if value := env("INVOKR_SHELL_ISOLATE_ENV"); value != "" {
+	if value := Env("INVOKR_SHELL_ISOLATE_ENV"); value != "" {
 		c.IsolateEnv = boolPtr(envBool("INVOKR_SHELL_ISOLATE_ENV", c.IsolateHostEnv()))
 	}
 	if envBool("INVOKR_SHELL_DISABLED", false) {
 		c.Enabled = boolPtr(false)
 	}
-	if value := env("INVOKR_SHELL_ENABLED"); value != "" {
+	if value := Env("INVOKR_SHELL_ENABLED"); value != "" {
 		enabled := envBool("INVOKR_SHELL_ENABLED", c.IsEnabled())
 		c.Enabled = boolPtr(enabled)
 	}
@@ -750,7 +748,6 @@ func (c WorkspaceConfig) withDefaults(homeDir string) WorkspaceConfig {
 
 func (c ProviderConfig) withDefaults() ProviderConfig {
 	c.BaseURL = cmp.Or(c.BaseURL, constants.DefaultProviderBaseURL)
-	c.Model = cmp.Or(c.Model, constants.DefaultProviderModel)
 	c.HTTPTimeout = cmp.Or(c.HTTPTimeout, constants.DefaultHTTPTimeout)
 	c.MaxRetries = cmp.Or(c.MaxRetries, constants.DefaultProviderRetries)
 	return c
@@ -782,8 +779,6 @@ func (c AgentConfig) withDefaults() AgentConfig {
 	c.MaxRequestTokens = cmp.Or(c.MaxRequestTokens, constants.DefaultAgentMaxRequestTokens)
 	c.ContextWarningPercent = cmp.Or(c.ContextWarningPercent, 95)
 	c.ContextCompactPercent = cmp.Or(c.ContextCompactPercent, 99)
-	c.ToolResultKeepTurns = cmp.Or(c.ToolResultKeepTurns, 100000)
-	c.ToolResultAgeTurns = cmp.Or(c.ToolResultAgeTurns, 100000)
 	c.ToolResultMaxTokens = cmp.Or(c.ToolResultMaxTokens, constants.ToolResultGateTokens)
 	c.ToolResultStrategy = cmp.Or(c.ToolResultStrategy, constants.ToolResultStrategySpill)
 	// read pages itself (offset/limit continuation markers); spilling its
@@ -884,8 +879,6 @@ func (c ToolboxConfig) IsolateHostEnv() bool { return c.IsolateEnv == nil || *c.
 
 func boolPtr(value bool) *bool { return &value }
 
-// orPositive returns value when it is above zero and fallback otherwise, the
-// "0 and negatives both mean unset" counterpart to cmp.Or.
 func orPositive[T cmp.Ordered](value, fallback T) T {
 	if value <= *new(T) {
 		return fallback
@@ -893,7 +886,6 @@ func orPositive[T cmp.Ordered](value, fallback T) T {
 	return value
 }
 
-// orSlice returns values when it holds anything and fallback otherwise.
 func orSlice[T any](values, fallback []T) []T {
 	if len(values) == 0 {
 		return fallback
@@ -906,23 +898,36 @@ func orSlice[T any](values, fallback []T) []T {
 // package that need to fill in defaults relative to the same home, such as the
 // toolbox loader.
 func InvokrHomeDir() string {
-	if dir := env("INVOKR_HOME"); dir != "" {
+	if dir := Env("INVOKR_HOME"); dir != "" {
 		return dir
 	}
 	return defaultInvokrHomeDir()
 }
 
 func defaultInvokrHomeDir() string {
-	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
-		return filepath.Join(home, constants.InvokrHomeDirName)
+	if dir, err := UserInvokrHomeDir(); err == nil {
+		return dir
 	}
 	return filepath.Join(os.TempDir(), "invokr")
 }
 
-func env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
+// UserInvokrHomeDir is ~/.invokr, or an error when there is no home directory.
+func UserInvokrHomeDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err == nil && strings.TrimSpace(home) == "" {
+		err = errors.New("home directory is empty")
+	}
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, constants.InvokrHomeDirName), nil
+}
+
+// Env reads an environment variable with surrounding whitespace trimmed.
+func Env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 
 func envParse[T any](key string, fallback T, parse func(string) (T, error)) T {
-	if value := env(key); value != "" {
+	if value := Env(key); value != "" {
 		if parsed, err := parse(value); err == nil {
 			return parsed
 		}
@@ -933,14 +938,13 @@ func envParse[T any](key string, fallback T, parse func(string) (T, error)) T {
 func envBool(key string, fallback bool) bool { return envParse(key, fallback, strconv.ParseBool) }
 
 func envFields(key string, fallback []string) []string {
-	value := env(key)
+	value := Env(key)
 	if value == "" {
 		return fallback
 	}
 	return strings.Fields(value)
 }
 
-// splitList parses a comma-separated env value, dropping blank entries.
 func splitList(value string) []string {
 	parts := strings.Split(value, ",")
 	for i, part := range parts {
@@ -949,7 +953,6 @@ func splitList(value string) []string {
 	return slices.DeleteFunc(parts, func(p string) bool { return p == "" })
 }
 
-// parseEnvMap parses a comma-separated "name=value" env value.
 func parseEnvMap(value string) map[string]string {
 	out := map[string]string{}
 	for _, part := range strings.Split(value, ",") {

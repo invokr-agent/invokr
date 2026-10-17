@@ -1,11 +1,13 @@
 package agentui
 
 import (
+	"cmp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
 )
 
@@ -18,8 +20,9 @@ const (
 )
 
 type message struct {
-	role, text string
-	streaming  bool
+	id, version uint64
+	role, text  string
+	streaming   bool
 
 	// meta (role == "assistant") is the provenance line under the answer:
 	// model, elapsed, tokens.
@@ -45,14 +48,6 @@ type message struct {
 	// expanded marks a settled block the user unfolded to its full recorded
 	// result. It survives streaming updates because the block mutates in place.
 	expanded bool
-
-	// rendered memoizes this message's frame output at renderedWidth (I4): a
-	// settled message renders identically every frame, and re-running glamour
-	// over the whole transcript made a frame cost ~0.4ms per message. Live
-	// messages (streaming answers, running tool blocks) are never memoized,
-	// and events that mutate a block replace the struct, clearing the memo.
-	rendered      string
-	renderedWidth int
 }
 
 // live reports whether the message still changes frame to frame — a streaming
@@ -64,22 +59,27 @@ func (m message) live() bool {
 // chatLog owns the chat transcript: user/assistant/tool/help/error messages,
 // including the tool-event state machine that mutates a running tool block in
 // place as it completes rather than appending a new line per event. The
-// model composes chatLog's rendered content with intro/sending/queue/help
-// chrome and owns the viewport auto-follow-bottom scroll logic around it.
+// model composes chatLog's messages with intro/sending/queue/help chrome in a
+// windowed MemoList, which owns scrolling and the render cache.
 type chatLog struct {
-	messages     []message
-	toolProgress progressMode
+	messages []message
+	// recordedTools retains request events even when progress display drops blocks.
+	recordedTools []message
+	nextID        uint64
+	toolProgress  progressMode
 }
 
 func newChatLog(toolProgress progressMode) chatLog { return chatLog{toolProgress: toolProgress} }
 
-// Append adds a message to the transcript.
-func (c *chatLog) Append(msg message) { c.messages = append(c.messages, msg) }
+func (c *chatLog) Append(msg message) {
+	c.nextID, msg.id = c.nextID+1, c.nextID+1
+	c.messages = append(c.messages, msg)
+}
 
-// Clear empties the transcript (e.g. /clear).
-func (c *chatLog) Clear() { c.messages = nil }
+func (c *chatLog) appendTranscript(item turn.TranscriptMessage) {
+	c.Append(message{role: item.Role, text: turn.AppendHistoricalExecution(turn.AppendToolOutcomeGuard(item.Text, item.ToolCalls), item.ExecutionEvidence)})
+}
 
-// Len returns the number of messages in the transcript.
 func (c *chatLog) Len() int { return len(c.messages) }
 
 // Last returns a pointer to the last message, or nil if the log is empty.
@@ -116,18 +116,24 @@ func (c *chatLog) ApplyEvent(ev events.Event) {
 		}
 		c.Append(message{role: "tool", toolID: t.ID, toolName: t.Name,
 			toolArgs: t.Arguments, toolStatus: toolRunning, toolStartedAt: started})
+		c.recordedTools = append(c.recordedTools, c.messages[len(c.messages)-1])
 		return
 	}
 
 	idx := c.finishToolMessage(t, ev.Type == events.EventToolFailed)
+	settled := c.messages[idx]
+	// Keep only evidence fields; full tool output stays in the transcript owner.
+	settled.toolOutput, settled.toolDiff, settled.toolError = "", "", ""
+	if prior := slices.IndexFunc(c.recordedTools, func(m message) bool { return m.id == settled.id }); prior >= 0 {
+		c.recordedTools[prior] = settled
+	} else {
+		c.recordedTools = append(c.recordedTools, settled)
+	}
 
 	switch c.toolProgress {
 	case progressOff:
-		// Drop the finished block; only live spinners are shown. copy+zero the
-		// freed tail so the removed message's strings can be GC'd.
-		copy(c.messages[idx:], c.messages[idx+1:])
-		c.messages[len(c.messages)-1] = message{}
-		c.messages = c.messages[:len(c.messages)-1]
+		// Drop the finished block; slices.Delete clears the freed tail.
+		c.messages = slices.Delete(c.messages, idx, idx+1)
 	case progressNew:
 		// ponytail: collapse repeats — drop earlier finished blocks of the same
 		// tool, keeping the latest. Not strictly consecutive-only; good enough.
@@ -135,13 +141,12 @@ func (c *chatLog) ApplyEvent(ev events.Event) {
 	}
 }
 
-// setToolProgress attaches an incremental status line to the newest still-
-// running block for this tool. A progress event carries no call ID (the plugin
-// never learns one), so the running block is matched by name.
+// setToolProgress matches call IDs, falling back to names for legacy events.
 func (c *chatLog) setToolProgress(t events.ToolPayload) {
 	for i := len(c.messages) - 1; i >= 0; i-- {
-		if c.messages[i].toolStatus == toolRunning && c.messages[i].toolName == t.Name {
+		if c.messages[i].toolStatus == toolRunning && c.messages[i].toolName == t.Name && (t.ID == "" || c.messages[i].toolID == t.ID) {
 			c.messages[i].toolProgressLine = t.Progress
+			c.messages[i].version++
 			return
 		}
 	}
@@ -163,6 +168,7 @@ func (c *chatLog) finishToolMessage(t events.ToolPayload, failed bool) int {
 		// Keep the started event's name/args: some emitters omit them on completion.
 		prev := c.messages[idx]
 		msg.toolStartedAt, msg.toolName, msg.toolArgs, msg.expanded = prev.toolStartedAt, prev.toolName, prev.toolArgs, prev.expanded
+		msg.id, msg.version = prev.id, prev.version+1
 	}
 	if msg.toolStatus == toolDone && t.Code == "" {
 		// A flagged result may not have applied, so it gets no diff.
@@ -183,6 +189,7 @@ func (c *chatLog) applyAssistantDelta(ev events.Event) bool {
 	}
 	if last := c.Last(); last != nil && last.role == "assistant" && last.streaming {
 		last.text += ev.Delta.Text
+		last.version++
 	} else {
 		c.Append(message{role: "assistant", text: ev.Delta.Text, streaming: true})
 	}
@@ -190,89 +197,28 @@ func (c *chatLog) applyAssistantDelta(ev events.Event) bool {
 }
 
 func (c *chatLog) findToolMessage(id string) int {
-	if id == "" {
-		return -1
+	for i := len(c.messages) - 1; i >= 0; i-- {
+		m := c.messages[i]
+		if id != "" && m.role == "tool" && m.toolID == id && m.toolStatus == toolRunning {
+			return i
+		}
 	}
-	return slices.IndexFunc(c.messages, func(m message) bool { return m.role == "tool" && m.toolID == id })
+	return -1
 }
 
 func (c *chatLog) dropFinishedToolBlocks(name string, keepIdx int) {
-	out := c.messages[:0]
-	for i := range c.messages {
-		msg := c.messages[i]
-		if i != keepIdx && msg.role == "tool" && msg.toolName == name && msg.toolStatus != toolRunning {
-			continue
-		}
-		out = append(out, msg)
-	}
-	// Zero the freed tail so dropped messages' strings can be GC'd.
-	for i := len(out); i < len(c.messages); i++ {
-		c.messages[i] = message{}
-	}
-	c.messages = out
+	i := -1
+	c.messages = slices.DeleteFunc(c.messages, func(msg message) bool {
+		i++
+		return i != keepIdx && msg.role == "tool" && msg.toolName == name && msg.toolStatus != toolRunning
+	})
 }
 
-// Content renders the message transcript. spinnerFrame is the current
-// spinner glyph used by running tool blocks; width is the target render
-// width. The caller composes this with intro/sending/queue/help chrome.
-func (c *chatLog) Content(width int, spinnerFrame string) string {
-	content, _ := c.ContentRanges(width, spinnerFrame, -1)
-	return content
-}
-
-// blockRange is one foldable tool block's [start,end) line range within the
-// rendered content, plus the index of the message it renders. The fold
-// hit-testing (mouse.go) and focus navigation consume these.
-type blockRange struct {
-	msg        int
-	start, end int
-}
-
-// ContentRanges renders the transcript and records the line range of every
-// foldable (settled tool) block. focused is the message index to mark with
-// the transcript-focus cursor, or -1 for none.
-func (c *chatLog) ContentRanges(width int, spinnerFrame string, focused int) (string, []blockRange) {
-	var b strings.Builder
-	var ranges []blockRange
-	line := 0
-	for i := range c.messages {
-		rendered := c.renderMessage(i, width, spinnerFrame)
-		if i == focused {
-			rendered = markFocused(rendered)
-		}
-		height := strings.Count(rendered, "\n") + 1
-		if c.messages[i].foldable() {
-			ranges = append(ranges, blockRange{msg: i, start: line, end: line + height})
-		}
-		b.WriteString(rendered + "\n\n")
-		line += height + 2
-	}
-	return b.String(), ranges
-}
-
-// renderMessage renders one message, serving settled messages from their
-// per-message memo. The focus marker is layered on afterwards so it never
-// enters the cache.
+// renderMessage renders one message; MemoList owns the viewport render memo.
 func (c *chatLog) renderMessage(i, width int, spinnerFrame string) string {
-	msg := &c.messages[i]
-	if !msg.live() && msg.rendered != "" && msg.renderedWidth == width {
-		return msg.rendered
-	}
 	var mb strings.Builder
-	writeMessage(&mb, *msg, width, spinnerFrame)
-	rendered := mb.String()
-	if !msg.live() {
-		msg.rendered, msg.renderedWidth = rendered, width
-	}
-	return rendered
-}
-
-// InvalidateRender drops every message's render memo — for theme or syntax
-// changes, which restyle text the memo would otherwise keep in old colors.
-func (c *chatLog) InvalidateRender() {
-	for i := range c.messages {
-		c.messages[i].rendered = ""
-	}
+	writeMessage(&mb, c.messages[i], width, spinnerFrame)
+	return mb.String()
 }
 
 // foldable reports whether a message is a settled tool block the user can
@@ -281,14 +227,53 @@ func (m message) foldable() bool {
 	return m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
 }
 
+// Format the latest request for the existing modal, without changing the prose.
+func (c *chatLog) executionHistory(start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {
+	evidence = slices.Clone(evidence)
+	for i, item := range evidence {
+		preview := item.Command
+		if idx := slices.IndexFunc(c.recordedTools, func(m message) bool {
+			return m.id > start && item.CallID != "" && m.role == "tool" && m.toolID == item.CallID
+		}); idx >= 0 {
+			preview = cmp.Or(preview, primaryArgLimit(c.recordedTools[idx].toolName, c.recordedTools[idx].toolArgs, 160))
+		}
+		evidence[i].CallID, evidence[i].Command = cmp.Or(preview, "arguments unavailable"), ""
+	}
+	details := turn.AppendExecutionGuard(turn.AppendToolOutcomeGuard("", failures), evidence)
+	if details == "" {
+		return "No tool calls recorded for this request"
+	}
+	return details
+}
+
+// observedEvidence is UI-only fallback when a failed/canceled runner returns
+// no ledger. It describes drained events; a running call remains incomplete.
+func (c *chatLog) observedEvidence(start uint64) []turn.ExecutionEvidence {
+	var observed []turn.ExecutionEvidence
+	for _, msg := range c.recordedTools {
+		if msg.id <= start {
+			continue
+		}
+		item := turn.ExecutionEvidence{CallID: msg.toolID, Tool: msg.toolName, Code: msg.toolCode, Outcome: "incomplete"}
+		switch msg.toolStatus {
+		case toolDone:
+			item.Outcome = "completed"
+			if msg.toolCode != "" {
+				item.Outcome = "flagged"
+			}
+		case toolFailed:
+			item.Outcome = "failed"
+		}
+		observed = append(observed, item)
+	}
+	return observed
+}
+
 // markFocused appends the transcript-focus cursor to a block's header line.
 func markFocused(rendered string) string {
-	head, rest, split := strings.Cut(rendered, "\n")
-	head += " " + ui.Invokr.Accent.Render("◀")
-	if !split {
-		return head
-	}
-	return head + "\n" + rest
+	lines := strings.SplitN(rendered, "\n", 2)
+	lines[0] += " " + ui.Invokr.Warn.Bold(true).Render("◀")
+	return strings.Join(lines, "\n")
 }
 
 // answerIndent aligns an answer under the accent bar of the user turn above it.

@@ -173,26 +173,19 @@ func d13Plugin(t *testing.T, home testHome, name, source string, extra map[strin
 	}
 }
 
-// d13Calls builds one scripted tool call per name: tool_search loads (when
-// searchTool is set) or the tools themselves, with optional per-tool arguments.
+// d13Calls enables or runs each probe through the manager.
 func d13Calls(names []string, idPrefix, searchTool string, args map[string]map[string]any) []providertest.CompletionToolCall {
-	calls := make([]providertest.CompletionToolCall, 0, len(names))
+	var calls []providertest.CompletionToolCall
 	for _, name := range names {
-		call := providertest.CompletionToolCall{
-			ID:       idPrefix + name,
-			Type:     "function",
-			Function: providertest.CompletionToolFunction{Name: name, Arguments: map[string]any{}},
+		arguments := args[name]
+		if arguments == nil {
+			arguments = map[string]any{}
 		}
+		managed := map[string]any{"action": "run", "name": name, "arguments": arguments}
 		if searchTool != "" {
-			call.Function = providertest.CompletionToolFunction{
-				Name:      searchTool,
-				Arguments: map[string]any{"query": name, "include_schema": true},
-			}
+			managed = map[string]any{"action": "enable", "names": []string{name}}
 		}
-		if extra, ok := args[name]; ok {
-			call.Function.Arguments = extra
-		}
-		calls = append(calls, call)
+		calls = append(calls, providertest.CompletionToolCall{ID: idPrefix + name, Type: "function", Function: providertest.CompletionToolFunction{Name: "tools", Arguments: managed}})
 	}
 	return calls
 }

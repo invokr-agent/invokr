@@ -13,8 +13,10 @@ type Request struct {
 	ID, Tool, Reason, Tier, Summary, Details string
 	// Execution facts are supplied by trusted tool preparation, never tool arguments.
 	ReadOnly, Confined, Writes, Network, Publishes, Protected bool
-	Paths                                                     []string
-	PolicyChecked                                             bool
+	// RequiresScopedApproval keeps opaque execution behind a per-call decision in Auto.
+	RequiresScopedApproval bool
+	Paths                  []string
+	PolicyChecked          bool
 	// Subject is the canonical, matchable argument string for this call (for
 	// shell, the command line). It is the ONLY thing standing grants match
 	// against: a request that leaves it empty can never be auto-approved by a
@@ -58,9 +60,7 @@ func (b *Broker) RequestApproval(ctx context.Context, req Request) (Decision, er
 		return Decision{}, fmt.Errorf("approval required for %s but no approver is configured", req.Tool)
 	}
 	req.Tool = strings.TrimSpace(req.Tool)
-	if req.Tool == "" {
-		req.Tool = "tool"
-	}
+	req.Tool = cmp.Or(req.Tool, "tool")
 	if strings.TrimSpace(req.ID) == "" {
 		req.ID = uuid.NewString()
 	}
@@ -122,16 +122,4 @@ func (p Pending) Decide(decision Decision) {
 	case p.decision <- decision:
 	default:
 	}
-}
-
-type StaticApprover struct {
-	Decision Decision
-}
-
-func (s StaticApprover) RequestApproval(_ context.Context, req Request) (Decision, error) {
-	if s.Decision.Approved {
-		return s.Decision, nil
-	}
-	reason := cmp.Or(strings.TrimSpace(s.Decision.Reason), "denied by policy")
-	return s.Decision, &DeniedError{Tool: req.Tool, Reason: reason}
 }

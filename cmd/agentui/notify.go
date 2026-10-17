@@ -12,16 +12,13 @@ import (
 type notifyMode int
 
 const (
-	// notifyOff emits nothing.
 	notifyOff notifyMode = iota
-	// notifyBell rings the terminal bell.
 	notifyBell
 	// notifyDesktop escalates: bell, plus an OSC 9 desktop notification, plus
 	// a "● " window-title marker while approvals pend.
 	notifyDesktop
 )
 
-// notifyModeNames is the modes in value order, as /notify spells them.
 var notifyModeNames = []string{"off", "bell", "desktop"}
 
 func (n notifyMode) String() string { return notifyModeNames[n] }
@@ -56,8 +53,6 @@ type notifier struct {
 	titleMarked bool
 }
 
-// approvalsPending is called with the visible queue length whenever the loop
-// has refreshed it. It returns the sequences the transition earned, if any.
 func (n *notifier) approvalsPending(prev, count int) tea.Cmd {
 	if count == 0 {
 		return n.clearTitle()
@@ -76,8 +71,6 @@ func (n *notifier) approvalsPending(prev, count int) tea.Cmd {
 	return rawSeq(seq)
 }
 
-// turnDone signals a completed turn (success or failure — the user is wanted
-// back either way).
 func (n *notifier) turnDone() tea.Cmd {
 	if n.mode == notifyOff {
 		return nil
@@ -89,7 +82,6 @@ func (n *notifier) turnDone() tea.Cmd {
 	return rawSeq(seq)
 }
 
-// clearTitle pops the pushed title once the queue drains.
 func (n *notifier) clearTitle() tea.Cmd {
 	if !n.titleMarked {
 		return nil
@@ -128,8 +120,6 @@ func (m *model) quitCmd() tea.Cmd {
 	return tea.Quit
 }
 
-// setNotifyMode is the /notify command: no argument cycles off -> bell ->
-// desktop, an explicit mode sets it. Either way the choice is remembered.
 func (m *model) setNotifyMode(args []string) {
 	const usage = "usage: /notify [off|bell|desktop]"
 	if len(args) > 1 {

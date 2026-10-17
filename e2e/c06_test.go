@@ -19,7 +19,7 @@ func TestC06_SearchAndRetrieval(t *testing.T) {
 	// query string echoed in the tool-call arguments.
 	provider := providertest.NewScripted(t,
 		providertest.NativeToolCallStep("c06-search", "file_search", map[string]any{"query": "amber-orbit"}),
-		providertest.NativeToolCallStep("c06-retrieval", "retrieval", map[string]any{"query": "gateway memory module"}),
+		managedToolStep("c06-retrieval", "retrieval", map[string]any{"query": "gateway memory module"}),
 		providertest.NativeToolCallStep("c06-passwd", "file_search", map[string]any{"query": "root:x:", "mode": "literal"}),
 		providertest.ReplyStep("done"),
 	)
@@ -31,8 +31,8 @@ func TestC06_SearchAndRetrieval(t *testing.T) {
 	// grantAll approves the retrieval_index_write needed on first index build.
 	got := runInProc(t, home, provider.URL(), "search and retrieve", grantAll)
 
-	if got.Resp.ToolCallCount != 3 {
-		t.Fatalf("tool_call_count = %d, want 3", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 4 {
+		t.Fatalf("tool_call_count = %d, want 4", got.Resp.ToolCallCount)
 	}
 	if len(got.Resp.ToolFailures) != 0 {
 		t.Fatalf("unexpected tool failures: %#v", got.Resp.ToolFailures)

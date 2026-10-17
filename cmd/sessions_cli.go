@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"cmp"
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
@@ -15,19 +14,16 @@ import (
 func NewSessionsCmd(services ServicesProvider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "sessions",
-		Aliases: []string{"session", "history"},
 		Short:   "Browse stored session history",
 		Long:    "Every agent run is stored: prompts, answers, and the tool ledger.\nRun bare, this is the history view; search finds a session by content,\nshow prints one transcript, and the IDs it prints are what --resume\ntakes.",
-		Example: "  invokr sessions                       # recent sessions, newest first\n  invokr sessions --limit 5 --json      # same, for scripts\n  invokr sessions search \"flaky test\"\n  invokr sessions show <session-id>\n  invokr --resume <session-id>          # continue one in the TUI",
+		Example: "  invokr sessions                       # recent sessions, newest first\n  invokr sessions --limit 5 --json      # same, for scripts\n  invokr sessions search \"flaky test\"\n  invokr sessions show <session-id>\n  invokr sessions rm <session-id> -y\n  invokr --resume <session-id>          # continue one in the TUI",
 		GroupID: groupInspect,
 	}
-	cmd.AddCommand(newSessionsListCmd(services), newSessionsSearchCmd(services), newSessionsShowCmd(services))
-	useDefaultSubcommand(cmd, "list")
+	useDefaultSubcommand(cmd, "list", newSessionsListCmd(services), newSessionsSearchCmd(services), newSessionsShowCmd(services), newSessionsRmCmd(services))
 	return cmd
 }
 
 func newSessionsListCmd(services ServicesProvider) *cobra.Command {
-	var asJSON bool
 	var all bool
 	var limit int
 	cmd := &cobra.Command{
@@ -47,14 +43,11 @@ func newSessionsListCmd(services ServicesProvider) *cobra.Command {
 				if limit > 0 && len(sessions) > limit {
 					sessions = sessions[:limit]
 				}
-				if asJSON {
-					return json.NewEncoder(cmd.OutOrStdout()).Encode(sessions)
-				}
-				return renderSessionTable(cmd.OutOrStdout(), sessions)
+				return emit(cmd, sessions, func() error { return renderSessionTable(cmd.OutOrStdout(), sessions) })
 			})
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the raw session records as JSON instead of a table")
+	addJSONFlag(cmd)
 	cmd.Flags().BoolVar(&all, "all", false, "List sessions from every directory, not just this one")
 	cmd.Flags().IntVar(&limit, "limit", 20, "Show at most this many sessions; 0 lists every stored session")
 	return cmd
@@ -64,7 +57,7 @@ func newSessionsListCmd(services ServicesProvider) *cobra.Command {
 // to something that identifies the conversation, and the JSON blob the command
 // used to print made the reader do that join by eye.
 func renderSessionTable(out io.Writer, sessions []sessionstore.SessionInfo) error {
-	return renderTable(out, fmt.Fprintln, []string{"ID", "UPDATED", "MSGS", "TITLE"},
+	return renderTable(out, []string{"ID", "UPDATED", "MSGS", "TITLE"},
 		"no stored sessions yet; run `invokr` to start one", sessions,
 		func(r renderer, info sessionstore.SessionInfo) []string {
 			return []string{r.muted(info.ID), r.when(info.UpdatedAt), strconv.Itoa(info.Messages), sessionLabel(info)}
@@ -82,7 +75,7 @@ func newSessionsSearchCmd(services ServicesProvider) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "search <query>",
 		Short:   "Find stored sessions by their content",
-		Long:    "Matches against the stored transcripts, not just titles. Prints the matching sessions as JSON.",
+		Long:    "Matches against the stored transcripts, not just titles.",
 		Example: "  invokr sessions search \"panic in the runner\" --max-results 3",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -91,11 +84,44 @@ func newSessionsSearchCmd(services ServicesProvider) *cobra.Command {
 				if err != nil {
 					return err
 				}
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(hits)
+				return emit(cmd, hits, func() error {
+					return renderTable(cmd.OutOrStdout(), []string{"SESSION", "ROLE", "SNIPPET"}, "no matching sessions", hits,
+						func(r renderer, h sessionstore.SearchHit) []string {
+							return []string{r.muted(h.SessionID), h.Role, h.Snippet}
+						})
+				})
 			})
 		},
 	}
+	addJSONFlag(cmd)
 	cmd.Flags().IntVar(&maxResults, "max-results", 10, "Maximum number of matching sessions to return")
+	return cmd
+}
+
+func newSessionsRmCmd(services ServicesProvider) *cobra.Command {
+	var yes bool
+	cmd := &cobra.Command{
+		Use:   "rm <session-id>",
+		Short: "Delete one stored session: its transcript and its memory records",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if !yes && !confirm(cmd, "This will delete session "+args[0]+".") {
+				_, _ = fmt.Fprintln(cmd.OutOrStdout(), "aborted")
+				return nil
+			}
+			s, err := services()
+			if err != nil {
+				return err
+			}
+			store := sessionstore.NewForWorkspace(s.App.Memory.Dir, s.App.Workspace.Root, s.Logger)
+			if err := purgeSession(cmd, s, store)(args[0]); err != nil {
+				return err
+			}
+			_, err = fmt.Fprintf(cmd.OutOrStdout(), "session %s removed\n", args[0])
+			return err
+		},
+	}
+	cmd.Flags().BoolVarP(&yes, "yes", "y", false, "Skip the confirmation prompt")
 	return cmd
 }
 
@@ -103,7 +129,7 @@ func newSessionsShowCmd(services ServicesProvider) *cobra.Command {
 	var around string
 	cmd := &cobra.Command{
 		Use:     "show <session-id>",
-		Short:   "Print one stored session transcript as JSON",
+		Short:   "Print one stored session transcript",
 		Example: "  invokr sessions show <session-id>\n  invokr sessions show <session-id> --around 12   # that message, plus 3 either side",
 		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -115,10 +141,18 @@ func newSessionsShowCmd(services ServicesProvider) *cobra.Command {
 				if around != "" {
 					messages = aroundMessages(messages, around, 3)
 				}
-				return json.NewEncoder(cmd.OutOrStdout()).Encode(messages)
+				return emit(cmd, messages, func() error {
+					for _, m := range messages {
+						if _, err := fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n%s\n\n", m.Role, m.ID, m.Text); err != nil {
+							return err
+						}
+					}
+					return nil
+				})
 			})
 		},
 	}
+	addJSONFlag(cmd)
 	cmd.Flags().StringVar(&around, "around", "", "Print only the 3 messages either side of this message ID or zero-based index")
 	return cmd
 }

@@ -13,7 +13,7 @@ func TestConfirmPurgeAcceptsInputWithoutNewline(t *testing.T) {
 	cmd.SetIn(strings.NewReader("yes"))
 	cmd.SetOut(&bytes.Buffer{})
 
-	if !confirmPurge(cmd) {
-		t.Fatal("confirmPurge rejected yes at EOF")
+	if !confirm(cmd, "This will remove all jobs.") {
+		t.Fatal("confirm rejected yes at EOF")
 	}
 }

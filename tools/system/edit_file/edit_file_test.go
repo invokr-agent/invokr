@@ -2,10 +2,10 @@ package edit_file
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -34,6 +34,27 @@ func plan(t *testing.T, wsp workspace.Policy, args editArgs) (preparedEdit, erro
 		t.Fatal(err)
 	}
 	return prepareEdit(&core.ToolCall{Name: "edit", Arguments: data}, wsp)
+}
+
+func contentPlan(t *testing.T, wsp workspace.Policy, path, content string) (preparedEdit, error) {
+	t.Helper()
+	data, err := json.Marshal(map[string]string{"path": path, "content": content})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return prepareEdit(&core.ToolCall{Name: "edit", Arguments: data}, wsp)
+}
+
+func replaceIn(content, oldText, newText string, all bool, eol string) (string, int, error) {
+	spans, lineRung, err := replacementSpans(content, oldText, all)
+	if err != nil {
+		return "", 0, err
+	}
+	replacement, spans := replacementFor(content, newText, spans, lineRung, eol)
+	for _, span := range slices.Backward(spans) {
+		content = content[:span[0]] + replacement + content[span[1]:]
+	}
+	return content, len(spans), nil
 }
 
 func TestReplaceInExactUnique(t *testing.T) {
@@ -99,45 +120,19 @@ func TestReplaceInNotFoundQuotesMultiLineContext(t *testing.T) {
 
 func TestReplaceInNotFoundNoResemblance(t *testing.T) {
 	err := notFoundError("alpha\n", "zeta")
-	if err == nil || !strings.Contains(err.Error(), "nothing resembles") {
+	if err == nil || !strings.Contains(err.Error(), "nothing resembles") || !strings.Contains(err.Error(), "into oldText") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
-func TestPrepareEditCreatesMissingFile(t *testing.T) {
+func TestEditRequiresExistingText(t *testing.T) {
 	wsp, root := testPolicy(t)
-	p, err := plan(t, wsp, editArgs{Path: "new/file.txt", Edits: []editOp{{New: "hello\n"}}})
-	if err != nil {
-		t.Fatalf("prepareEdit: %v", err)
+	if _, err := plan(t, wsp, editArgs{Path: "new.txt", Edits: []editOp{{Old: "a", New: "b"}}}); err == nil || !strings.Contains(err.Error(), "use content") {
+		t.Fatalf("missing file: %v", err)
 	}
-	if !p.created || p.updated != "hello\n" {
-		t.Fatalf("plan = %+v", p)
-	}
-	if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	content, err := os.ReadFile(filepath.Join(root, "new/file.txt"))
-	if err != nil || string(content) != "hello\n" {
-		t.Fatalf("content = %q err = %v", content, err)
-	}
-}
-
-func TestPrepareEditEmptyOldOverwritesExistingFile(t *testing.T) {
-	wsp, root := testPolicy(t)
 	write(t, root, "a.txt", "body\n")
-	p, err := plan(t, wsp, editArgs{Path: "a.txt", Edits: []editOp{{New: "fresh\n"}}})
-	if err != nil {
-		t.Fatalf("prepareEdit: %v", err)
-	}
-	if !p.overwrote || p.created || p.updated != "fresh\n" {
-		t.Fatalf("plan = %+v", p)
-	}
-	if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	content, _ := os.ReadFile(filepath.Join(root, "a.txt"))
-	if string(content) != "fresh\n" {
-		t.Fatalf("content = %q", content)
+	if _, err := plan(t, wsp, editArgs{Path: "a.txt", Edits: []editOp{{New: "fresh\n"}}}); err == nil || !strings.Contains(err.Error(), "use content") {
+		t.Fatalf("empty oldText: %v", err)
 	}
 }
 
@@ -146,46 +141,6 @@ func TestPrepareEditRejectsEmptyOldAndNewOnExistingFile(t *testing.T) {
 	write(t, root, "a.txt", "body\n")
 	if _, err := plan(t, wsp, editArgs{Path: "a.txt"}); err == nil {
 		t.Fatal("expected error for empty old and new on existing file")
-	}
-}
-
-func TestPrepareEditMissingFileWithOldCreatesFromNew(t *testing.T) {
-	wsp, root := testPolicy(t)
-	p, err := plan(t, wsp, editArgs{Path: "new/gone.txt", Edits: []editOp{{Old: "a", New: "b\n"}}})
-	if err != nil {
-		t.Fatalf("prepareEdit: %v", err)
-	}
-	if !p.created || p.updated != "b\n" || !strings.Contains(p.note, "old was ignored") {
-		t.Fatalf("plan = %+v", p)
-	}
-	out, err := runPreparedEdit(t.Context(), nil, p)
-	if err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	if !strings.Contains(out, `"action":"create"`) || !strings.Contains(out, "did not exist, so it was created with new as its whole content; old was ignored") {
-		t.Fatalf("result = %s", out)
-	}
-	content, err := os.ReadFile(filepath.Join(root, "new/gone.txt"))
-	if err != nil || string(content) != "b\n" {
-		t.Fatalf("content = %q err = %v", content, err)
-	}
-}
-
-func TestPrepareEditMissingFileWithOldDryRunDoesNotWrite(t *testing.T) {
-	wsp, root := testPolicy(t)
-	p, err := plan(t, wsp, editArgs{Path: "gone.txt", DryRun: true, Edits: []editOp{{Old: "a", New: "b"}}})
-	if err != nil {
-		t.Fatalf("prepareEdit: %v", err)
-	}
-	out, err := runPreparedEdit(t.Context(), nil, p)
-	if err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	if !strings.Contains(out, `"dry_run":true`) || !strings.Contains(out, "old was ignored") {
-		t.Fatalf("result = %s", out)
-	}
-	if _, err := os.Stat(filepath.Join(root, "gone.txt")); !os.IsNotExist(err) {
-		t.Fatalf("dry run must not create the file, stat err = %v", err)
 	}
 }
 
@@ -216,17 +171,17 @@ func TestPrepareEditRejectsEscapingPath(t *testing.T) {
 	}
 }
 
-func TestEditsBatchAppliesInOrder(t *testing.T) {
+func TestEditsBatchMatchesOriginalFile(t *testing.T) {
 	wsp, root := testPolicy(t)
 	write(t, root, "a.txt", "one\ntwo\nthree\n")
 	p, err := plan(t, wsp, editArgs{Path: "a.txt", Edits: []editOp{
 		{Old: "one", New: "uno"},
-		{Old: "uno\ntwo", New: "pair"},
+		{Old: "two", New: "dos"},
 	}})
 	if err != nil {
 		t.Fatalf("prepareEdit: %v", err)
 	}
-	if p.updated != "pair\nthree\n" || p.replaced != 2 {
+	if p.updated != "uno\ndos\nthree\n" || p.replaced != 2 {
 		t.Fatalf("updated = %q replaced = %d", p.updated, p.replaced)
 	}
 }
@@ -261,33 +216,11 @@ func TestEditsBatchRejectsEmptyOld(t *testing.T) {
 	}
 }
 
-func TestEditsBatchMissingFileCreatesWhenUnambiguous(t *testing.T) {
-	wsp, root := testPolicy(t)
-	p, err := plan(t, wsp, editArgs{Path: "missing.txt", Edits: []editOp{{Old: "a", New: "b"}, {Old: "c", New: "b"}}})
-	if err != nil {
-		t.Fatalf("prepareEdit: %v", err)
-	}
-	if !p.created || p.updated != "b" || p.note == "" {
-		t.Fatalf("plan = %+v", p)
-	}
-	if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	if content, _ := os.ReadFile(filepath.Join(root, "missing.txt")); string(content) != "b" {
-		t.Fatalf("content = %q", content)
-	}
-}
-
-func TestEditsBatchRejectsMissingFileWhenAmbiguous(t *testing.T) {
+func TestEditsBatchRejectsMissingFile(t *testing.T) {
 	wsp, _ := testPolicy(t)
-	for _, edits := range [][]editOp{
-		{{Old: "a", New: "b"}, {Old: "c", New: "d"}},
-	} {
-		_, err := plan(t, wsp, editArgs{Path: "missing.txt", Edits: edits})
-		var toolErr *core.ToolError
-		if !errors.As(err, &toolErr) || toolErr.Code != "missing_file" || !strings.Contains(err.Error(), "does not exist") {
-			t.Fatalf("edits %+v: err = %v", edits, err)
-		}
+	_, err := plan(t, wsp, editArgs{Path: "missing.txt", Edits: []editOp{{Old: "a", New: "b"}, {Old: "c", New: "d"}}})
+	if err == nil || !strings.Contains(err.Error(), "use content") {
+		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -318,7 +251,7 @@ func TestDeleteRemovesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareEdit: %v", err)
 	}
-	if !p.deleted {
+	if p.operation != "delete" {
 		t.Fatalf("plan = %+v", p)
 	}
 	out, err := runPreparedEdit(t.Context(), nil, p)
@@ -389,90 +322,80 @@ func TestDeleteAsksApproval(t *testing.T) {
 	}
 }
 
-// The model asks for an empty file (a package `__init__.py`) as a non-empty
-// old against a missing file, or as a batch of empty replacements; both
-// create it empty (#453). A call carrying nothing at all still refuses --
-// see TestPrepareEditRejectsEmptyCall.
-func TestPrepareEditEmptyNewCreatesEmptyFile(t *testing.T) {
-	for name, args := range map[string]editArgs{
-		"oldset": {Path: "pkg/__init__.py", Edits: []editOp{{Old: "a"}}},
-		"batch":  {Path: "pkg/__init__.py", Edits: []editOp{{Old: "a", New: ""}, {Old: "b", New: ""}}},
-	} {
-		wsp, root := testPolicy(t)
-		p, err := plan(t, wsp, args)
+func TestEditContentCreatesAndOverwrites(t *testing.T) {
+	wsp, root := testPolicy(t)
+	for i, want := range []string{"", "fresh\n"} {
+		p, err := contentPlan(t, wsp, "pkg/sub/__init__.py", want)
 		if err != nil {
-			t.Fatalf("%s: prepareEdit: %v", name, err)
+			t.Fatal(err)
 		}
-		if !p.created || p.updated != "" {
-			t.Fatalf("%s: plan = %+v", name, p)
+		action := []string{"create", "overwrite"}[i]
+		if p.action("update") != action || editApprovalRequest(p).Summary != action+" pkg/sub/__init__.py" {
+			t.Fatalf("action = %+v", p)
 		}
+		p.args.DryRun = true
 		if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
-			t.Fatalf("%s: runPreparedEdit: %v", name, err)
+			t.Fatal(err)
 		}
-		if content, err := os.ReadFile(filepath.Join(root, "pkg/__init__.py")); err != nil || len(content) != 0 {
-			t.Fatalf("%s: content = %q err = %v", name, content, err)
+		before, readErr := os.ReadFile(filepath.Join(root, "pkg/sub/__init__.py"))
+		if (i == 0 && !os.IsNotExist(readErr)) || (i == 1 && (readErr != nil || len(before) != 0)) {
+			t.Fatalf("dry run changed file: %q, %v", before, readErr)
+		}
+		if i == 0 {
+			if _, err := os.Stat(filepath.Join(root, "pkg")); !os.IsNotExist(err) {
+				t.Fatalf("dry run created parents: %v", err)
+			}
+		}
+		p.args.DryRun = false
+		if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(root, "pkg/sub/__init__.py"))
+		if err != nil || string(got) != want {
+			t.Fatalf("got %q, err %v", got, err)
 		}
 	}
 }
 
-// An explicit empty replacement creates an empty file.
-func TestPrepareEditExplicitEmptyFileUnderExistingDir(t *testing.T) {
-	wsp, root := testPolicy(t)
-	if err := os.MkdirAll(filepath.Join(root, "pkg"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	p, err := plan(t, wsp, editArgs{Path: "pkg/__init__.py", Edits: []editOp{{Old: "", New: ""}}})
-	if err != nil {
-		t.Fatalf("prepareEdit: %v", err)
-	}
-	if !p.created || p.updated != "" || p.note != "" {
-		t.Fatalf("plan = %+v", p)
-	}
-	if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	if content, err := os.ReadFile(filepath.Join(root, "pkg/__init__.py")); err != nil || len(content) != 0 {
-		t.Fatalf("content = %q err = %v", content, err)
-	}
-}
-
-// Empty files can be created beneath missing parent directories.
-func TestPrepareEditCreatesEmptyFileUnderMissingDir(t *testing.T) {
-	wsp, root := testPolicy(t)
-	p, err := plan(t, wsp, editArgs{Path: "pkg/sub/__init__.py", Edits: []editOp{{Old: "", New: ""}}})
-	if err != nil || !p.created {
-		t.Fatalf("plan = %+v err = %v", p, err)
-	}
-	if _, err := runPreparedEdit(t.Context(), nil, p); err != nil {
-		t.Fatalf("runPreparedEdit: %v", err)
-	}
-	if content, err := os.ReadFile(filepath.Join(root, "pkg/sub/__init__.py")); err != nil || len(content) != 0 {
-		t.Fatalf("content = %q err = %v", content, err)
-	}
-}
-
-func TestNormalizeArgKeysMapsAliasesAndRejectsUnknown(t *testing.T) {
-	call := &core.ToolCall{Name: "edit", Arguments: []byte(`{"file":"a.py","edits":[{"old":"x","new":"y"}]}`)}
-	if err := normalizeArgKeys(call); err != nil {
-		t.Fatalf("normalize: %v", err)
-	}
-	args, err := core.DecodeOptionalToolArgs[editArgs](call)
-	if err != nil || args.Path != "a.py" || len(args.Edits) != 1 || args.Edits[0].Old != "x" || args.Edits[0].New != "y" {
-		t.Fatalf("args = %+v err = %v", args, err)
-	}
-	call = &core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"a.py","contents":"y"}`)}
-	err = normalizeArgKeys(call)
-	if err == nil || !strings.Contains(err.Error(), `unknown argument "contents"`) || !strings.Contains(err.Error(), "accepted: path, edits") {
+func TestEditRequiresOperation(t *testing.T) {
+	wsp, _ := testPolicy(t)
+	_, err := prepareEdit(&core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"empty.txt"}`)}, wsp)
+	if err == nil || !strings.Contains(err.Error(), "edits must contain") {
 		t.Fatalf("err = %v", err)
 	}
 }
 
-func TestPrepareEditRejectsContentAlias(t *testing.T) {
+func TestValidateArgKeysRejectsAliasesAndUnknown(t *testing.T) {
+	call := &core.ToolCall{Name: "edit", Arguments: []byte(`{"file":"a.py","edits":[{"oldText":"x","newText":"y"}]}`)}
+	if err := validateArgKeys(call); err == nil || !strings.Contains(err.Error(), `unknown argument "file"`) {
+		t.Fatalf("alias accepted: %v", err)
+	}
+	call = &core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"a.py","contents":"y"}`)}
+	err := validateArgKeys(call)
+	if err == nil || !strings.Contains(err.Error(), `unknown argument "contents"`) || !strings.Contains(err.Error(), "accepted: path, content, edits") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestPrepareEditAcceptsContent(t *testing.T) {
 	wsp, _ := testPolicy(t)
 	call := &core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"new.py","content":"print(1)\n"}`)}
 	p, err := prepareEdit(call, wsp)
-	if err == nil || !strings.Contains(err.Error(), `unknown argument "content"`) {
+	if err != nil || p.operation != "create" || p.updated != "print(1)\n" {
 		t.Fatalf("plan = %+v err = %v", p, err)
+	}
+}
+
+func TestPrepareEditRejectsContentWithEditsOrDelete(t *testing.T) {
+	wsp, root := testPolicy(t)
+	write(t, root, "a.txt", "old\n")
+	for _, raw := range []string{
+		`{"path":"a.txt","content":"new\n","edits":[{"oldText":"old","newText":"new"}]}`,
+		`{"path":"a.txt","content":"new\n","delete":true}`,
+	} {
+		if _, err := prepareEdit(&core.ToolCall{Name: "edit", Arguments: []byte(raw)}, wsp); err == nil || !strings.Contains(err.Error(), "content") {
+			t.Fatalf("raw=%s err=%v", raw, err)
+		}
 	}
 }
 
@@ -516,7 +439,7 @@ func TestBatchNotFoundHintQuotesTheFileOnDisk(t *testing.T) {
 		{Old: "alpha", New: "ALPHA"},
 		{Old: "gamna", New: "GAMMA"},
 	}}
-	_, _, err := applyOps("alpha\nbeta\ngamma\n", args, "f.go", "\n")
+	_, _, err := applyOriginalOps("alpha\nbeta\ngamma\n", args, "f.go", "\n")
 	if err == nil {
 		t.Fatalf("want an error")
 	}
@@ -575,7 +498,7 @@ func TestNotFoundResuppliesSurroundingLines(t *testing.T) {
 		t.Fatalf("want an error")
 	}
 	got := err.Error()
-	for _, want := range []string{"line 28\n", "line 30\n", "line 33\n", "current text, lines 28-33", "closest match to old starts at line 30", "do not retype it from memory"} {
+	for _, want := range []string{"line 28\n", "line 30\n", "line 33\n", "current text, lines 28-33", "closest match to old starts at line 30", "do not retype it from memory", "into oldText"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in %s", want, got)
 		}
@@ -587,7 +510,7 @@ func TestNotFoundResuppliesSurroundingLines(t *testing.T) {
 
 func TestNotFoundNoResemblanceQuotesSmallFileWhole(t *testing.T) {
 	err := notFoundError("alpha\nbeta\ngamma\n", "zzzz")
-	if err == nil || !strings.Contains(err.Error(), "nothing resembles") {
+	if err == nil || !strings.Contains(err.Error(), "nothing resembles") || !strings.Contains(err.Error(), "into oldText") {
 		t.Fatalf("err = %v", err)
 	}
 	if !strings.Contains(err.Error(), "full current contents (3 lines):\nalpha\nbeta\ngamma") {
@@ -606,7 +529,7 @@ func TestNotFoundNoResemblanceRefusesToDumpLargeFile(t *testing.T) {
 	if err == nil {
 		t.Fatalf("want an error")
 	}
-	if strings.Contains(err.Error(), "full current contents") || !strings.Contains(err.Error(), "read it") {
+	if strings.Contains(err.Error(), "full current contents") || !strings.Contains(err.Error(), "read it") || !strings.Contains(err.Error(), "into oldText") {
 		t.Fatalf("err = %v", err)
 	}
 	if len(err.Error()) > 400 {
@@ -623,7 +546,7 @@ func TestSuccessfulEditUnaffectedByResupply(t *testing.T) {
 }
 
 func TestEditSchemaOnlyExposesEdits(t *testing.T) {
-	schema := core.SchemaFor[editArgs]()
+	schema := editSchema()
 	data, err := json.Marshal(schema)
 	if err != nil {
 		t.Fatal(err)
@@ -634,13 +557,51 @@ func TestEditSchemaOnlyExposesEdits(t *testing.T) {
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	for _, key := range []string{"old", "new", "replace_all"} {
+	for _, key := range []string{"oldText", "newText", "replace_all"} {
 		if _, ok := decoded.Properties[key]; ok {
 			t.Fatalf("legacy field %s exposed", key)
 		}
 	}
 	if _, ok := decoded.Properties["edits"]; !ok {
 		t.Fatal("edits missing")
+	}
+	oldAt, newAt := strings.Index(string(data), `"oldText"`), strings.Index(string(data), `"newText"`)
+	if oldAt < 0 || newAt < 0 || oldAt >= newAt {
+		t.Fatalf("provider schema must put oldText before newText: %s", data)
+	}
+}
+
+func TestEditRejectsLegacyPair(t *testing.T) {
+	wsp, root := testPolicy(t)
+	write(t, root, "a.txt", "one")
+	_, err := prepareEdit(&core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"a.txt","edits":[{"old":"one","new":"two"}]}`)}, wsp)
+	if err == nil {
+		t.Fatalf("legacy pair accepted: %v", err)
+	}
+}
+
+func TestEditRequiresNewTextButAllowsEmptyReplacement(t *testing.T) {
+	wsp, root := testPolicy(t)
+	write(t, root, "a.txt", "one")
+	_, err := prepareEdit(&core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"a.txt","edits":[{"oldText":"one"}]}`)}, wsp)
+	if err == nil || !strings.Contains(err.Error(), "requires newText") {
+		t.Fatalf("missing newText: %v", err)
+	}
+	if _, err := prepareEdit(&core.ToolCall{Name: "edit", Arguments: []byte(`{"path":"a.txt","edits":[{"oldText":"one","newText":""}]}`)}, wsp); err != nil {
+		t.Fatalf("empty replacement: %v", err)
+	}
+}
+
+func TestOverlappingBatchLeavesFileUnchanged(t *testing.T) {
+	wsp, root := testPolicy(t)
+	write(t, root, "a.txt", "alpha beta\n")
+	_, err := plan(t, wsp, editArgs{Path: "a.txt", Edits: []editOp{{Old: "alpha beta", New: "x"}, {Old: "beta", New: "y"}}})
+	if err == nil || !strings.Contains(err.Error(), "overlapping edits") {
+		t.Fatalf("overlap: %v", err)
+	}
+	got, readErr := os.ReadFile(filepath.Join(root, "a.txt"))
+	if readErr != nil || string(got) != "alpha beta\n" {
+		t.Fatalf("file changed: %q, %v", got, readErr)
 	}
 }
 

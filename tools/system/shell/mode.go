@@ -26,6 +26,7 @@ func modeShellApproval(cfg config.ShellConfig, p preparedShellCommand) core.Appr
 	}
 	req.Confined, req.Writes = sandbox.Available() && p.mode != approval.YOLO, p.mode != approval.Plan
 	req.Network, req.Publishes = p.networkAllowed(), p.publishes
+	req.RequiresScopedApproval = p.sandboxExec
 	if !req.Confined {
 		req.Details += "\nUNSANDBOXED: this command runs on the host."
 	}

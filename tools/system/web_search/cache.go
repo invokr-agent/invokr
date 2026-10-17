@@ -3,8 +3,6 @@ package web_search
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -52,14 +50,7 @@ func (c cacheStore) Write(args toolArgs, resp toolResponse) error {
 	if c.dir == "" {
 		return nil
 	}
-	if err := os.MkdirAll(c.dir, 0755); err != nil {
-		return err
-	}
-	data, err := json.Marshal(cacheEntry{CreatedAt: c.now(), Response: resp})
-	if err != nil {
-		return err
-	}
-	return fsutil.WriteFileAtomic(c.path(args), data, 0600)
+	return fsutil.SaveJSON(c.path(args), cacheEntry{CreatedAt: c.now(), Response: resp})
 }
 
 func (c cacheStore) path(args toolArgs) string { return filepath.Join(c.dir, cacheKey(args)+".json") }

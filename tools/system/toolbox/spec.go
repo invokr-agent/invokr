@@ -1,16 +1,19 @@
 package toolbox
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
 
 	"go.uber.org/zap"
 )
@@ -61,25 +64,21 @@ func applyLimits(cfg config.ToolboxConfig, limits *toolboxLimits) (config.Toolbo
 	if limits == nil {
 		return cfg, nil
 	}
-	if ms := limits.TimeoutSeconds * 1000; ms > 0 {
-		if ms > cfg.MaxLimitTimeoutMS {
-			return cfg, fmt.Errorf("limits.timeout_seconds %d exceeds cap of %d", limits.TimeoutSeconds, cfg.MaxLimitTimeoutMS/1000)
+	return cfg, cmp.Or(
+		applyCap(&cfg.ExecTimeoutMS, limits.TimeoutSeconds, 1000, cfg.MaxLimitTimeoutMS, "timeout_seconds"),
+		applyCap(&cfg.MemoryLimitBytes, limits.MemoryMB, 1024*1024, cfg.MaxLimitMemoryBytes, "memory_mb"),
+		applyCap(&cfg.MaxOutputBytes, limits.OutputKB, 1024, cfg.MaxLimitOutputBytes, "output_kb"))
+}
+
+// applyCap sets *dst to asked*unit when positive, refusing values over limit.
+func applyCap[T int | int64](dst *T, asked int, unit, limit T, field string) error {
+	if v := T(asked) * unit; v > 0 {
+		if v > limit {
+			return fmt.Errorf("limits.%s %d exceeds cap of %d", field, asked, limit/unit)
 		}
-		cfg.ExecTimeoutMS = ms
+		*dst = v
 	}
-	if bytes := int64(limits.MemoryMB) * 1024 * 1024; bytes > 0 {
-		if bytes > cfg.MaxLimitMemoryBytes {
-			return cfg, fmt.Errorf("limits.memory_mb %d exceeds cap of %d", limits.MemoryMB, cfg.MaxLimitMemoryBytes/(1024*1024))
-		}
-		cfg.MemoryLimitBytes = bytes
-	}
-	if bytes := limits.OutputKB * 1024; bytes > 0 {
-		if bytes > cfg.MaxLimitOutputBytes {
-			return cfg, fmt.Errorf("limits.output_kb %d exceeds cap of %d", limits.OutputKB, cfg.MaxLimitOutputBytes/1024)
-		}
-		cfg.MaxOutputBytes = bytes
-	}
-	return cfg, nil
+	return nil
 }
 
 // applyNetwork maps network-at-exec onto the capability the sandbox reads and
@@ -191,7 +190,7 @@ func loadToolboxTool(pluginDir string, cfg config.ToolboxConfig, logger *zap.Log
 		ToolSpec: core.ToolSpec{
 			Name: spec.Name, Description: spec.Description, Example: spec.Example, Parameters: spec.Parameters,
 			Metadata: core.ToolMetadata{
-				Namespace: core.FirstNonEmptyTrimmed(spec.Namespace, constants.ToolboxSource), Source: source,
+				Namespace: strutil.FirstNonEmptyTrimmed(spec.Namespace, constants.ToolboxSource), Source: source,
 				Runtime: runtime, PluginDir: filepath.ToSlash(pluginDir), Policy: policy,
 				Capabilities: capabilities, AlwaysVisible: alwaysVisible, Command: spec.Command,
 			},

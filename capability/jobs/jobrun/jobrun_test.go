@@ -27,7 +27,7 @@ func newTestDB(t *testing.T) *jobs.Store {
 func newTestApp(t *testing.T, baseURL string) config.AppConfig {
 	t.Helper()
 	return config.AppConfig{
-		Provider: config.ProviderConfig{BaseURL: baseURL},
+		Provider: config.ProviderConfig{BaseURL: baseURL, Model: "test-model"},
 		Memory:   config.MemoryConfig{Dir: t.TempDir()},
 	}
 }

@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/strutil"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	"github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/capability/memory/forgetting"
@@ -531,7 +532,6 @@ func newManagerFromConfigWithEvents(app config.AppConfig, dispatcher events.Disp
 	if dispatcher == nil {
 		return nil, errors.New("memory manager requires event dispatcher")
 	}
-	_ = memoryLogger(logger...)
 
 	sqliteMemory, err := sqlite.NewStore(sqlite.Config{Dir: app.Memory.Dir})
 	if err != nil {
@@ -560,7 +560,7 @@ func newManagerFromConfigWithEvents(app config.AppConfig, dispatcher events.Disp
 		lexical = vectorSource{embedder: worker, store: sqliteMemory}
 	}
 	m := TieredManager{markdown: markdownMemory, sqlite: sqliteMemory,
-		sessions: sessionstore.NewForWorkspace(app.Memory.Dir, app.Workspace.Root, memoryLogger(logger...)),
+		sessions: sessionstore.NewForWorkspace(app.Memory.Dir, app.Workspace.Root, cmp.Or(append(slices.Clip(logger), zap.NewNop())...)),
 		recall:   memoryrecall.NewOrchestrator(pinnedMarkdownSource{markdown: markdownMemory}, lexical, recallPolicy),
 		worker:   activeWorker, summarizer: summarizer, ownsWorker: ownsWorker,
 		zerfoo: app.Memory.Zerfoo, forgetting: app.Memory.Forgetting,
@@ -568,13 +568,6 @@ func newManagerFromConfigWithEvents(app config.AppConfig, dispatcher events.Disp
 	m.curator = newCurator(m)
 	m.curator.startWorker()
 	return m, nil
-}
-
-func memoryLogger(logger ...*zap.Logger) *zap.Logger {
-	if len(logger) > 0 && logger[0] != nil {
-		return logger[0]
-	}
-	return zap.NewNop()
 }
 
 func (m TieredManager) orchestrator() *memoryrecall.Orchestrator {

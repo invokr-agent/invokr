@@ -5,6 +5,7 @@
 package edit_file
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -23,27 +24,36 @@ import (
 )
 
 type editArgs struct {
-	Path   string   `json:"path" desc:"Workspace-relative or absolute path to edit."`
-	Edits  []editOp `json:"edits,omitempty" desc:"One or more replacements; required unless delete is true. Batch changes to this file in one call. Applied in order against updated content; all apply or none do. A single empty old creates or overwrites the whole file."`
-	DryRun bool     `json:"dry_run,omitempty" desc:"Validate the edit and report the outcome without writing."`
-	Delete bool     `json:"delete,omitempty" desc:"Delete the file at path instead of editing it. Give no edits with it."`
+	Path    string   `json:"path" desc:"Workspace-relative or absolute path to edit."`
+	Content *string  `json:"content,omitempty" desc:"Full file contents. Set this instead of edits to create or overwrite the whole file, including an empty file."`
+	Edits   []editOp `json:"edits,omitempty" desc:"One or more replacements against the original file; required unless content or delete is set. Overlapping replacements fail atomically."`
+	DryRun  bool     `json:"dry_run,omitempty" desc:"Validate the edit and report the outcome without writing."`
+	Delete  bool     `json:"delete,omitempty" desc:"Delete the file at path instead of editing it. Give no edits with it."`
 }
 
 type editOp struct {
-	Old        string `json:"old" desc:"Exact text to find. Empty only in a single-entry list to create or overwrite the whole file."`
-	New        string `json:"new" desc:"Replacement text. Empty deletes matched text."`
+	Old        string `json:"oldText" desc:"Exact text to find in the original file; must be nonempty."`
+	New        string `json:"newText" desc:"Replacement text. Empty deletes matched text."`
 	ReplaceAll bool   `json:"replace_all,omitempty" desc:"Replace every match instead of requiring a unique one."`
 }
 
+func (op *editOp) UnmarshalJSON(data []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	if _, ok := fields["newText"]; !ok {
+		return errors.New("edit requires newText")
+	}
+	type plain editOp
+	return json.Unmarshal(data, (*plain)(op))
+}
+
 type preparedEdit struct {
-	args                                    editArgs
-	original, displayPath, absPath, updated string
-	mode                                    os.FileMode
-	created, overwrote, deleted             bool
-	replaced                                int
-	// note tells the model when the call was repaired rather than applied as
-	// sent, so it learns what actually happened to the file.
-	note string
+	args                                     editArgs
+	displayPath, absPath, updated, operation string
+	mode                                     os.FileMode
+	replaced                                 int
 }
 
 type editResponse struct {
@@ -51,16 +61,31 @@ type editResponse struct {
 	Action   string `json:"action"`
 	Replaced int    `json:"replaced"`
 	DryRun   bool   `json:"dry_run,omitempty"`
-	Note     string `json:"note,omitempty"`
+}
+
+// Keep the edit pair in declaration order on the provider wire. JSON maps
+// otherwise sort "new" before "old", despite editOp's field order.
+func editSchema() map[string]any {
+	schema := core.SchemaFor[editArgs]()
+	items := schema["properties"].(map[string]any)["edits"].(map[string]any)["items"].(map[string]any)
+	properties := items["properties"].(map[string]any)
+	ordered := struct {
+		Old        any `json:"oldText"`
+		New        any `json:"newText"`
+		ReplaceAll any `json:"replace_all"`
+	}{properties["oldText"], properties["newText"], properties["replace_all"]}
+	data, _ := json.Marshal(ordered)
+	items["properties"] = json.RawMessage(data)
+	return schema
 }
 
 func RegisterEditFileTool(c core.NativeRegistrar, dispatcher events.Dispatcher, wsp workspace.Policy) {
 	core.Register(c, core.Tool[preparedEdit]{
 		Spec: core.ToolSpec{
 			Name:        "edit",
-			Description: "Edit a workspace file by exact search and replace. Pass an `edits` list even for one replacement, with exact existing text in `old` and its replacement in `new`; `old` must match exactly one place unless replace_all is set. Use a single edit with empty `old` to create or overwrite the whole file, including an empty file. For several changes to one file, use one call with multiple `edits` instead of separate calls. Keep each `old` small but unique; merge overlapping changes. Edits match the content after earlier edits in the list. Set dry_run to validate without writing. To remove a file, pass `delete` with the path and nothing else — this is the only way to delete a file.",
-			Example:     `{"name":"edit","arguments":{"path":"README.md","edits":[{"old":"## Usage","new":"## Usage\n\nRun the CLI."}]}}`,
-			Parameters:  core.SchemaFor[editArgs](),
+			Description: "Modify one file at path. Choose content (create/overwrite, including empty files; creates parent directories), edits (existing file), or delete. Batch replacements in edits: each oldText matches the original file uniquely unless replace_all=true; newText replaces it. Overlaps fail atomically. Never combine content, edits, or delete. dry_run validates without writing.",
+			Example:     `{"name":"edit","arguments":{"path":"README.md","edits":[{"oldText":"## Usage","newText":"## Usage\n\nRun the CLI."}]}}`,
+			Parameters:  editSchema(),
 			Metadata:    core.WriteWorkspaceAskMetadata("workspace", core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true}),
 		},
 		Decode: func(call *core.ToolCall) (preparedEdit, error) {
@@ -87,7 +112,7 @@ func RegisterEditFileTool(c core.NativeRegistrar, dispatcher events.Dispatcher, 
 }
 
 func prepareEdit(call *core.ToolCall, wsp workspace.Policy) (preparedEdit, error) {
-	if err := normalizeArgKeys(call); err != nil {
+	if err := validateArgKeys(call); err != nil {
 		return preparedEdit{}, err
 	}
 	args, err := core.DecodeOptionalToolArgs[editArgs](call)
@@ -106,34 +131,48 @@ func prepareEdit(call *core.ToolCall, wsp workspace.Policy) (preparedEdit, error
 	if args.Delete {
 		return prepareDelete(plan)
 	}
-	if len(args.Edits) == 0 {
-		return preparedEdit{}, fmt.Errorf("edit: edits must contain at least one replacement; use a single empty old to create or overwrite a file")
+	if args.Content != nil {
+		return prepareContent(plan)
 	}
-	content, err := os.ReadFile(abs)
+	return prepareReplacement(plan)
+}
+
+func prepareContent(plan preparedEdit) (preparedEdit, error) {
+	if len(plan.args.Edits) > 0 {
+		return preparedEdit{}, fmt.Errorf("edit %s: content cannot be combined with edits", plan.displayPath)
+	}
+	info, err := os.Stat(plan.absPath)
 	switch {
 	case os.IsNotExist(err):
-		return prepareCreate(plan)
+		plan.operation = "create"
+	case err != nil:
+		return preparedEdit{}, fmt.Errorf("stat %s: %w", plan.displayPath, err)
+	case info.IsDir():
+		return preparedEdit{}, fmt.Errorf("edit %s: path is a directory", plan.displayPath)
+	default:
+		plan.operation, plan.mode = "overwrite", info.Mode().Perm()
+	}
+	plan.updated, plan.replaced = *plan.args.Content, 1
+	return plan, nil
+}
+
+func prepareReplacement(plan preparedEdit) (preparedEdit, error) {
+	args := plan.args
+	if len(args.Edits) == 0 {
+		return preparedEdit{}, fmt.Errorf("edit: edits must contain at least one replacement")
+	}
+	content, err := os.ReadFile(plan.absPath)
+	switch {
+	case os.IsNotExist(err):
+		return preparedEdit{}, fmt.Errorf("edit %s: file does not exist; use content to create it", plan.displayPath)
 	case err != nil:
 		return preparedEdit{}, fmt.Errorf("read %s: %w", plan.displayPath, err)
 	}
-	if info, statErr := os.Stat(abs); statErr == nil {
+	if info, statErr := os.Stat(plan.absPath); statErr == nil {
 		plan.mode = info.Mode().Perm()
 	}
-	plan.original = string(content)
-	return prepareExistingEdit(plan, string(content))
-}
-
-// prepareExistingEdit plans a change to a file that already exists.
-func prepareExistingEdit(plan preparedEdit, content string) (preparedEdit, error) {
-	args := plan.args
-	// An empty old with replacement text on a file that exists is the model
-	// asking to rewrite it whole. Rejecting that produced retry loops (the
-	// model resends the same call), and its intent is unambiguous, so honor it.
-	if len(args.Edits) == 1 && args.Edits[0].Old == "" {
-		plan.overwrote, plan.replaced, plan.updated = true, 1, args.Edits[0].New
-		return plan, nil
-	}
-	updated, replaced, err := applyOps(content, args, plan.displayPath, workspace.DominantEOL(content))
+	original := string(content)
+	updated, replaced, err := applyOriginalOps(original, args, plan.displayPath, workspace.DominantEOL(original))
 	if err != nil {
 		return preparedEdit{}, err
 	}
@@ -170,8 +209,8 @@ func finishEdit(ctx context.Context, dispatcher events.Dispatcher, plan prepared
 // alternative outcome of a call that also asked for an edit.
 func prepareDelete(plan preparedEdit) (preparedEdit, error) {
 	args := plan.args
-	if len(args.Edits) > 0 {
-		return preparedEdit{}, fmt.Errorf("delete %s: give delete on its own, without edits", plan.displayPath)
+	if len(args.Edits) > 0 || args.Content != nil {
+		return preparedEdit{}, fmt.Errorf("delete %s: give delete on its own, without content or edits", plan.displayPath)
 	}
 	info, err := os.Stat(plan.absPath)
 	if os.IsNotExist(err) {
@@ -183,77 +222,52 @@ func prepareDelete(plan preparedEdit) (preparedEdit, error) {
 	if info.IsDir() {
 		return preparedEdit{}, fmt.Errorf("cannot delete %s: it is a directory; only files can be deleted", plan.displayPath)
 	}
-	plan.deleted, plan.mode = true, info.Mode().Perm()
+	plan.operation, plan.mode = "delete", info.Mode().Perm()
 	return plan, nil
 }
 
-// prepareCreate plans the creation of a missing file. The documented shape is
-// an empty old with the contents in new, but the most common failed call is a
-// non-empty old against a file that is not there yet: the model wanted the
-// file to end up containing new, so create it from new and say so in the
-// result instead of bouncing the call. An empty new creates an empty file
-// (the model's `__init__.py`); only an edits batch with conflicting
-// replacements is still refused.
-func prepareCreate(plan preparedEdit) (preparedEdit, error) {
-	args := plan.args
-	content, err := createContent(args, plan.displayPath)
-	if err != nil {
-		return preparedEdit{}, err
-	}
-	plan.created, plan.replaced, plan.updated = true, 1, content
-	if len(args.Edits) > 1 || args.Edits[0].Old != "" {
-		plan.note = fmt.Sprintf("%s did not exist, so it was created with new as its whole content; old was ignored because there was no existing text to match", plan.displayPath)
-	}
-	return plan, nil
-}
-
-// createContent picks the full contents for a missing file from the call's
-// shape. An empty new is a legitimate request for an empty file — the
-// package `__init__.py` in a directory that does not exist yet was the single
-// largest edit failure on the bench (39 per arm) while the parent
-// directory gated it; MkdirAll on write covers the nesting. Only an edits
-// batch that disagrees with itself is refused.
-func createContent(args editArgs, display string) (string, error) {
-	content := args.Edits[0].New
-	for _, op := range args.Edits[1:] {
-		if op.New != content {
-			return "", &core.ToolError{Code: "missing_file", Err: fmt.Errorf("cannot edit %s: file does not exist and the edits disagree on its contents; create it first with an empty old and the full contents in new", display)}
-		}
-	}
-	return content, nil
-}
-
-// applyOps applies the edits in order against the evolving content — and returns the final content
-// with the total replacement count. A batch is all-or-nothing: the first
-// failing edit aborts the whole call.
-func applyOps(content string, args editArgs, display, eol string) (string, int, error) {
+// applyOriginalOps locates all replacements in the original file and writes
+// them only after every match and overlap has been validated.
+func applyOriginalOps(content string, args editArgs, display, eol string) (string, int, error) {
 	ops, err := editOpsFor(args, display)
 	if err != nil {
 		return "", 0, err
 	}
-	total := 0
-	original := content
+	type change struct {
+		span [2]int
+		text string
+	}
+	var changes []change
 	for i, op := range ops {
-		updated, replaced, err := replaceIn(content, op.Old, op.New, op.ReplaceAll, eol)
+		spans, lineRung, err := replacementSpans(content, op.Old, op.ReplaceAll)
 		if err != nil {
 			if errors.Is(err, errOldNotFound) {
-				err = notFoundError(original, op.Old)
-				if _, _, originalErr := replaceIn(original, op.Old, op.New, op.ReplaceAll, eol); i > 0 && originalErr == nil {
-					err = errors.New("old matched the original file, but an earlier edit invalidated it. Edits apply sequentially. No changes were written. Merge overlapping edits or make this old match the result of earlier edits")
-				}
+				err = notFoundError(content, op.Old)
 			}
 			return "", 0, fmt.Errorf("edit %s: edits[%d]: %w", display, i, err)
 		}
-		content, total = updated, total+replaced
+		text, spans := replacementFor(content, op.New, spans, lineRung, eol)
+		for _, span := range spans {
+			changes = append(changes, change{span, text})
+		}
 	}
-	return content, total, nil
+	slices.SortFunc(changes, func(a, b change) int { return cmp.Compare(a.span[0], b.span[0]) })
+	for i := 1; i < len(changes); i++ {
+		if changes[i].span[0] < changes[i-1].span[1] {
+			return "", 0, fmt.Errorf("edit %s: overlapping edits; merge them into one replacement. No changes were written", display)
+		}
+	}
+	for _, c := range slices.Backward(changes) {
+		content = content[:c.span[0]] + c.text + content[c.span[1]:]
+	}
+	return content, len(changes), nil
 }
 
 // editOpsFor validates replacements on an existing file.
 func editOpsFor(args editArgs, display string) ([]editOp, error) {
 	for i, op := range args.Edits {
 		if op.Old == "" {
-			return nil, fmt.Errorf("edit %s: edits[%d]: empty old requires a single-entry edits list for whole-file overwrite", display, i)
+			return nil, fmt.Errorf("edit %s: edits[%d]: empty oldText; use content to create or overwrite the file", display, i)
 		}
 		args.Edits[i].Old = stripLinePrefixes(op.Old)
 	}
@@ -269,17 +283,10 @@ func toEOL(s, eol string) string {
 	return strings.ReplaceAll(lf, "\n", eol)
 }
 
-// stripCRLine ignores a line's carriage return, so LF `old` matches a CRLF
-// file (and the reverse) without also tolerating trailing-whitespace drift.
-func stripCRLine(s string) string { return strings.TrimSuffix(s, "\r") }
-
-// replaceIn applies the matching ladder: exact text, then line matching that
-// ignores line endings, then line matching that ignores trailing whitespace,
-// then line matching that ignores all leading and trailing whitespace. The
-// first rung with any match wins. Matching is what the rungs differ on; the
-// replacement always carries the file's own line ending, whichever rung hit.
-func replaceIn(content, oldText, newText string, all bool, eol string) (string, int, error) {
-	rungs := []func(string) string{nil, stripCRLine, trimRightLine, strings.TrimSpace, collapseSpacesLine}
+// replacementSpans tries each rung in turn; StripCR lets LF `old` match a CRLF
+// file without also tolerating trailing-whitespace drift.
+func replacementSpans(content, oldText string, all bool) ([][2]int, bool, error) {
+	rungs := []func(string) string{nil, core.StripCR, trimRightLine, strings.TrimSpace, collapseSpacesLine}
 	for i, norm := range rungs {
 		spans := locate(content, oldText, norm)
 		if len(spans) == 0 {
@@ -293,19 +300,17 @@ func replaceIn(content, oldText, newText string, all bool, eol string) (string, 
 			break
 		}
 		if len(spans) > 1 && !all {
-			return "", 0, fmt.Errorf("old matches %d locations (first at offsets %d and %d); include surrounding lines to make it unique, or set replace_all", len(spans), spans[0][0], spans[1][0])
+			return nil, false, fmt.Errorf("old matches %d locations (first at offsets %d and %d); include surrounding lines to make it unique, or set replace_all", len(spans), spans[0][0], spans[1][0])
 		}
 		if !all {
 			spans = spans[:1]
 		}
-		replacement, spans := replacementFor(content, newText, spans, norm != nil, eol)
-		return spliceAll(content, spans, replacement), len(spans), nil
+		return spans, norm != nil, nil
 	}
 	if spans := locateBlockAnchor(content, oldText); len(spans) == 1 && !all {
-		replacement, spans := replacementFor(content, newText, spans, true, eol)
-		return spliceAll(content, spans, replacement), 1, nil
+		return spans, true, nil
 	}
-	return "", 0, errOldNotFound
+	return nil, false, errOldNotFound
 }
 
 // Block-anchor budgets (#577). The five ladder rungs all require every line of
@@ -461,18 +466,6 @@ func keepTrailingCR(content string, spans [][2]int) [][2]int {
 	return spans
 }
 
-func spliceAll(content string, spans [][2]int, replacement string) string {
-	var b strings.Builder
-	cursor := 0
-	for _, span := range spans {
-		b.WriteString(content[cursor:span[0]])
-		b.WriteString(replacement)
-		cursor = span[1]
-	}
-	b.WriteString(content[cursor:])
-	return b.String()
-}
-
 // locate returns the byte spans of old in content. A nil norm means exact
 // substring search; otherwise lines are compared after norm.
 func locate(content, old string, norm func(string) string) [][2]int {
@@ -501,7 +494,7 @@ func locateLines(content, old string, norm func(string) string) [][2]int {
 	want := strings.Split(strings.TrimSuffix(old, "\n"), "\n")
 	var spans [][2]int
 	for i := 0; i+len(want) <= len(lines); i++ {
-		if !slices.EqualFunc(lines[i:i+len(want)], want, func(a, b string) bool { return norm(a) == norm(b) }) {
+		if !slices.EqualFunc(lines[i:i+len(want)], want, core.EqualBy(norm)) {
 			continue
 		}
 		last := i + len(want) - 1
@@ -560,7 +553,7 @@ func notFoundError(content, old string) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "old not found in file; suggested closest match to old starts at line %d.\n", bestIdx+1)
 	writeFirstDifference(&b, lines, want, bestIdx)
-	fmt.Fprintf(&b, "Copy the raw text below verbatim into old — do not retype it from memory. File's current text, lines %d-%d; closest match in the file:\n", from+1, to)
+	fmt.Fprintf(&b, "Copy the raw text below verbatim into oldText — do not retype it from memory. File's current text, lines %d-%d; closest match in the file:\n", from+1, to)
 	for i := from; i < to; i++ {
 		b.WriteString(lines[i])
 		b.WriteString("\n")
@@ -592,9 +585,9 @@ func writeFirstDifference(b *strings.Builder, lines, want []string, bestIdx int)
 // it does today.
 func noResemblanceError(content string, lines []string, first string) error {
 	if len(lines) <= resupplyWholeFileLines && len(content) <= resupplyWholeFileBytes {
-		return fmt.Errorf("old not found in file; nothing resembles %q. Copy the raw text below verbatim into old — do not retype it from memory. The file's full current contents (%d lines):\n%s", first, len(lines), strings.TrimSuffix(content, "\n"))
+		return fmt.Errorf("old not found in file; nothing resembles %q. Copy the raw text below verbatim into oldText — do not retype it from memory. The file's full current contents (%d lines):\n%s", first, len(lines), strings.TrimSuffix(content, "\n"))
 	}
-	return fmt.Errorf("old not found in file; nothing resembles %q. The file is %d lines, too large to quote here: read it and copy the exact text into old — do not retype it from memory", first, len(lines))
+	return fmt.Errorf("old not found in file; nothing resembles %q. The file is %d lines, too large to quote here: read it and copy the exact text into oldText — do not retype it from memory", first, len(lines))
 }
 
 // Exact lines dominate; bounded whole-line similarity breaks ties without
@@ -627,6 +620,9 @@ func describeOps(args editArgs) string {
 	if args.Delete {
 		return "Delete the file."
 	}
+	if args.Content != nil {
+		return fmt.Sprintf("Write full file content:\n%s", *args.Content)
+	}
 	var b strings.Builder
 	for i, op := range args.Edits {
 		fmt.Fprintf(&b, "Edit %d old:\n%s\n\nEdit %d new:\n%s\n\n", i+1, op.Old, i+1, op.New)
@@ -635,7 +631,7 @@ func describeOps(args editArgs) string {
 }
 
 func runPreparedEdit(ctx context.Context, dispatcher events.Dispatcher, plan preparedEdit) (string, error) {
-	if plan.deleted {
+	if plan.operation == "delete" {
 		return runDelete(ctx, dispatcher, plan)
 	}
 	if !plan.args.DryRun {
@@ -647,35 +643,22 @@ func runPreparedEdit(ctx context.Context, dispatcher events.Dispatcher, plan pre
 			return "", fmt.Errorf("write %s: %w", plan.displayPath, err)
 		}
 	}
-	return finishEdit(ctx, dispatcher, plan, "applied", editResponse{Path: plan.displayPath, Action: plan.action("update"), Replaced: plan.replaced, DryRun: plan.args.DryRun, Note: plan.note})
+	return finishEdit(ctx, dispatcher, plan, "applied", editResponse{Path: plan.displayPath, Action: plan.action("update"), Replaced: plan.replaced, DryRun: plan.args.DryRun})
 }
 
 // action names what the plan does to the file; fallback is the plain-edit
 // word, which the approval prompt and the result spell differently.
 func (p preparedEdit) action(fallback string) string {
-	switch {
-	case p.created:
-		return "create"
-	case p.overwrote:
-		return "overwrite"
-	case p.deleted:
-		return "delete"
-	}
-	return fallback
+	return cmp.Or(p.operation, fallback)
 }
 
 func dispatchEditAudit(ctx context.Context, dispatcher events.Dispatcher, plan preparedEdit, outcome string, err error) {
 	core.DispatchAudit(ctx, dispatcher, &events.AuditPayload{Action: "edit", Tool: "edit", Paths: []string{plan.displayPath}, DryRun: plan.args.DryRun, Outcome: outcome}, err)
 }
 
-// argAliases accepts common path spellings without introducing another edit shape.
-var argAliases = map[string]string{"file": "path", "file_path": "path", "filename": "path"}
+var knownArgKeys = []string{"path", "content", "edits", "dry_run", "delete"}
 
-var knownArgKeys = []string{"path", "edits", "dry_run", "delete"}
-
-// normalizeArgKeys rewrites aliased keys in place and refuses unknown ones
-// with the list of accepted names, instead of decoding around them.
-func normalizeArgKeys(call *core.ToolCall) error {
+func validateArgKeys(call *core.ToolCall) error {
 	if call == nil || len(call.Arguments) == 0 {
 		return nil
 	}
@@ -683,22 +666,10 @@ func normalizeArgKeys(call *core.ToolCall) error {
 	if err := json.Unmarshal(call.Arguments, &raw); err != nil {
 		return nil // let the typed decode report the syntax error
 	}
-	changed := false
-	for key, value := range raw {
-		canonical, aliased := argAliases[key]
-		switch {
-		case aliased:
-			if _, taken := raw[canonical]; !taken {
-				raw[canonical] = value
-			}
-			delete(raw, key)
-			changed = true
-		case !slices.Contains(knownArgKeys, key):
+	for key := range raw {
+		if !slices.Contains(knownArgKeys, key) {
 			return fmt.Errorf("edit: unknown argument %q; accepted: %s", key, strings.Join(knownArgKeys, ", "))
 		}
-	}
-	if changed {
-		call.Arguments, _ = json.Marshal(raw)
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -24,11 +25,12 @@ type ServicesProvider func() (appruntime.Services, error)
 
 func NewAgentCmd(services ServicesProvider) *cobra.Command {
 	var resumeID string
+	var last bool
 	cmd := &cobra.Command{
 		Use:     "agent",
 		Short:   "Run the interactive agent (what bare `invokr` does)",
 		Long:    "Opens the TUI: you type, the agent answers, and tool calls stop for\napproval unless a standing grant covers them. The transcript is stored,\nso --resume can pick it up later.",
-		Example: "  invokr agent\n  invokr agent --resume            # pick a session from a menu\n  invokr agent --resume <id>       # resume that session\n  invokr agent --resume pick       # same as the bare flag",
+		Example: "  invokr\n  invokr --resume            # pick a session from a menu\n  invokr --resume <id>       # resume that session\n  invokr --last              # resume the latest session here",
 		GroupID: groupRun,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			runtimeServices, err := services()
@@ -36,15 +38,18 @@ func NewAgentCmd(services ServicesProvider) *cobra.Command {
 				return err
 			}
 
-			session, approvals, transcript, err := resumeAgentSession(cmd, runtimeServices, resumeIDFromArgs(resumeID, args))
+			id := resumeIDFromArgs(resumeID, args)
+			if last {
+				id = resumeLastSentinel
+			}
+			session, approvals, transcript, err := resumeAgentSession(cmd, runtimeServices, id)
 			if errors.Is(err, agentui.ErrPickCanceled) {
 				return nil // dismissing the picker leaves, it does not start fresh
 			}
 			if err != nil {
 				return err
 			}
-			registerCustomCommands(cmd.Context(), runtimeServices.Commands, runtimeServices.Logger)
-			return runAgentUI(cmd.Context(), agentui.Params{
+			return runAgentSessions(cmd.Context(), runtimeServices, agentui.Params{
 				Session: session, Commands: runtimeServices.Commands,
 				EventBus: runtimeServices.Events, Approvals: approvals, Grants: runtimeServices.Grants,
 				Logs: runtimeServices.Logs, LogView: runtimeServices.LogView,
@@ -62,8 +67,38 @@ func NewAgentCmd(services ServicesProvider) *cobra.Command {
 	// space-separated value, so `--resume <id>` arrives as a positional instead;
 	// resumeIDFromArgs recovers it and keeps that spelling working.
 	cmd.Flags().Lookup("resume").NoOptDefVal = resumePickSentinel
+	cmd.Flags().BoolVar(&last, "last", false, "Resume the most recent stored session in this directory")
+	cmd.MarkFlagsMutuallyExclusive("resume", "last")
 	cmd.Args = resumeAwareArgs(&resumeID)
 	return cmd
+}
+
+func runAgentSessions(ctx context.Context, services appruntime.Services, params agentui.Params) error {
+	defer func() {
+		if closer, ok := params.Session.(interface{ Close() }); ok {
+			closer.Close()
+		}
+	}()
+	for {
+		registerCustomCommands(ctx, services.Commands, services.Logger)
+		if err := runAgentUI(ctx, params); !errors.Is(err, agentui.ErrNewSession) {
+			return err
+		}
+		if services.NewAgentSession == nil {
+			return fmt.Errorf("runtime does not support starting a new session")
+		}
+		next, err := services.NewAgentSession()
+		if err != nil {
+			return err
+		}
+		if closer, ok := params.Session.(interface{ Close() }); ok {
+			closer.Close()
+		}
+		services = next
+		params.Session, params.Approvals, params.Commands = next.Session, next.Approvals, next.Commands
+		params.Grants = next.Grants
+		params.Transcript = []turn.TranscriptMessage{{Role: "tool", Text: "new session started — saved history and memory kept"}}
+	}
 }
 
 // resumePickSentinel is the value pflag assigns when --resume is given without
@@ -72,6 +107,9 @@ func NewAgentCmd(services ServicesProvider) *cobra.Command {
 // help, making `--resume pick` a documented spelling rather than a leaked
 // implementation detail.
 const resumePickSentinel = "pick"
+
+// resumeLastSentinel stands for --last; the NUL keeps it untypeable as an ID.
+const resumeLastSentinel = "\x00last"
 
 // resumeAwareArgs allows exactly one positional after a bare --resume, so
 // `--resume <id>` still works despite NoOptDefVal, while every other stray
@@ -113,7 +151,12 @@ func purgeSession(cmd *cobra.Command, services appruntime.Services, store *sessi
 }
 
 func resolveResumeID(cmd *cobra.Command, services appruntime.Services, store *sessionstore.Store, resumeID string) (string, error) {
-	if resumeID != resumePickSentinel {
+	switch resumeID {
+	case resumeLastSentinel:
+		last, err := store.LastResumableInCwd()
+		return last.ID, err
+	case resumePickSentinel:
+	default:
 		return resumeID, nil
 	}
 	return agentui.PickSession(cmd.Context(), store, purgeSession(cmd, services, store), cmd.InOrStdin(), cmd.OutOrStdout())
@@ -178,9 +221,7 @@ func registerCustomCommands(ctx context.Context, backend appruntime.CommandBacke
 	if backend == nil {
 		return
 	}
-	if logger == nil {
-		logger = zap.NewNop()
-	}
+	logger = cmp.Or(logger, zap.NewNop())
 	register := func() {
 		dynamic := toolcore.MapSlice(backend.CustomCommands(ctx), func(command appruntime.CustomCommand) agentui.DynamicCommand {
 			return agentui.DynamicCommand(command)

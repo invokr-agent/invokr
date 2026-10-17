@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -37,11 +36,9 @@ type contextBudget struct {
 	// writesWorkspace reports whether a tool mutates the workspace; nil-safe
 	// (pinning is skipped when unset, e.g. in tests).
 	writesWorkspace func(string) bool
-	// resultKeepTurns / resultAgeTurns are the explicit aging settings (#480);
-	// zero means scaled with the window by agingLimits (#577).
-	resultKeepTurns, resultAgeTurns int
 	// todo reads authoritative task state only after a context rewrite.
 	todo          func() string
+	toolState     func() string
 	spill         spillStore
 	workspaceRoot string
 }
@@ -69,17 +66,10 @@ func (b *contextBudget) RequestCompaction() {
 	b.forceCompaction.Store(true)
 }
 
-// Prepare ages and, past the threshold, compacts the transcript. spillRefs
-// maps tool call id → spill file path so an aged stub can point at the full
-// output; it may be nil.
-func (b *contextBudget) Prepare(ctx context.Context, sessionID string, messages []inference.Message, state contextWindowState, spillRefs map[string]string) ([]inference.Message, contextWindowState) {
+// Prepare compacts the transcript past the context threshold.
+func (b *contextBudget) Prepare(ctx context.Context, sessionID string, messages []inference.Message, state contextWindowState) ([]inference.Message, contextWindowState) {
 	if b == nil || len(messages) == 0 {
 		return messages, state
-	}
-	var aged int
-	keepTurns, ageTurns, pinBudget := b.agingLimits()
-	if messages, aged = ageToolResults(messages, keepTurns, ageTurns, pinBudget, spillRefs, b.writesWorkspace); aged > 0 {
-		events.Notice(ctx, b.events, sessionID, b.parentSessionID, fmt.Sprintf("context.elided: %d tool result(s) older than %d turns collapsed", aged, keepTurns))
 	}
 	windowSize := b.contextWindowTokens()
 	if windowSize <= 0 {
@@ -158,6 +148,11 @@ func (b *contextBudget) afterCompaction(messages []inference.Message, state cont
 	if changed && b.todo != nil {
 		if items := b.todo(); items != "" {
 			messages = append(messages, inference.UserMessage("Current todo list (from the todo tool; supersedes earlier snapshots):\n"+items))
+		}
+	}
+	if changed && b.toolState != nil {
+		if snapshot := b.toolState(); snapshot != "" {
+			messages = append(messages, inference.UserMessage(snapshot))
 		}
 	}
 	if changed && estimatedMessageTokens(messages) > target {
@@ -377,15 +372,4 @@ func carriedFiles(message inference.Message) map[string][]string {
 		return nil
 	}
 	return map[string][]string{"read": files["read"], "modified": files["modified"]}
-}
-
-// agingLimits scales the 32k-tuned aging defaults (keep/age turns, pinned-read
-// budget) linearly with the effective context window (after headroom, e.g.
-// 65536-4096 -> 9/15/60 KiB), capped at 4x; explicit settings win, and an
-// explicit age caps the scaled keep. At 64k one-call turns aged results out within 5-8 calls, driving
-// re-reads and edit anchor misses (#577).
-func (b *contextBudget) agingLimits() (int, int, int) {
-	kiB := int(min(max(b.contextWindowTokens(), 32<<10), 128<<10)) / 1024 // window, 32..128 KiB tokens
-	keep := cmp.Or(b.resultKeepTurns, min(constants.ToolResultKeepTurns*kiB/32, cmp.Or(b.resultAgeTurns, math.MaxInt)))
-	return keep, max(cmp.Or(b.resultAgeTurns, constants.ToolResultAgeTurns*kiB/32), keep), pinnedReadBudgetBytes * kiB / 32
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
 
@@ -54,6 +56,8 @@ func newRootCmd(app config.AppConfig, bootstrap runtimeBootstrap) (*cobra.Comman
 		Long:    rootLong,
 		Example: rootExample,
 		Version: version.String(),
+		// main prints the returned error once; cobra printing it too doubled it.
+		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			modePolicy, modeErr := startupMode(cmd)
 			if modeErr != nil {
@@ -95,6 +99,8 @@ func newRootCmd(app config.AppConfig, bootstrap runtimeBootstrap) (*cobra.Comman
 				LogBuffer:    logBuffer,
 				LogView:      logView,
 				ModelFlagSet: cmd.Root().PersistentFlags().Changed("model"),
+				// ponytail: only commands that send turns need a model.
+				ModelOptional: !isAgentCommand(cmd) && !hasAncestorNamed(cmd, "exec", "bot"),
 			})
 			if err != nil {
 				return err
@@ -110,8 +116,8 @@ func newRootCmd(app config.AppConfig, bootstrap runtimeBootstrap) (*cobra.Comman
 			return cleanupActiveRuntime(cmd.ErrOrStderr(), &activeRuntime)
 		},
 	}
-	registerRootFlags(rootCmd, &appConfig, &logView)
-	registerCommands(rootCmd, &appConfig, &activeRuntime)
+	session := registerRootFlags(rootCmd, &appConfig, &logView)
+	registerCommands(rootCmd, &appConfig, &activeRuntime, session)
 	return rootCmd, func() error { return cleanupActiveRuntime(os.Stderr, &activeRuntime) }
 }
 
@@ -119,39 +125,47 @@ func newRootCmd(app config.AppConfig, bootstrap runtimeBootstrap) (*cobra.Comman
 // presentation that has to be set on root: the version template, the command
 // groups, and a group for cobra's own generated commands (unassigned, they land
 // in an "Additional Commands" bucket that exists for no other reason).
-func registerRootFlags(rootCmd *cobra.Command, appConfig *config.AppConfig, logView *bool) {
+func registerRootFlags(rootCmd *cobra.Command, appConfig *config.AppConfig, logView *bool) *pflag.FlagSet {
 	flags := rootCmd.PersistentFlags()
-	flags.String("mode", "manual", "Session mode: manual, auto, plan (agent/exec; exec denies operations that still need approval). Auto cannot initialize a repository at the workspace root; use Manual or your terminal first")
-	flags.Bool("yolo", false, "DANGER: bypass approvals and Invokr sandbox/workspace restrictions for this session")
-	flags.Bool("allow-publishing", false, "Allow recognized publishing operations in Auto for this session")
 	flags.StringVar(&appConfig.Provider.BaseURL, "base-url", appConfig.Provider.BaseURL, "Base URL for the model/provider API")
 	flags.StringVar(&appConfig.Provider.Model, "model", appConfig.Provider.Model, "Model name sent to the provider API")
 	// --profile is consumed before cobra runs (main.go profileRequested): the
 	// overlay must land under the flag bindings above. Registered here only so
 	// cobra accepts the flag and documents it.
-	flags.String("profile", "", "Run with a profile from ~/.invokr/profiles/<name>.md or the router table")
-	flags.IntVar(&appConfig.Provider.ContextWindowTokens, "context-window-tokens", appConfig.Provider.ContextWindowTokens, "Provider context window token limit for usage display")
+	flags.String("profile", "", "Run with a profile from ~/.invokr/profiles/<name>.md, <name>.json, or the router table")
 	flags.StringVar(&appConfig.Log.Level, "log-level", appConfig.Log.Level, "Default log level: debug, info, warn, error, dpanic, panic, or fatal")
 	flags.StringVar(&appConfig.Log.Format, "log-format", appConfig.Log.Format, "Log format: console or json")
 	flags.StringVar(&appConfig.Log.Output, "log-output", appConfig.Log.Output, "Log output path, stdout, or stderr")
 	flags.StringVar(&appConfig.Log.Filter, "log-filter", appConfig.Log.Filter, "Per-logger filter rules, e.g. 'agent.session=info,clients=debug' or 'info:agent.session,debug:clients'")
-	flags.StringSliceVar(&appConfig.Tools.Allowlist, "tools", appConfig.Tools.Allowlist, "Advertise only these tools to the model, repeatable (also INVOKR_TOOLS); a narrow set cuts selection dilution on small models")
-	flags.BoolVar(logView, "log-view", false, "Show full-width Chat and Logs tabs during interactive agent runs")
-	flags.BoolVar(&appConfig.Sandbox.Enabled, "sandbox", appConfig.Sandbox.Enabled, "Re-exec the agent inside a docker container before bootstrapping (set INVOKR_SANDBOX=1 to enable via env); auto-build requires a Linux host")
-	rootCmd.SetVersionTemplate("invokr-agent {{.Version}}\n")
+	// Session flags only mean something to a run of the agent: root, agent and
+	// exec carry them as local flags (registerCommands), so other commands'
+	// help does not list them.
+	session := pflag.NewFlagSet("session", pflag.ContinueOnError)
+	session.String("mode", cmp.Or(appConfig.SessionMode, "manual"), "Session mode: manual, auto, plan (agent/exec; exec denies operations that still need approval). Auto cannot initialize a repository at the workspace root; use Manual or your terminal first")
+	session.Bool("yolo", false, "DANGER: bypass approvals and Invokr sandbox/workspace restrictions for this session")
+	session.Bool("allow-publishing", false, "Allow recognized publishing operations in Auto for this session")
+	session.IntVar(&appConfig.Provider.ContextWindowTokens, "context-window-tokens", appConfig.Provider.ContextWindowTokens, "Provider context window token limit for usage display")
+	session.StringSliceVar(&appConfig.Tools.Allowlist, "tools", appConfig.Tools.Allowlist, "Advertise only these tools to the model, repeatable (also INVOKR_TOOLS); a narrow set cuts selection dilution on small models")
+	session.BoolVar(&appConfig.Tools.TmuxHostServer, "use-host-tmux", appConfig.Tools.TmuxHostServer, "Point the tmux tool at your own tmux server, unsandboxed: the agent can read and type into all your sessions (also INVOKR_TMUX_HOST_SERVER=1)")
+	session.BoolVar(logView, "log-view", false, "Show full-width Chat and Logs tabs during interactive agent runs")
+	session.BoolVar(&appConfig.Sandbox.Enabled, "sandbox", appConfig.Sandbox.Enabled, "Re-exec the agent inside a docker container before bootstrapping (set INVOKR_SANDBOX=1 to enable via env); auto-build requires a Linux host")
+	rootCmd.SetVersionTemplate("invokr {{.Version}}\n")
 	rootCmd.AddGroup(rootCommandGroups()...)
 	rootCmd.SetHelpCommandGroupID(groupConfigure)
 	// Shell completion is a one-time install step, not a daily command: keep it
 	// runnable, out of help.
 	rootCmd.CompletionOptions.HiddenDefaultCmd = true
+	return session
 }
 
 // registerCommands builds the command tree. The agent is wired twice on
 // purpose: as the `agent` subcommand, and as root's own RunE so a bare `invokr`
 // starts it.
-func registerCommands(rootCmd *cobra.Command, appConfig *config.AppConfig, activeRuntime *commandRuntime) {
+func registerCommands(rootCmd *cobra.Command, appConfig *config.AppConfig, activeRuntime *commandRuntime, session *pflag.FlagSet) {
 	services := runtimeServicesProvider(activeRuntime)
-	agentCmd := NewAgentCmd(services)
+	agentCmd, execCmd := NewAgentCmd(services), NewExecCmd(services, appConfig)
+	agentCmd.Flags().AddFlagSet(session)
+	execCmd.Flags().AddFlagSet(session)
 	// A bare invocation runs the interactive agent; NoArgs keeps mistyped
 	// subcommands failing instead of silently launching the TUI.
 	rootCmd.RunE = agentCmd.RunE
@@ -162,8 +176,14 @@ func registerCommands(rootCmd *cobra.Command, appConfig *config.AppConfig, activ
 	// variables the borrowed RunE and Args close over. Must precede AddCommand,
 	// which would otherwise merge root's persistent flags into agentCmd.Flags().
 	rootCmd.Flags().AddFlagSet(agentCmd.Flags())
-	rootCmd.AddCommand(agentCmd, NewExecCmd(services, appConfig), NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewChatCmd(services),
-		NewConfigCmd(appConfig), NewDoctorCmd(appConfig), NewSkillsCmd(appConfig), NewProviderCmd())
+	rootCmd.AddCommand(agentCmd, execCmd, NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewChatCmd(services),
+		NewConfigCmd(appConfig), NewDoctorCmd(appConfig), NewSkillsCmd(appConfig), NewToolboxCmd(appConfig), NewProviderCmd(), &cobra.Command{
+			Use: "version", Short: "Print the version (same as --version)", GroupID: groupConfigure, Args: cobra.NoArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				_, err := fmt.Fprintf(cmd.OutOrStdout(), "invokr %s\n", cmd.Root().Version)
+				return err
+			},
+		})
 }
 
 func runtimeServicesProvider(activeRuntime *commandRuntime) ServicesProvider {
@@ -195,13 +215,13 @@ func cleanupActiveRuntime(w io.Writer, activeRuntime *commandRuntime) error {
 
 func skipsRuntimeBootstrap(cmd *cobra.Command) bool {
 	// doctor diagnoses environments where bootstrap itself would fail, so it
-	// must never bootstrap. Jobs commands manage the store directly; `jobs run`
+	// must never bootstrap; provider commands only touch the install cache and
+	// the config file. Jobs commands manage the store directly; `jobs run`
 	// bootstraps its own runtime inside jobs.RunJob, so the root bootstrap
 	// would create a second one.
-	return hasAncestorNamed(cmd, "jobs", "config", "skills") || cmd.Name() == "setup" || cmd.Name() == "doctor"
+	return hasAncestorNamed(cmd, "jobs", "config", "skills", "provider") || slices.Contains([]string{"setup", "doctor", "version"}, cmd.Name())
 }
 
-// hasAncestorNamed reports whether cmd or any of its ancestors is one of names.
 func hasAncestorNamed(cmd *cobra.Command, names ...string) bool {
 	for c := cmd; c != nil; c = c.Parent() {
 		if slices.Contains(names, c.Name()) {

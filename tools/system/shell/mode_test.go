@@ -11,6 +11,7 @@ import (
 
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/core/sandbox"
 	"github.com/invokr-ai/invokr/tools/system/workspace"
@@ -29,6 +30,35 @@ func TestPublishingCommandShapes(t *testing.T) {
 	}
 }
 
+func TestAutoBashCommandCannotBypassDeclinedApproval(t *testing.T) {
+	t.Setenv(sandbox.AllowUnsandboxedEnv, "1")
+	root := t.TempDir()
+	wsp := workspace.NewWorkspacePolicy(config.WorkspaceConfig{Root: root})
+	for _, allowed := range [][]string{{"touch"}, {"touch", "bash"}} {
+		cfg := config.ShellConfig{AllowedCommands: allowed}
+		call := &core.ToolCall{Arguments: []byte(`{"command":"bash -c 'touch denied'"}`)}
+		plan, err := prepareShellCommand(call, cfg, wsp, core.StringSet(allowed), allowed)
+		if err != nil {
+			t.Fatal(err)
+		}
+		plan.mode = approval.Auto
+		if !plan.sandboxExec {
+			t.Fatalf("bash -c must be opaque with allowlist %v", allowed)
+		}
+		ctx, done := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: plan.line})
+		approver := testutil.StaticApprover{Decision: approval.Decision{Reason: "declined by user"}}
+		decision := modeShellApproval(cfg, plan)
+		if decision.Request == nil {
+			t.Fatal("opaque shell command must request approval")
+		}
+		decision.Request.Confined = true
+		if err := core.EnforceApproval(ctx, approver, core.ToolSpec{Name: "shell"}, decision); err == nil || !strings.Contains(err.Error(), "declined by user") {
+			t.Fatalf("declined bash -c approval = %v", err)
+		}
+		done()
+	}
+}
+
 func TestAutoForegroundRunsWithoutMissingSealPromptAndBackgroundStillAsks(t *testing.T) {
 	if !sandbox.Available() {
 		t.Skip("namespace sandbox unavailable")
@@ -37,7 +67,7 @@ func TestAutoForegroundRunsWithoutMissingSealPromptAndBackgroundStillAsks(t *tes
 	root := t.TempDir()
 	wsp := workspace.NewWorkspacePolicy(config.WorkspaceConfig{Root: root})
 	p := preparedShellCommand{mode: approval.Auto, workspaceRoot: root, cwd: root, roots: []string{root}, protected: wsp.ProtectedPaths(), command: "bash", line: "touch written"}
-	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: p.line}, approval.StaticApprover{Decision: approval.Decision{Reason: "unexpected prompt"}})
+	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: p.line}, testutil.StaticApprover{Decision: approval.Decision{Reason: "unexpected prompt"}})
 	defer release()
 	if _, err := runLine(nil, ctx, p); err != nil {
 		t.Fatal(err)
@@ -133,7 +163,7 @@ func TestAutoSandboxDoesNotCreateControlDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: p.line}, approval.StaticApprover{Decision: approval.Decision{Approved: true}})
+	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: p.line}, testutil.StaticApprover{Decision: approval.Decision{Approved: true}})
 	defer release()
 	command, cleanup, err := spec.Build(ctx)
 	if err != nil {
@@ -174,7 +204,7 @@ func TestAutoGitCanCommitWithProtectedControlPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: p.line}, approval.StaticApprover{Decision: approval.Decision{Approved: true}})
+	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: p.line}, testutil.StaticApprover{Decision: approval.Decision{Approved: true}})
 	defer release()
 	command, cleanup, err := spec.Build(ctx)
 	if err != nil {

@@ -33,6 +33,9 @@ func TestStartupModeFlags(t *testing.T) {
 				t.Fatal(err)
 			}
 			if err := command.ParseFlags(args); err != nil {
+				if tc.invalid {
+					return // e.g. doctor does not register --mode at all
+				}
 				t.Fatal(err)
 			}
 			p, err := startupMode(command)
@@ -43,6 +46,29 @@ func TestStartupModeFlags(t *testing.T) {
 				t.Fatalf("mode=%s want %s", p.Mode(), tc.mode)
 			}
 		})
+	}
+}
+
+func TestStartupModeProfileDefaultAndFlagOverride(t *testing.T) {
+	for _, tc := range []struct {
+		args []string
+		want approval.Mode
+	}{
+		{nil, approval.Auto},
+		{[]string{"--mode=manual"}, approval.Manual},
+	} {
+		root, _ := NewRootCmd(config.AppConfig{SessionMode: "auto"})
+		command, args, err := root.Find(tc.args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := command.ParseFlags(args); err != nil {
+			t.Fatal(err)
+		}
+		policy, err := startupMode(command)
+		if err != nil || policy.Mode() != tc.want {
+			t.Fatalf("args=%v mode=%v err=%v", tc.args, policy.Mode(), err)
+		}
 	}
 }
 

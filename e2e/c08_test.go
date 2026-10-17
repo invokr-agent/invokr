@@ -23,17 +23,17 @@ func TestC08_CodeInterpreter(t *testing.T) {
 	// Four tool calls: print 2+2 (granted), sleep with timeout (granted),
 	// artifact write (granted), final call (denied).
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c08-print", "code_interpreter", map[string]any{
+		managedToolStep("c08-print", "code_interpreter", map[string]any{
 			"code": "print(2+2)",
 		}),
-		providertest.NativeToolCallStep("c08-sleep", "code_interpreter", map[string]any{
+		managedToolStep("c08-sleep", "code_interpreter", map[string]any{
 			"code":       "import time; time.sleep(8)",
 			"timeout_ms": 3000,
 		}),
-		providertest.NativeToolCallStep("c08-artifact", "code_interpreter", map[string]any{
+		managedToolStep("c08-artifact", "code_interpreter", map[string]any{
 			"code": "import os\nwith open(os.path.join(os.environ['INVOKR_CI_ARTIFACT_DIR'], 'output.txt'), 'w') as f:\n    f.write('artifact-canary-31')",
 		}),
-		providertest.NativeToolCallStep("c08-deny", "code_interpreter", map[string]any{
+		managedToolStep("c08-deny", "code_interpreter", map[string]any{
 			"code": "print('denied-canary')",
 		}),
 		providertest.ReplyStep("done"),
@@ -57,8 +57,8 @@ func TestC08_CodeInterpreter(t *testing.T) {
 	got := runInProc(t, home, provider.URL(), "run code interpreter", approve)
 
 	// Four tool calls total.
-	if got.Resp.ToolCallCount != 4 {
-		t.Fatalf("tool_call_count = %d, want 4", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 8 {
+		t.Fatalf("tool_call_count = %d, want 8", got.Resp.ToolCallCount)
 	}
 
 	// Exactly one denied failure for code_interpreter.
@@ -74,7 +74,7 @@ func TestC08_CodeInterpreter(t *testing.T) {
 
 	// Each call raises exactly one approval request (4 total).
 	if len(got.Approvals) != 4 {
-		t.Fatalf("approval requests = %d, want 4; approvals=%#v", len(got.Approvals), got.Approvals)
+		t.Fatalf("approval requests = %d, want 8; approvals=%#v", len(got.Approvals), got.Approvals)
 	}
 
 	snapshot := provider.Snapshot()

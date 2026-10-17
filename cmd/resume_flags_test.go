@@ -1,7 +1,11 @@
 package cmd
 
 import (
+	"context"
 	"testing"
+
+	"github.com/invokr-ai/invokr/capability/sessionstore"
+	appruntime "github.com/invokr-ai/invokr/platform/runtime"
 
 	"github.com/spf13/cobra"
 )
@@ -52,5 +56,16 @@ func TestResumeFlagSpellings(t *testing.T) {
 				t.Fatalf("resolved session ID = %q, want %q", gotID, tc.wantID)
 			}
 		})
+	}
+}
+
+func TestResolveResumeIDLast(t *testing.T) {
+	store := sessionstore.NewForWorkspace(t.TempDir(), "/work/alpha")
+	if _, err := store.Append(context.Background(), "alpha", "user", "hi"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveResumeID(&cobra.Command{}, appruntime.Services{}, store, resumeLastSentinel)
+	if err != nil || got != "alpha" {
+		t.Fatalf("resolveResumeID(last) = %q, %v, want alpha", got, err)
 	}
 }

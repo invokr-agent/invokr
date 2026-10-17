@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -14,7 +15,7 @@ import (
 
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/support/strutil"
 
 	"go.uber.org/zap"
 )
@@ -95,10 +96,8 @@ func (g *resultGate) spillResult(tool, result string) (string, string, error) {
 	}
 	encoded, _ := json.Marshal(stub + shellRecaptureHint(fields))
 	fields[key] = encoded
-	envelope, err := json.Marshal(fields)
-	if err != nil {
-		return "", "", fmt.Errorf("re-marshal spilled envelope: %w", err)
-	}
+	// ponytail: fields contain only validated JSON and the encoded preview string.
+	envelope, _ := json.Marshal(fields)
 	return string(envelope), ref, nil
 }
 
@@ -109,27 +108,15 @@ func (g *resultGate) spillResult(tool, result string) (string, string, error) {
 func envelopeLongestField(result string) (map[string]json.RawMessage, string, string, bool) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(result), &fields); err != nil {
-		fields = firstJSONObject(result)
+		if err := json.Unmarshal([]byte(strutil.ExtractJSONObject(result)), &fields); err != nil {
+			return nil, "", "", false
+		}
 	}
 	if len(fields) == 0 {
 		return nil, "", "", false
 	}
 	key, val, ok := longestStringField(fields)
 	return fields, key, val, ok
-}
-
-// firstJSONObject decodes the first JSON object embedded in s, ignoring
-// anything before or after it. Returns nil when there is none.
-func firstJSONObject(s string) map[string]json.RawMessage {
-	i := strings.IndexByte(s, '{')
-	if i < 0 {
-		return nil
-	}
-	var fields map[string]json.RawMessage
-	if err := json.NewDecoder(strings.NewReader(s[i:])).Decode(&fields); err != nil {
-		return nil
-	}
-	return fields
 }
 
 // shellRecaptureHint tells the model when the spilled text is itself
@@ -223,7 +210,7 @@ type fileSpillStore struct {
 func newFileSpillStore(sessionID string) *fileSpillStore {
 	scope := "unscoped"
 	if strings.TrimSpace(sessionID) != "" {
-		scope = core.HashHex(sessionID)[:12]
+		scope = strutil.HashHex(sessionID)[:12]
 	}
 	return &fileSpillStore{dir: filepath.Join(config.InvokrHomeDir(), constants.SpillDirName, scope), pruneOnce: &spillPruneOnce}
 }
@@ -257,9 +244,7 @@ func sanitizeSpillName(name string) string {
 		}
 		return '-'
 	}, name)
-	if mapped == "" {
-		mapped = "result"
-	}
+	mapped = cmp.Or(mapped, "result")
 	if len(mapped) > 64 {
 		mapped = mapped[:64]
 	}

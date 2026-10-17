@@ -31,7 +31,7 @@ func TestA03_PoisonedMetadataCannotSelfTrigger(t *testing.T) {
 	}
 
 	provider2 := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("a03-skill", "load_skill", map[string]any{"name": "evil-skill"}),
+		managedToolStep("a03-skill", "load_skill", map[string]any{"name": "evil-skill"}),
 		providertest.NativeToolCallStep("a03-env", "shell", map[string]any{"command": "env"}),
 		providertest.ReplyStep("done"),
 	)

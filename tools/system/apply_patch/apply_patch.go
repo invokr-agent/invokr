@@ -3,18 +3,20 @@ package apply_patch
 import (
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/system/workspace"
+
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-ai/invokr/support/strutil"
 )
 
 type applyPatchArgs struct {
@@ -81,7 +83,7 @@ func RegisterApplyPatchTool(c core.NativeRegistrar, dispatcher events.Dispatcher
 	core.Register(c, core.Tool[preparedApplyPatch]{
 		Spec: core.ToolSpec{
 			Name:        "apply_patch",
-			Description: "Apply reviewable workspace patches. Use Add File for new files, Update File for existing files, Delete File to remove files, and dry_run to validate without writing.",
+			Description: "Patch workspace files: Add File creates, Update File edits, Delete File removes. dry_run validates without writing.",
 			Example:     "{\"name\":\"apply_patch\",\"arguments\":{\"patch\":\"*** Begin Patch\\n*** Add File: hello.txt\\n+hello\\n*** Update File: note.txt\\n@@\\n-old\\n+new\\n*** Delete File: obsolete.txt\\n*** End Patch\",\"dry_run\":false}}",
 			Parameters:  core.SchemaFor[applyPatchArgs](),
 			Metadata:    metadata,
@@ -157,10 +159,10 @@ func runPreparedApplyPatch(dispatcher events.Dispatcher, ctx context.Context, pl
 func changedFileResult(change plannedFileChange) applyPatchChangedFile {
 	item := applyPatchChangedFile{Path: change.displayPath, Action: change.action}
 	if change.existed {
-		item.PreviousSHA256 = core.HashHex(change.original)
+		item.PreviousSHA256 = strutil.HashHex(change.original)
 	}
 	if change.action != constants.ApplyPatchActionDelete {
-		item.NewSHA256 = core.HashHex(change.updated)
+		item.NewSHA256 = strutil.HashHex(change.updated)
 	}
 	return item
 }
@@ -343,7 +345,7 @@ func planPatchChange(op applyPatchOp, workspace workspace.Policy, deleted map[st
 			return plannedFileChange{}, fmt.Errorf("read %s: %w", op.Path, err)
 		}
 		change.original = string(content)
-		change.originalSHA256 = core.HashHex(change.original)
+		change.originalSHA256 = strutil.HashHex(change.original)
 	}
 	if err := applyActionToChange(op, exists && !deleted[resolved], &change); err != nil {
 		return plannedFileChange{}, err
@@ -491,7 +493,8 @@ const hunkMatchLimit = 4
 func locateHunk(lines []string, cursor int, seq []string, hunkIdx int) (int, error) {
 	matches := findHunkMatches(lines, cursor, seq, exactLineMatch)
 	if len(matches) == 0 {
-		for _, eq := range []func(a, b string) bool{crLineMatch, looseLineMatch} {
+		// CR-only first: it matches CRLF files without admitting indentation drift.
+		for _, eq := range []func(a, b string) bool{core.EqualBy(core.StripCR), core.EqualBy(strings.TrimSpace)} {
 			if fuzzy := findHunkMatches(lines, cursor, seq, eq); len(fuzzy) == 1 {
 				return fuzzy[0], nil
 			}
@@ -507,13 +510,6 @@ func locateHunk(lines []string, cursor int, seq []string, hunkIdx int) (int, err
 }
 
 func exactLineMatch(a, b string) bool { return a == b }
-
-// crLineMatch ignores the carriage return a CRLF file's lines carry, so a hunk
-// written against the normalized patch text matches without also tolerating
-// the indentation drift looseLineMatch admits.
-func crLineMatch(a, b string) bool { return strings.TrimSuffix(a, "\r") == strings.TrimSuffix(b, "\r") }
-
-func looseLineMatch(a, b string) bool { return strings.TrimSpace(a) == strings.TrimSpace(b) }
 
 func findHunkMatches(lines []string, cursor int, seq []string, eq func(a, b string) bool) []int {
 	if len(seq) == 0 {
@@ -621,7 +617,7 @@ func validatePlannedChanges(changes []plannedFileChange) error {
 			return fmt.Errorf("validate %s before commit: %w", change.displayPath, err)
 		case !change.existed:
 			return fmt.Errorf("cannot commit %s: file changed since patch was prepared", change.displayPath)
-		case core.HashHex(string(content)) != change.originalSHA256:
+		case strutil.HashHex(string(content)) != change.originalSHA256:
 			return fmt.Errorf("cannot commit %s: file changed since patch was prepared", change.displayPath)
 		}
 	}

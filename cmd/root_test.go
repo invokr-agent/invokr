@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -22,7 +21,8 @@ type cleanupSpyRuntime struct {
 
 func TestRootFlagOverridesLoadedEnvironment(t *testing.T) {
 	t.Setenv("INVOKR_MODEL", "env-model")
-	app, err := config.LoadFile(filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("INVOKR_HOME", t.TempDir())
+	app, err := config.LoadDefaultFileWithProfile("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,8 +179,8 @@ func TestRootVersionFlagPrintsWithoutBootstrap(t *testing.T) {
 	if bootstrapCalls != 0 {
 		t.Fatalf("bootstrap calls = %d, want 0 (--version must not bootstrap the runtime)", bootstrapCalls)
 	}
-	if !strings.HasPrefix(out.String(), "invokr-agent ") {
-		t.Fatalf("--version output = %q, want prefix %q", out.String(), "invokr-agent ")
+	if !strings.HasPrefix(out.String(), "invokr ") {
+		t.Fatalf("--version output = %q, want prefix %q", out.String(), "invokr ")
 	}
 }
 

@@ -7,12 +7,14 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/tmux"
@@ -61,6 +63,21 @@ func TestTmuxSendAndRead(t *testing.T) {
 	call(t, caller, `{"action":"send","session":"`+session+`","keys":["Enter"],"literal":true}`)
 	if screen := call(t, caller, `{"action":"read","session":"`+session+`","wait_ms":100}`); !strings.Contains(screen, "Enter") {
 		t.Fatalf("screen missing literal text: %q", screen)
+	}
+}
+
+func TestTmuxSendRejectsEmptyKeys(t *testing.T) {
+	caller := newCaller(t)
+	session := openSession(t, caller, "cat")
+	for _, args := range []string{
+		`{"action":"send","session":"` + session + `"}`,
+		`{"action":"send","session":"` + session + `","keys":[]}`,
+		`{"action":"send","session":"` + session + `","keys":[""]}`,
+	} {
+		_, err := caller.HandleCall(context.Background(), &core.ToolCall{Name: "tmux", Arguments: json.RawMessage(args)})
+		if err == nil || !strings.Contains(err.Error(), "keys are required for send") {
+			t.Fatalf("expected empty send rejection for %s, got %v", args, err)
+		}
 	}
 }
 
@@ -113,7 +130,7 @@ func newCaller(t *testing.T) *tools.Caller {
 	})
 	return tools.NewCaller(core.CallerDeps{App: config.AppConfig{
 		Toolbox: config.ToolboxConfig{Dir: t.TempDir()}, Workspace: config.WorkspaceConfig{Root: root},
-	}, Approver: approval.StaticApprover{Decision: approval.Decision{Approved: true}}})
+	}, Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}}})
 }
 
 func call(t *testing.T, caller *tools.Caller, args string) string {
@@ -158,8 +175,9 @@ func TestTmuxShortLivedCommandStaysReadable(t *testing.T) {
 }
 
 func TestTmuxSocketNameIsPerProcessUnique(t *testing.T) {
-	if !regexp.MustCompile(fmt.Sprintf(`^invokr-%d-[0-9a-f]{4}$`, os.Getpid())).MatchString(tmux.SocketName()) {
-		t.Fatalf("unexpected socket name %q", tmux.SocketName())
+	name := strings.TrimSuffix(filepath.Base(tmux.SocketPath("")), ".sock")
+	if !regexp.MustCompile(fmt.Sprintf(`^invokr-%d-[0-9a-f]{4}$`, os.Getpid())).MatchString(name) {
+		t.Fatalf("unexpected socket name %q", name)
 	}
 }
 
@@ -208,4 +226,31 @@ func openSession(t *testing.T, caller *tools.Caller, command string) string {
 		t.Fatal(err)
 	}
 	return result["session"]
+}
+
+func TestTmuxHostServerReachesUserSessions(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not installed")
+	}
+	t.Setenv("TMUX", "")
+	t.Setenv("TMUX_TMPDIR", t.TempDir())
+	if out, err := exec.Command("tmux", "new-session", "-d", "-s", "userbot", "cat").CombinedOutput(); err != nil {
+		t.Fatalf("start user server: %v: %s", err, out)
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-server").Run() })
+	caller := tools.NewCaller(core.CallerDeps{App: config.AppConfig{
+		Toolbox: config.ToolboxConfig{Dir: t.TempDir()}, Workspace: config.WorkspaceConfig{Root: t.TempDir()},
+		Tools: config.ToolsConfig{TmuxHostServer: true},
+	}, Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}}})
+	// Registration sets the process-wide host flag; a default caller resets it.
+	t.Cleanup(func() {
+		tools.NewCaller(core.CallerDeps{App: config.AppConfig{Toolbox: config.ToolboxConfig{Dir: t.TempDir()}}})
+	})
+	if listed := call(t, caller, `{"action":"list"}`); !strings.Contains(listed, "userbot") {
+		t.Fatalf("user session missing from host list: %q", listed)
+	}
+	call(t, caller, `{"action":"send","session":"userbot:0.0","keys":["hi-host","Enter"]}`)
+	if screen := call(t, caller, `{"action":"read","session":"userbot:0.0","wait_ms":300}`); !strings.Contains(screen, "hi-host") {
+		t.Fatalf("host pane missing sent text: %q", screen)
+	}
 }

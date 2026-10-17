@@ -1,10 +1,10 @@
 package shell
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/turn"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,12 +12,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/invokr-ai/invokr/platform/turn"
+
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/support/fsutil"
 	"github.com/invokr-ai/invokr/support/mathutil"
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/workspace"
 )
@@ -69,6 +72,7 @@ type preparedShellCommand struct {
 	// directories are mounted.
 	command, cwd      string
 	commands, reasons []string
+	allowedCommands   []string
 	tier              shellTier
 	// workspaceRoot and roots are the sandbox's writable mounts;
 	// readonlyRoots are mounted read-only, so a write-tier line cannot touch
@@ -135,7 +139,8 @@ var globalValueFlags = map[string]map[string]struct{}{
 
 func RegisterShellTool(c core.NativeRegistrar, deps core.CallerDeps, workspace workspace.Policy) {
 	cfg := deps.App.Shell
-	if deps.Policy != nil && deps.Policy.Mode() == approval.YOLO {
+	yolo := deps.Policy != nil && deps.Policy.Mode() == approval.YOLO
+	if yolo {
 		cfg.AllowAnyCommand = true
 	}
 	cfg.AllowedCommands = constants.ShellAllowedCommands(cfg.AllowedCommands)
@@ -144,7 +149,7 @@ func RegisterShellTool(c core.NativeRegistrar, deps core.CallerDeps, workspace w
 	core.Register(c, core.Tool[preparedShellCommand]{
 		Spec: core.ToolSpec{
 			Name:        constants.ShellToolName,
-			Description: shellDescription(allowedList, workspace.Root),
+			Description: shellDescription(allowedList, workspace.Root, yolo),
 			Example:     `{"name":"shell","arguments":{"command":"git status","cwd":".","timeout_ms":30000,"max_output_bytes":20000}}`,
 			Parameters:  core.SchemaFor[shellArgs](),
 			Metadata:    core.NativeMetadata("system", []string{string(shellTierReadonly), string(shellTierWrite), string(shellTierNetwork)}, constants.ApprovalPolicyAsk, core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true, Network: true, ExecutesCode: true}),
@@ -177,10 +182,16 @@ func RegisterShellTool(c core.NativeRegistrar, deps core.CallerDeps, workspace w
 // shellDescription is language-neutral by design (#306): the allowlist is a
 // plain list and tiers are described generically — Go-specific tier detail
 // stays in the internal rule table (rules.go), out of the prompt.
-func shellDescription(allowedList []string, root string) string {
-	desc := fmt.Sprintf("Run a bash command line in the workspace (%s). Allowed commands: %s.%s Read-only lines run without asking; a line that writes a file, uses $(...), or runs a write or network command asks the user first. Use cwd instead of cd. Output over max_output_bytes is truncated; a command that printed nothing answers with stdout \"(no output)\". /tmp is shared scratch kept between calls; cwd must stay in the workspace, so use `cd /tmp/x && ...` inside the line. Background processes do not survive past the call; a process that must outlive the call belongs in the tmux tool.",
-		sandboxConfinement(), strings.Join(allowedList, ", "), scriptRoutingNote())
-	if note := projectGapNote(root, allowedList); note != "" {
+func shellDescription(allowedList []string, root string, yolo bool) string {
+	confinement, approvalText, routing := sandboxConfinement(false, false), "Read-only lines need no approval; writes, $(...), and network commands require approval.", scriptRoutingNote()
+	allowedText := strings.Join(allowedList, ", ")
+	if yolo {
+		confinement, approvalText, routing = "runs UNSANDBOXED on the host", "YOLO mode skips shell approvals.", " Interpreters and workspace scripts also run on the host."
+		allowedText = "any command"
+	}
+	desc := fmt.Sprintf("Run bash in the workspace (%s). Allowed commands: %s.%s %s Use cwd within the workspace. /tmp persists between calls; access it with `cd /tmp/x && ...`. Output truncates at max_output_bytes; no output becomes \"(no output)\". Use tmux for processes that must survive this call.",
+		confinement, allowedText, routing, approvalText)
+	if note := projectGapNote(root, allowedList); note != "" && !yolo {
 		desc += " " + note
 	}
 	return desc
@@ -219,7 +230,7 @@ func prepareShellCommand(call *core.ToolCall, cfg config.ShellConfig, workspace 
 	if len(pol.roots) > 0 {
 		command = pol.roots[0]
 	}
-	return preparedShellCommand{args: args, line: line, command: command, commands: pol.roots, tier: pol.tier, publishes: pol.publishes, reasons: pol.reasons, cwd: cwd, workspaceRoot: workspace.Root, roots: workspace.WritableRoots(), readonlyRoots: workspace.ReadOnlyRoots(), sandboxExec: pol.sandboxExec, allowNetwork: cfg.AllowNetworkCommands, timeoutMS: timeoutMS, maxOutputBytes: maxOutputBytes, isolateEnv: isolate, env: env, passthrough: cfg.EnvPassthrough}, nil
+	return preparedShellCommand{args: args, line: line, command: command, commands: pol.roots, allowedCommands: allowedList, tier: pol.tier, publishes: pol.publishes, reasons: pol.reasons, cwd: cwd, workspaceRoot: workspace.Root, roots: workspace.WritableRoots(), readonlyRoots: workspace.ReadOnlyRoots(), sandboxExec: pol.sandboxExec, allowNetwork: cfg.AllowNetworkCommands, timeoutMS: timeoutMS, maxOutputBytes: maxOutputBytes, isolateEnv: isolate, env: env, passthrough: cfg.EnvPassthrough}, nil
 }
 
 // networkAllowed reports whether the sandbox shares the host network
@@ -338,9 +349,15 @@ func runLine(dispatcher events.Dispatcher, ctx context.Context, plan preparedShe
 		hint = `shell exited but a background process kept output pipes open; capture stopped and output may be incomplete. Use the tmux tool for long-running commands: {"action":"open","command":"<your command>"}`
 	}
 	if res.TimedOut {
-		hint = fmt.Sprintf("killed after %d ms; pass timeout_ms (max %d) for longer work", plan.timeoutMS, constants.ShellMaxTimeoutMS)
+		hint = timeoutHint(plan.timeoutMS)
 	}
 	return ShellResult{Command: plan.line, Stdout: noOutputMarker(strings.TrimSpace(res.Stdout), strings.TrimSpace(res.Stderr)), Stderr: strings.TrimSpace(res.Stderr), ExitCode: res.ExitCode, TimedOut: res.TimedOut, Truncated: res.Truncated, Hint: hint, Cwd: displayCwd(plan.workspaceRoot, plan.cwd), Sandboxed: spec.Build != nil}, nil
+}
+
+// timeoutHint must not nudge a blind retry with a longer timeout: a runaway
+// launcher re-run at 70 s instead of 30 s exhausted the host (2026-09-28).
+func timeoutHint(timeoutMS int) string {
+	return fmt.Sprintf("killed after %d ms together with all its child processes. A timeout can mean the command spawned runaway children or never terminates: inspect the program (a launcher that re-executes itself, missing exit conditions, unbounded concurrency) before retrying. Raise timeout_ms only for a command known to be legitimately slow.", timeoutMS)
 }
 
 // backgroundHint points a line that tries to outlive the call at the tool that
@@ -485,15 +502,11 @@ func shellApprovalRequest(cfg config.ShellConfig, plan preparedShellCommand) (*a
 		return nil, nil
 	}
 	trigger := strings.Join(plan.reasons, "; ")
-	if plan.sandboxExec {
-		trigger += " (" + sandboxConfinement() + ")"
-	}
+	trigger += " (" + sandboxConfinement(true, plan.networkAllowed()) + ")"
 	// The model's stated intent is what the user checks the command against;
 	// "Run <line>" only repeats the subject, so it is the fallback.
 	summary := strings.TrimSpace(plan.args.Intent)
-	if summary == "" {
-		summary = "Run " + plan.line
-	}
+	summary = cmp.Or(summary, "Run "+plan.line)
 	return &approval.Request{Tool: constants.ShellToolName, Tier: string(plan.tier), Summary: summary, Subject: plan.line, Reason: fmt.Sprintf("shell classified this as %s: %s", plan.tier, trigger), Details: fmt.Sprintf("Command: %s\nWorking directory: %s\nTier: %s\nTrigger: %s\nTimeout: %d ms\nMax output: %d bytes", plan.line, plan.cwd, plan.tier, trigger, plan.timeoutMS, plan.maxOutputBytes)}, nil
 }
 
@@ -560,7 +573,7 @@ func stripSurroundingQuotes(input string) string {
 }
 
 func dispatchShellAudit(dispatcher events.Dispatcher, ctx context.Context, plan preparedShellCommand, outcome string, err error) {
-	payload := &events.AuditPayload{Action: "shell:" + string(plan.tier), Tool: "shell", Outcome: outcome, Paths: []string{filepath.ToSlash(core.FirstNonEmpty(plan.args.Cwd, plan.cwd))}}
+	payload := &events.AuditPayload{Action: "shell:" + string(plan.tier), Tool: "shell", Outcome: outcome, Paths: []string{filepath.ToSlash(strutil.FirstNonEmpty(plan.args.Cwd, plan.cwd))}}
 	// Recorded so post-hoc review can diff the stated intent against what ran.
 	if intent := strings.TrimSpace(plan.args.Intent); intent != "" {
 		payload.Details = map[string]any{"intent": intent}

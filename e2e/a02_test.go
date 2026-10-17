@@ -18,8 +18,8 @@ func TestA02_HostileMCPOutputCannotEscapeGuards(t *testing.T) {
 	t.Setenv("INVOKR_FAKE_MCP_HOSTILE", "1")
 	t.Setenv("INVOKR_TEST_SECRET", "host-canary-91")
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("a02-search", "tool_search", map[string]any{"query": "mcp_hostile_echo", "include_schema": true}),
-		providertest.NativeToolCallStep("a02-echo", "mcp_hostile_echo", map[string]any{"text": "hello"}),
+		providertest.NativeToolCallStep("a02-search", "tools", map[string]any{"action": "search", "query": "mcp_hostile_echo", "include_schema": true}),
+		managedToolStep("a02-echo", "mcp_hostile_echo", map[string]any{"text": "hello"}),
 		providertest.NativeToolCallStep("a02-env", "shell", map[string]any{"command": "env"}),
 		providertest.NativeToolCallStep("a02-rm", "shell", map[string]any{"command": "rm", "args": []string{"rm", "-rf", "x"}}),
 		providertest.ReplyStep("done"),

@@ -25,7 +25,7 @@ existing exit policy. Child summaries carry bounded historical evidence.
 
 ## Provider
 
-`clients.LLMProvider` is the provider seam. `clients.Client` wraps the OpenAI Go SDK for OpenAI-compatible servers, normalizes base URLs to `/v1`, streams completions with a stall watchdog, and queries provider metadata from `/props`. Memory *embeddings* run on the in-process Zerfoo model runtime (`capability/memory/zerfoo/`); memory *summarization* runs on the main chat provider via `capability/memory/chat_summarizer.go` (Zerfoo CPU decode is too slow — see docs/memory.md).
+`clients.LLMProvider` is the provider seam. `clients.Client` uses the inference-router adapter for OpenAI-compatible servers, normalizes base URLs to `/v1`, streams completions with a stall watchdog, and queries provider metadata from `/props`. Memory *embeddings* run on the in-process Zerfoo model runtime (`capability/memory/zerfoo/`); memory *summarization* runs on the main chat provider via `capability/memory/chat_summarizer.go` (Zerfoo CPU decode is too slow — see docs/memory.md).
 
 Key files: `clients/llm_provider.go`, `clients/openai.go`.
 

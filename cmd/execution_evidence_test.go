@@ -30,7 +30,7 @@ func TestExecFlagsAreSeparateAndStrictExitIsOptional(t *testing.T) {
 	if err := completeExecResponse(&out, "s1", "model", resp, execOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "does not establish full task verification") || !strings.Contains(out.String(), "exit=1") {
+	if !strings.Contains(out.String(), "Execution history — not final task status") || !strings.Contains(out.String(), "does not establish full task verification") || !strings.Contains(out.String(), "exit=1") {
 		t.Fatalf("missing guard: %s", out.String())
 	}
 }

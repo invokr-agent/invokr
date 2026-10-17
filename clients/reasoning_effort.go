@@ -12,7 +12,7 @@ import (
 
 const largeReasoningToolResultBytes = 8192
 
-var failedToolExit = regexp.MustCompile(`\[exit code [1-9][0-9]*\]`)
+var failedToolStatus = regexp.MustCompile(`\[(exit code -?[1-9][0-9]*|timed out)\]|^FAIL\n`)
 
 // LlamaCppToolResultBudget leaves user and compaction requests at the server default.
 // A trailing batch uses the highest budget needed by any tool result.
@@ -31,7 +31,7 @@ func LlamaCppToolResultBudget(messages []inference.Message) int {
 }
 
 func failedToolResult(content string) bool {
-	if failedToolExit.MatchString(content) || strings.HasPrefix(content, "FAIL\n") {
+	if failedToolStatus.MatchString(content) {
 		return true
 	}
 	if !strings.HasPrefix(strings.TrimSpace(content), "{") {
@@ -43,7 +43,7 @@ func failedToolResult(content string) bool {
 	}
 	exitCode, _ := value["exit_code"].(float64)
 	return (value["error"] != nil && value["error"] != "") || value["success"] == false || value["ok"] == false ||
-		value["status"] == "error" || value["status"] == "failed" || exitCode != 0
+		value["status"] == "error" || value["status"] == "failed" || value["timed_out"] == true || exitCode != 0
 }
 
 // ReasoningKind names a provider whose effort scale invokr knows. Empty means

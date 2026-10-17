@@ -8,6 +8,7 @@ import (
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/mcp"
@@ -27,6 +28,7 @@ func TestMCPRegistersAndCallsStdioTool(t *testing.T) {
 				"fake": {Command: os.Args[0], Args: []string{"-test.run=TestFakeMCPServer"}, Enabled: true, DefaultToolsApprovalMode: constants.ApprovalPolicyAuto},
 			}},
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
+			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 		},
 	})
 	waitForMCPTool(t, caller, "mcp_fake_echo")
@@ -63,18 +65,32 @@ func TestMCPRequiresSchemaSearchPerSession(t *testing.T) {
 				"fake": {Command: os.Args[0], Args: []string{"-test.run=TestFakeMCPServer"}, Enabled: true, DefaultToolsApprovalMode: constants.ApprovalPolicyAuto},
 			}},
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
+			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 		},
 	})
 	waitForMCPTool(t, caller, "mcp_fake_echo")
 	ctx := core.WithSessionID(context.Background(), "mcp-session")
 	call := &core.ToolCall{Name: "mcp_fake_echo", Arguments: json.RawMessage(`{"text":"hi"}`)}
-	// A first call to a deferred tool runs and loads the schema for the next turn (#480).
-	if out, err := caller.HandleCall(ctx, call); err != nil || out != "echo: hi" {
-		t.Fatalf("expected first deferred MCP call to run, got output %q error %v", out, err)
+	if err := caller.StartToolSession("mcp-session"); err != nil {
+		t.Fatal(err)
 	}
-	if !slices.ContainsFunc(caller.CallableSpecs("mcp-session"), func(spec core.ToolSpec) bool { return spec.Name == "mcp_fake_echo" }) {
-		t.Fatal("expected schema loaded after first call")
+	if _, err := caller.HandleCall(ctx, call); err == nil {
+		t.Fatal("optional MCP call ran before enable")
 	}
+	if _, err := caller.HandleCall(ctx, &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"enable","names":["mcp_fake_echo"]}`)}); err != nil {
+		t.Fatal(err)
+	}
+	managed, err := caller.ResolveToolCall(ctx, &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"run","name":"mcp_fake_echo","arguments":{"text":"hi"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := caller.HandleCall(ctx, managed); err != nil || out != "echo: hi" {
+		t.Fatalf("managed MCP: %s %v", out, err)
+	}
+	if slices.ContainsFunc(caller.StableSpecs(), func(spec core.ToolSpec) bool { return spec.Name == "mcp_fake_echo" }) {
+		t.Fatal("enable changed native array")
+	}
+
 }
 
 func TestMCPApprovalRequiredByDefault(t *testing.T) {
@@ -86,8 +102,9 @@ func TestMCPApprovalRequiredByDefault(t *testing.T) {
 				"fake": {Command: os.Args[0], Args: []string{"-test.run=TestFakeMCPServer"}, Enabled: true},
 			}},
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
+			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 		},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: false}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: false}},
 	})
 	waitForMCPTool(t, caller, "mcp_fake_echo")
 	_, err := caller.HandleCall(context.Background(), &core.ToolCall{Name: "mcp_fake_echo", Arguments: json.RawMessage(`{}`)})
@@ -105,6 +122,7 @@ func TestMCPSkipsNotificationBeforeResponse(t *testing.T) {
 				"fake": {Command: os.Args[0], Args: []string{"-test.run=TestFakeMCPServer"}, Enabled: true, DefaultToolsApprovalMode: constants.ApprovalPolicyAuto},
 			}},
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
+			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 		},
 	})
 	waitForMCPTool(t, caller, "mcp_fake_echo")

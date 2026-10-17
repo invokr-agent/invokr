@@ -21,7 +21,7 @@ func TestApprovalIdentityAndCleanup(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
 			var client *Client
-			replacement := &pendingApproval{chatID: "222", decision: make(chan bool, 1)}
+			replacement := &messaging.PendingApproval{ChatID: "222", Decision: make(chan bool, 1)}
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if !strings.HasSuffix(r.URL.Path, "/sendMessage") {
 					_, _ = fmt.Fprint(w, `{"ok":true,"result":true}`)
@@ -130,7 +130,7 @@ func TestUnacceptedCallbacksNeverClaimDecision(t *testing.T) {
 				t.Fatal(err)
 			}
 			if scenario == "wrong peer" {
-				client.pending.Store("request", &pendingApproval{chatID: "111", decision: make(chan bool, 1)})
+				client.pending.Store("request", &messaging.PendingApproval{ChatID: "111", Decision: make(chan bool, 1)})
 			}
 			client.dispatchUpdate(context.Background(), tgUpdate{CallbackQuery: &tgCallbackQuery{
 				ID: "callback", Data: "approve:request", Message: tgMessage{MessageID: 42, Chat: tgChat{ID: 222}},

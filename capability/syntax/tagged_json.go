@@ -108,10 +108,7 @@ func parseTaggedReply(raw string) (taggedReply, bool) {
 }
 
 func (TaggedJSONSyntax) RenderToolResult(result string) inference.Message {
-	payload, err := json.Marshal(taggedToolResult{Type: "tool_result", Result: result})
-	if err != nil {
-		payload = []byte(`{"type":"tool_result","result":"tool failed to encode result"}`)
-	}
+	payload, _ := json.Marshal(taggedToolResult{Type: "tool_result", Result: result}) // Both fields are strings.
 
 	return inference.UserMessage(string(payload))
 }

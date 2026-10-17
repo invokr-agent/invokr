@@ -32,12 +32,6 @@ type testHome struct {
 	live bool
 }
 
-// loadApplyPatch scripts the tool_search call that discloses the deferred
-// apply_patch schema (#405) — required before any scripted apply_patch call.
-func loadApplyPatch(id string) providertest.CompletionStep {
-	return providertest.NativeToolCallStep(id, "tool_search", map[string]any{"query": "apply_patch", "include_schema": true})
-}
-
 type ledger struct {
 	Events    []map[string]any
 	Completed map[string]any
@@ -405,4 +399,20 @@ func mustWrite(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// managedToolStep exercises real enable + run calls in provider order. Tests
+// concerned with availability itself use explicit steps instead.
+func managedToolStep(id, name string, args any) providertest.CompletionStep {
+	if raw, ok := args.(string); ok {
+		args = json.RawMessage(raw)
+	}
+	step := providertest.NativeToolCallStep(id+"-enable", "tools", map[string]any{"action": "enable", "names": []string{name}})
+	run := providertest.NativeToolCallStep(id, "tools", map[string]any{"action": "run", "name": name, "arguments": args})
+	step.ToolCalls = append(step.ToolCalls, run.ToolCalls...)
+	return step
+}
+
+func createToolStep(id, _ string, definition any) providertest.CompletionStep {
+	return providertest.NativeToolCallStep(id, "tools", map[string]any{"action": "create", "definition": definition})
 }

@@ -1,12 +1,14 @@
 package approval
 
 import (
+	"cmp"
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
 	"slices"
 	"sync"
+
+	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/platform/turn"
 )
 
 type Mode string
@@ -22,19 +24,16 @@ const (
 // Policy is session-local. The execution owners provide facts about prepared
 // operations; neither model arguments nor tool-advertised capabilities prove confinement.
 type Policy struct {
-	mu       sync.Mutex
-	mode     Mode
-	publish  bool
-	revision uint64
-	store    *Store
-	loadErr  error
-	active   map[Mode]int
+	mu      sync.Mutex
+	mode    Mode
+	publish bool
+	store   *Store
+	loadErr error
+	active  map[Mode]int
 }
 
 func NewPolicy(mode Mode, publish bool) *Policy {
-	if mode == "" {
-		mode = Manual
-	}
+	mode = cmp.Or(mode, Manual)
 	return &Policy{mode: mode, publish: publish, active: make(map[Mode]int)}
 }
 
@@ -59,10 +58,7 @@ func (p *Policy) SetMode(mode Mode) error {
 	if p.loadErr != nil && mode != Manual {
 		return fmt.Errorf("standing rules unavailable: %w", p.loadErr)
 	}
-	if p.mode != mode {
-		p.mode = mode
-		p.revision++
-	}
+	p.mode = mode
 	return nil
 }
 
@@ -70,7 +66,6 @@ func (p *Policy) SetPublishing(allow bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.publish = allow
-	p.revision++
 }
 func (p *Policy) Publishing() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.publish }
 func (p *Policy) SetStore(store *Store, err error) {
@@ -129,8 +124,7 @@ func Retain(ctx context.Context) func() {
 	s.policy.mu.Lock()
 	s.policy.active[s.mode]++
 	s.policy.mu.Unlock()
-	var once sync.Once
-	return func() { once.Do(s.release) }
+	return sync.OnceFunc(s.release)
 }
 
 func ModeFromContext(ctx context.Context) Mode {
@@ -168,12 +162,8 @@ func Authorize(ctx context.Context, approver Approver, req Request, ask bool) (b
 	if !ok {
 		return false, nil
 	}
-	if approver == nil {
-		approver = s.approver
-	}
-	if req.Subject == "" {
-		req.Subject = s.request.Subject
-	}
+	approver = cmp.Or(approver, s.approver)
+	req.Subject = cmp.Or(req.Subject, s.request.Subject)
 	decision, resolved := s.decide(req, ask)
 	if resolved {
 		return true, decisionError(req, decision)
@@ -192,15 +182,6 @@ func Authorize(ctx context.Context, approver Approver, req Request, ask bool) (b
 		return true, decisionError(req, current)
 	}
 	return true, decisionError(req, decision)
-}
-
-func (p *Policy) Revision() uint64 {
-	if p == nil {
-		return 0
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.revision
 }
 
 func decisionError(req Request, d Decision) error {
@@ -253,18 +234,5 @@ func blockedInPlan(req Request) bool {
 }
 
 func needsScopedApproval(mode Mode, req Request, publish bool) bool {
-	return mode == Auto && (req.Protected || req.Publishes && !publish) || mode == Plan && req.Network
-}
-
-func (p *Policy) ModeInstructions() string {
-	switch p.Mode() {
-	case Plan:
-		return "PLAN MODE: inspect, clarify, and propose a decision-complete plan. Verification may use read-only source mounts and writable scratch/cache. Ask for network. Never edit sources, publish, or switch modes yourself."
-	case Auto:
-		return "AUTO MODE: carry out the task using confined tools. Network and local commits are allowed. Protected edits require approval. Recognized publishing operations ask unless publishing was authorized for this session; never evade approval by using another tool or HTTP."
-	case YOLO:
-		return YOLOWarning
-	default:
-		return "MANUAL MODE: follow configured tool approvals and explicit denial rules."
-	}
+	return mode == Auto && (req.Protected || req.RequiresScopedApproval || req.Publishes && !publish) || mode == Plan && req.Network
 }

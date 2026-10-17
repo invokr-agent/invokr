@@ -12,14 +12,13 @@ func TestD11_ConfigurationVariants(t *testing.T) {
 	t.Run("native schemas and denial", func(t *testing.T) {
 		provider := providertest.NewScripted(t,
 			providertest.NativeToolCallStep("d11-read", "read", map[string]any{"paths": []string{"README.md"}}),
-			loadApplyPatch("d11-load"),
 			providertest.NativeToolCallStep("d11-write", "apply_patch", map[string]any{"patch": "*** Begin Patch\n*** Add File: .hidden-d11\n+x\n*** End Patch"}),
 			providertest.ReplyStep("done"),
 		)
 		defer provider.Close()
 		home := newHome(t, provider.URL())
 		got := runInProc(t, home, provider.URL(), "native mode", denyAll)
-		if got.Resp.ToolCallCount != 3 || len(got.failureKinds()) != 1 || got.failureKinds()[0].Kind != "denied" {
+		if got.Resp.ToolCallCount != 2 || len(got.failureKinds()) != 1 || got.failureKinds()[0].Kind != "denied" {
 			t.Fatalf("response=%#v failures=%#v", got.Resp, got.failureKinds())
 		}
 		if provider.Snapshot().CompletionRequests[0].Tools == nil {

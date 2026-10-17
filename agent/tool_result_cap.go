@@ -26,14 +26,11 @@ func capToolResult(output string, maxTokens int) string {
 	return truncateWithMarker(output, limit)
 }
 
-// truncationMarker tells the model the result was cut and what to do about it.
 func truncationMarker(limit int) string {
 	return fmt.Sprintf(
 		"\n[output truncated at ~%d tokens — narrow the request or fetch it in smaller parts]", limit/4)
 }
 
-// truncateWithMarker cuts s to at most limit bytes on a UTF-8 boundary and
-// appends the marker. Returns s unchanged when it already fits.
 func truncateWithMarker(s string, limit int) string {
 	if len(s) <= limit {
 		return s
@@ -41,10 +38,6 @@ func truncateWithMarker(s string, limit int) string {
 	return s[:runeFloor(s, limit)] + truncationMarker(limit)
 }
 
-// capJSONEnvelope trims the longest string fields of a JSON object result until
-// the whole envelope fits, keeping every key the tool reported. Reports false
-// when output is not a JSON object or trimming cannot get it under the limit,
-// leaving the caller on the plain-truncation path.
 func capJSONEnvelope(output string, limit int) (string, bool) {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(output), &fields); err != nil || len(fields) == 0 {
@@ -61,15 +54,9 @@ func capJSONEnvelope(output string, limit int) (string, bool) {
 		if trimmed == val {
 			return "", false // no progress available; fall back
 		}
-		encoded, err := json.Marshal(trimmed)
-		if err != nil {
-			return "", false
-		}
-		fields[key] = encoded
-		b, err := json.Marshal(fields)
-		if err != nil {
-			return "", false
-		}
+		// ponytail: strings and these validated RawMessages cannot fail to marshal.
+		fields[key], _ = json.Marshal(trimmed)
+		b, _ := json.Marshal(fields)
 		output = string(b)
 		if len(output) <= limit {
 			return output, true
@@ -78,8 +65,6 @@ func capJSONEnvelope(output string, limit int) (string, bool) {
 	return "", false
 }
 
-// longestStringField returns the key and decoded value of the longest string
-// field, so the trim loop always spends its budget on the biggest offender.
 func longestStringField(fields map[string]json.RawMessage) (string, string, bool) {
 	var bestKey, bestVal string
 	found := false

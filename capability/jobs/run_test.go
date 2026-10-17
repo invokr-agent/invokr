@@ -23,7 +23,7 @@ type fakeSession struct {
 
 func (f *fakeSession) Send(ctx context.Context, prompt string) (turn.AgentResponse, error) {
 	if f.approve {
-		d, err := f.broker.RequestApproval(ctx, approval.Request{Tool: "shell"})
+		d, err := f.broker.RequestApproval(ctx, approval.Request{Tool: "shell", Tier: "execute_readonly_command"})
 		var denied *approval.DeniedError
 		if err != nil && !errors.As(err, &denied) {
 			return turn.AgentResponse{}, err
@@ -110,8 +110,23 @@ func TestRun_FailOnToolError(t *testing.T) {
 	}
 }
 
+func TestRun_DenialRecordedWithoutFailOnToolError(t *testing.T) {
+	store := newRunStore(t)
+	job := addRunJob(t, store, "deny")
+	session := &fakeSession{resp: turn.AgentResponse{
+		ToolFailures: []turn.ToolOutcome{{Tool: "shell", Kind: turn.OutcomeKindDenied, Detail: "job policy deny"}},
+	}}
+
+	if err := jobs.Run(context.Background(), session, approval.NewBroker(), store, job, jobs.RunOptions{}); err == nil {
+		t.Fatal("expected unattended tool denial to fail the job")
+	}
+	if got := lastStatus(t, store); got != "denied: shell: job policy deny" {
+		t.Fatalf("expected recorded denial, got %q", got)
+	}
+}
+
 func TestRun_DrainsApprovalsPerPolicy(t *testing.T) {
-	for policy, want := range map[string]bool{"allow": true, "deny": false} {
+	for policy, want := range map[string]bool{"allow": true, "deny": false, "read-only": true, "write_workspace": false} {
 		store := newRunStore(t)
 		job, err := store.Add(context.Background(), "run-job", "* * * * *", "p", policy)
 		if err != nil {

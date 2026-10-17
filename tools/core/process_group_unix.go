@@ -26,6 +26,11 @@ func ConfigureProcessGroup(cmd *exec.Cmd) {
 		if cmd.Process == nil {
 			return os.ErrProcessDone
 		}
+		// Descendants that left the group (setsid/setpgid) are found by
+		// parentage before the group kill orphans them to init.
+		for _, pid := range descendants(cmd.Process.Pid) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
 		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		if errors.Is(err, syscall.ESRCH) {
 			return os.ErrProcessDone
@@ -33,4 +38,18 @@ func ConfigureProcessGroup(cmd *exec.Cmd) {
 		return err
 	}
 	cmd.WaitDelay = time.Second
+}
+
+// awaitGroupGone re-kills cmd's process group until it has no members left or
+// a short bound passes, so a timed-out or cancelled run does not return while
+// a runaway tree (e.g. a self-re-executing launcher) is still forking.
+func awaitGroupGone(cmd *exec.Cmd) {
+	if cmd.Process == nil || cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+		return
+	}
+	for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if errors.Is(syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL), syscall.ESRCH) {
+			return
+		}
+	}
 }

@@ -55,7 +55,11 @@ func RunProcess(ctx context.Context, spec ProcessSpec) (res RunResult, err error
 	cmd.Dir = spec.Dir
 	cmd.Env = spec.Env
 	ConfigureProcessGroup(cmd)
-	return RunCollect(ctx, cmd, spec.OutputLimit)
+	res, err = RunCollect(ctx, cmd, spec.OutputLimit)
+	if ctx.Err() != nil {
+		awaitGroupGone(cmd)
+	}
+	return res, err
 }
 
 // RunResult holds the captured output and exit classification of a subprocess

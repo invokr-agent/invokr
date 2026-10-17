@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -22,16 +21,14 @@ func NewSkillsCmd(app *config.AppConfig) *cobra.Command {
 		Use:     "skills",
 		Short:   "List, search, install, and remove agent skills",
 		Long:    "Skills are SKILL.md instruction packs the agent can load on demand.\nThey install from skill hubs (git repositories of skills), local\ndirectories, or raw https:// URLs to a SKILL.md.\n\nRun bare, this lists what is installed.",
-		Example: "  invokr skills\n  invokr skills search review\n  invokr skills install code-review\n  invokr skills install --all\n  invokr skills remove code-review",
+		Example: "  invokr skills\n  invokr skills search review\n  invokr skills install code-review\n  invokr skills install --all\n  invokr skills rm code-review",
 		GroupID: groupConfigure,
 	}
-	root.AddCommand(newSkillsListCmd(app), newSkillsSearchCmd(app), newSkillsInstallCmd(app), newSkillsRemoveCmd(app))
-	useDefaultSubcommand(root, "list")
+	useDefaultSubcommand(root, "list", newSkillsListCmd(app), newSkillsSearchCmd(app), newSkillsInstallCmd(app), newSkillsRemoveCmd(app))
 	return root
 }
 
 func newSkillsListCmd(app *config.AppConfig) *cobra.Command {
-	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List installed skills",
@@ -41,21 +38,18 @@ func newSkillsListCmd(app *config.AppConfig) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			out := cmd.OutOrStdout()
-			if asJSON {
-				return json.NewEncoder(out).Encode(specs)
-			}
-			return renderTable(out, fmt.Fprint, []string{"NAME", "DESCRIPTION"},
-				"no skills installed; see `invokr skills install --help`", specs,
-				func(_ renderer, s skills.Spec) []string { return []string{s.Name, s.Description} })
+			return emit(cmd, specs, func() error {
+				return renderTable(cmd.OutOrStdout(), []string{"NAME", "DESCRIPTION"},
+					"no skills installed; see `invokr skills install --help`", specs,
+					func(_ renderer, s skills.Spec) []string { return []string{s.Name, s.Description} })
+			})
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
+	addJSONFlag(cmd)
 	return cmd
 }
 
 func newSkillsSearchCmd(app *config.AppConfig) *cobra.Command {
-	var asJSON bool
 	cmd := &cobra.Command{
 		Use:   "search [term]",
 		Short: "Search the configured skill hubs",
@@ -70,10 +64,10 @@ func newSkillsSearchCmd(app *config.AppConfig) *cobra.Command {
 			for _, err := range errs {
 				_, _ = fmt.Fprintln(cmd.ErrOrStderr(), "warning:", err)
 			}
-			return renderSkillsSearch(cmd, svc, matchSkills(found, term), asJSON)
+			return renderSkillsSearch(cmd, svc, matchSkills(found, term))
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit machine-readable JSON")
+	addJSONFlag(cmd)
 	return cmd
 }
 
@@ -83,13 +77,11 @@ func matchSkills(found []hub.HubSkill, term string) []hub.HubSkill {
 	})
 }
 
-func renderSkillsSearch(cmd *cobra.Command, svc *hub.Service, matched []hub.HubSkill, asJSON bool) error {
-	out := cmd.OutOrStdout()
-	if asJSON {
-		return json.NewEncoder(out).Encode(matched)
-	}
-	return renderTable(out, fmt.Fprint, []string{"NAME", "HUB", "DESCRIPTION"}, "no matching skills in hubs "+strings.Join(svc.Hubs(), ", "), matched,
-		func(_ renderer, hs hub.HubSkill) []string { return []string{hs.Name, hs.Hub, hs.Description} })
+func renderSkillsSearch(cmd *cobra.Command, svc *hub.Service, matched []hub.HubSkill) error {
+	return emit(cmd, matched, func() error {
+		return renderTable(cmd.OutOrStdout(), []string{"NAME", "HUB", "DESCRIPTION"}, "no matching skills in hubs "+strings.Join(svc.Hubs(), ", "), matched,
+			func(_ renderer, hs hub.HubSkill) []string { return []string{hs.Name, hs.Hub, hs.Description} })
+	})
 }
 
 func newSkillsInstallCmd(app *config.AppConfig) *cobra.Command {
@@ -135,10 +127,9 @@ func newSkillsInstallCmd(app *config.AppConfig) *cobra.Command {
 
 func newSkillsRemoveCmd(app *config.AppConfig) *cobra.Command {
 	return &cobra.Command{
-		Use:     "remove <name>",
-		Aliases: []string{"rm"},
-		Short:   "Remove an installed skill",
-		Args:    cobra.ExactArgs(1),
+		Use:   "rm <name>",
+		Short: "Remove an installed skill",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := hub.NewService(*app).Remove(args[0]); err != nil {
 				return err

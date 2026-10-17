@@ -1,9 +1,11 @@
 package lsp
 
 import (
-	"github.com/invokr-ai/invokr/support/fsutil"
 	"slices"
 	"strings"
+
+	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-ai/invokr/tools/core"
 
 	"go.lsp.dev/protocol"
 	"go.lsp.dev/uri"
@@ -75,17 +77,7 @@ func (c *Client) location(in protocol.Location) Location {
 		EndLine: oneBased(in.Range.End.Line), EndColumn: c.column(in.URI, in.Range.End)}
 }
 
-func (c *Client) locations(in []protocol.Location) []Location { return mapEach(in, c.location) }
-
-// mapEach projects every element of in through fn. The result is always
-// non-nil, so an empty result marshals as [] rather than null.
-func mapEach[T, U any](in []T, fn func(T) U) []U {
-	out := make([]U, 0, len(in))
-	for _, one := range in {
-		out = append(out, fn(one))
-	}
-	return out
-}
+func (c *Client) locations(in []protocol.Location) []Location { return core.MapSlice(in, c.location) }
 
 // definitionLocations flattens the three shapes the spec allows for a
 // definition result into one list.
@@ -96,7 +88,7 @@ func (c *Client) definitionLocations(result protocol.DefinitionResult) []Locatio
 	case protocol.LocationSlice:
 		return c.locations(value)
 	case protocol.DefinitionLinkSlice:
-		return mapEach(value, func(link protocol.DefinitionLink) Location {
+		return core.MapSlice(value, func(link protocol.DefinitionLink) Location {
 			return c.location(protocol.Location{URI: link.TargetURI, Range: link.TargetSelectionRange})
 		})
 	default:
@@ -117,7 +109,7 @@ func (c *Client) documentSymbols(result protocol.DocumentSymbolResult, docURI ur
 
 func (c *Client) workspaceSymbols(result protocol.WorkspaceSymbolResult) []Symbol {
 	if value, ok := result.(protocol.WorkspaceSymbolSlice); ok {
-		return mapEach(value, func(one protocol.WorkspaceSymbol) Symbol {
+		return core.MapSlice(value, func(one protocol.WorkspaceSymbol) Symbol {
 			return newSymbol(one.Name, int(one.Kind), one.ContainerName, c.workspaceSymbolLocation(one.Location))
 		})
 	}
@@ -131,7 +123,7 @@ func (c *Client) symbolInformationsOrEmpty(result any) []Symbol {
 	if !ok {
 		return []Symbol{}
 	}
-	return mapEach(value, func(one protocol.SymbolInformation) Symbol {
+	return core.MapSlice(value, func(one protocol.SymbolInformation) Symbol {
 		return newSymbol(one.Name, int(one.Kind), one.ContainerName, c.location(one.Location))
 	})
 }
@@ -206,7 +198,7 @@ func (c *Client) flatten(in []protocol.DocumentSymbol, docURI uri.URI, container
 }
 
 func (c *Client) diagnostics(in []protocol.Diagnostic, docURI uri.URI) []Diagnostic {
-	return mapEach(in, func(one protocol.Diagnostic) Diagnostic {
+	return core.MapSlice(in, func(one protocol.Diagnostic) Diagnostic {
 		source, _ := one.Source.Get()
 		return Diagnostic{Severity: enumName(severityNames, int(one.Severity)),
 			Message: diagnosticMessage(one.Message), Source: source,

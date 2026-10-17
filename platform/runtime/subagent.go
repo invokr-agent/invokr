@@ -3,6 +3,9 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
+
 	"github.com/invokr-ai/invokr/agent"
 	"github.com/invokr-ai/invokr/capability/agentdef"
 	"github.com/invokr-ai/invokr/capability/memory"
@@ -12,9 +15,8 @@ import (
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/tools/core"
-	"slices"
-	"strings"
 
 	"go.uber.org/zap"
 )
@@ -74,7 +76,7 @@ func (r *subagentRunner) RunSubagent(ctx context.Context, req core.SubagentReque
 	if len(resp.ToolFailures)+len(resp.ToolFlagged) > 0 {
 		events.RecordExecution(ctx, turn.ExecutionEvidence{Code: "child tool failure or flagged result"})
 	}
-	return core.SubagentResult{Label: req.Label, FinalText: turn.AppendHistoricalExecution(turn.AppendToolOutcomeGuard(resp.Message, resp.ToolFailures), resp.ExecutionEvidence), StopReason: core.FirstNonEmpty(resp.StopReason, "completed"), Usage: resp.Usage}, nil
+	return core.SubagentResult{Label: req.Label, FinalText: turn.AppendHistoricalExecution(turn.AppendToolOutcomeGuard(resp.Message, resp.ToolFailures), resp.ExecutionEvidence), StopReason: strutil.FirstNonEmpty(resp.StopReason, "completed"), Usage: resp.Usage}, nil
 }
 
 func (r *subagentRunner) resolveDefinition(agentName string) (agentdef.Definition, bool, error) {
@@ -141,12 +143,10 @@ func validateToolAllowlist(agentName string, names []string, caller core.ToolCal
 	return nil
 }
 
-// toolNamesExcluding returns the names of all specs except those in excluded.
 func toolNamesExcluding(specs []core.ToolSpec, excluded []string) []string {
 	return slices.DeleteFunc(toolNames(specs), func(name string) bool { return slices.Contains(excluded, name) })
 }
 
-// toolNames lists the names of specs.
 func toolNames(specs []core.ToolSpec) []string {
 	return core.MapSlice(specs, func(s core.ToolSpec) string { return s.Name })
 }

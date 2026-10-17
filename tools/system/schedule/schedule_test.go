@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/capability/jobs"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/support/testutil"
 	"github.com/invokr-ai/invokr/tools"
@@ -22,7 +23,7 @@ func newCaller(t *testing.T, approved bool) *tools.Caller {
 			Toolbox: config.ToolboxConfig{Dir: t.TempDir()},
 			Memory:  config.MemoryConfig{Dir: t.TempDir()},
 		},
-		Approver: approval.StaticApprover{Decision: approval.Decision{Approved: approved}},
+		Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: approved}},
 	})
 }
 
@@ -160,6 +161,62 @@ func TestScheduleAddListModifyRemove(t *testing.T) {
 	}
 	if !strings.Contains(out, "removed") {
 		t.Fatalf("expected remove confirmation, got %q", out)
+	}
+}
+
+func TestScheduleRefusesDelegatedTiers(t *testing.T) {
+	fakeCrontab(t)
+	c := newCaller(t, true)
+	_, err := call(t, c, map[string]any{
+		"action": "add", "name": "health", "schedule": "*/5 * * * *",
+		"prompt": "append health.log", "allow": []string{"execute_write_command"},
+	})
+	if err == nil {
+		t.Fatal("schedule tool must not persist delegated tiers")
+	}
+	out, err := call(t, c, map[string]any{"action": "list"})
+	if err != nil || out != "no scheduled jobs." {
+		t.Fatalf("rejected job must not be saved: %q, %v", out, err)
+	}
+	_, err = call(t, c, map[string]any{
+		"action": "add", "name": "safe", "schedule": "*/5 * * * *", "prompt": "say hi",
+	})
+	if err != nil {
+		t.Fatalf("deny-only add: %v", err)
+	}
+	_, err = call(t, c, map[string]any{"action": "modify", "name": "safe", "allow": []string{"execute_write_command"}})
+	if err == nil {
+		t.Fatal("schedule tool must not widen existing job policy")
+	}
+}
+
+func TestScheduleRefusesPrivilegedJobModify(t *testing.T) {
+	fakeCrontab(t)
+	app := config.AppConfig{Toolbox: config.ToolboxConfig{Dir: t.TempDir()}, Memory: config.MemoryConfig{Dir: t.TempDir()}}
+	c := tools.NewCaller(core.CallerDeps{App: app, Approver: testutil.StaticApprover{Decision: approval.Decision{Approved: true}}})
+	db, store, err := jobs.OpenStore(app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	stored, err := store.Add(context.Background(), "privileged", "0 2 * * *", "original", "allow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = call(t, c, map[string]any{"action": "modify", "name": "privileged", "prompt": "rewrite"})
+	if err == nil {
+		t.Fatal("schedule tool must not rewrite a privileged job")
+	}
+	job, err := store.GetByName(context.Background(), "privileged")
+	if err != nil || job.Prompt != "original" || job.ApprovalPolicy != "allow" {
+		t.Fatalf("privileged job changed: %+v, %v", job, err)
+	}
+	if err := store.RecordRun(context.Background(), stored.ID, "denied: shell: job policy deny"); err != nil {
+		t.Fatal(err)
+	}
+	out, err := call(t, c, map[string]any{"action": "list"})
+	if err != nil || !strings.Contains(out, "last_status=denied: shell: job policy deny") {
+		t.Fatalf("list omitted last-run denial: %q, %v", out, err)
 	}
 }
 

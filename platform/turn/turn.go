@@ -85,7 +85,7 @@ func AppendToolOutcomeGuard(message string, failures []ToolOutcome) string {
 	if out.Len() > 0 {
 		out.WriteString("\n\n")
 	}
-	out.WriteString("[Authoritative tool outcome]\n")
+	out.WriteString("[Tool attempt failures — history, not final task status]\n")
 	for _, failure := range failures {
 		fmt.Fprintf(&out, "- %s %s: %s\n", toolOutcomeName(failure.Tool), failure.Kind, failure.Detail)
 	}
@@ -164,9 +164,7 @@ func (u TokenUsage) NewTurnUsage() TokenUsage {
 }
 
 func (u TokenUsage) AccumulateTurnUsage(delta TokenUsage) TokenUsage {
-	if u.state == nil {
-		u.state = delta.state
-	}
+	u.state = cmp.Or(u.state, delta.state)
 	if !delta.Available {
 		return u
 	}

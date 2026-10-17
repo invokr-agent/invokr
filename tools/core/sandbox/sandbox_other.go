@@ -21,6 +21,7 @@ type Plan struct {
 	CommandPath, TmpDir string
 	MemoryLimit         int64
 	Detached            bool
+	PinnedRW, PinnedRO  []string
 }
 
 func BuildPlan(cmdPath string, _ string, _ string, _ string, _ core.ToolCapabilities, memoryLimitBytes int64, _ []string) Plan {

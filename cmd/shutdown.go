@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/spinner"
-	"github.com/charmbracelet/x/term"
+	"github.com/invokr-ai/invokr/support/fsutil"
 )
 
 // shutdownSpinnerDelay is how long cleanup may take before we say anything.
@@ -46,7 +46,7 @@ func WithShutdownProgress(w io.Writer, fn func() error) error {
 // runShutdownSpinner is a variable so tests can observe that the progress path
 // was taken without needing a pty.
 var runShutdownSpinner = func(w io.Writer, done <-chan error) error {
-	if !isShutdownTerminal(w) {
+	if !fsutil.IsTerminal(w) {
 		// Not an interactive terminal: nothing to animate onto and no key to
 		// press, so just wait it out.
 		return <-done
@@ -62,11 +62,4 @@ var runShutdownSpinner = func(w io.Writer, done <-chan error) error {
 		return <-done
 	}
 	return cleanupErr
-}
-
-// isShutdownTerminal reports whether w is an interactive terminal, which is
-// what makes an animated spinner worth drawing.
-func isShutdownTerminal(w io.Writer) bool {
-	f, ok := w.(interface{ Fd() uintptr })
-	return ok && term.IsTerminal(f.Fd())
 }

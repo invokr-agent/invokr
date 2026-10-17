@@ -4,10 +4,11 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
 	"maps"
 	"slices"
 	"strings"
+
+	"github.com/invokr-ai/invokr/capability/approval"
 
 	"github.com/antonikliment/tuikit/markdown"
 	humanize "github.com/dustin/go-humanize"
@@ -17,6 +18,7 @@ import (
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
 	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/system/tool_search"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -70,7 +72,7 @@ func init() {
 		{name: "approvals", usage: "/approvals [manual|auto|plan]", summary: "alias for /mode", handler: voidCmd((*model).setApprovalMode)},
 		{name: "mode", usage: "/mode [manual|auto|plan]", summary: "show or set session mode (shift+tab cycles)", handler: voidCmd((*model).setApprovalMode)},
 		{name: "publishing", usage: "/publishing [ask|allow]", summary: "publishing permission for this Auto session", handler: voidCmd((*model).setPublishing)},
-		{name: "clear", usage: "/clear", summary: "clear visible transcript", handler: runClearCommand},
+		{name: "clear", usage: "/clear", summary: "start a new session (keep saved history and memory)", handler: runClearCommand},
 		{name: "compact", usage: "/compact", summary: "compact context before next turn", handler: sessionCmd(compactCommandText), plain: sessionText(compactCommandText)},
 		{name: "context", usage: "/context", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
 		{name: "grants", usage: grantsUsage, summary: "manage standing approval grants and denials", handler: textCmd((*model).grantsCommand)},
@@ -84,11 +86,14 @@ func init() {
 		{name: "reasoning", usage: "/reasoning [none|minimal|low|medium|high|xhigh|max|default]", summary: "show or set llama.cpp reasoning effort", handler: sessionCmd(reasoningFeedback), plain: sessionText(reasoningFeedback)},
 		{name: "profile", usage: "/profile [name]", summary: "list profiles or switch model+prompt", handler: sessionCmd(profileCommandText), plain: sessionText(profileCommandText)},
 		{name: "progress", usage: "/progress [all|new|off]", summary: "show or set tool progress", handler: voidCmd((*model).setProgress)},
+		{name: "recorded", usage: "/recorded", summary: "show recorded calls for this request (alt+r)", handler: func(m *model, _ string, _ []string) tea.Cmd { m.showRecorded(); return nil }, plain: func(context.Context, CommandBackend, turn.Session, string, []string) (string, bool) {
+			return "Recorded-call overlay unavailable in plain mode; see printed execution history", true
+		}},
 		{name: "settings", usage: "/settings", summary: "open the settings panel (ctrl+o)", handler: runSettingsCommand, plain: sessionText(settingsPlainText)},
 		{name: "retry", usage: "/retry", summary: "retry the last prompt", handler: runRetryCommand},
 		{name: "skills", usage: "/skills [install [<name>]]", summary: "list skills, or install from the skill hubs", handler: runSkillsCommand, plain: runPlainBackend, needsBackend: true},
 		{name: "syntax", usage: "/syntax [name|auto]", summary: "pick the syntax theme for code blocks", handler: runSyntaxCommand},
-		{name: "tools", usage: "/tools", summary: "list available tools", handler: runToolsCommand, plain: sessionText(plainToolsText)},
+		{name: "tools", usage: "/tools", summary: "list and toggle available tools", handler: runToolsCommand, plain: sessionText(plainToolsText)},
 	}
 	findCommand("help").plain = sessionText(func(turn.Session, []string) string { return renderCommandHelp(0) })
 }
@@ -376,9 +381,12 @@ func runClearCommand(m *model, _ string, _ []string) tea.Cmd {
 		m.commandMessage("cannot clear while approvals are pending")
 		return nil
 	}
-	m.chatLog.Clear()
-	m.commandMessage("transcript cleared — model context unchanged (use /compact for that)")
-	return nil
+	if m.sending {
+		m.commandMessage("cannot start a new session while a turn is running")
+		return nil
+	}
+	m.err = ErrNewSession
+	return tea.Quit
 }
 
 func runContextCommand(m *model, _ string, _ []string) tea.Cmd {
@@ -418,7 +426,18 @@ func runToolsCommand(m *model, _ string, _ []string) tea.Cmd {
 		m.commandMessage("tools unavailable in this runtime")
 		return nil
 	}
-	m.overlay.Open("tools", renderTools(source.ToolSpecs(), m.overlayContentWidth()))
+	specs := source.ToolSpecs()
+	manager, ok := m.session.(toolDialogSource)
+	if !ok {
+		m.overlay.Open("tools", renderTools(specs, m.overlayContentWidth()))
+		return nil
+	}
+	listings, err := manager.ListTools(m.ctx)
+	if err != nil {
+		m.overlay.Open("tools", "error: "+err.Error())
+		return nil
+	}
+	m.openToolDialog(specs, listings)
 	return nil
 }
 
@@ -619,13 +638,12 @@ func toolDisplayName(spec toolcore.ToolSpec) string {
 }
 
 func shortDescription(value string) string {
-	value = strings.TrimSpace(value)
-	if end := strings.IndexRune(value, '.'); end >= 0 {
-		value = value[:end+1]
+	// The model-facing first sentence, punctuated for display.
+	sentence := tool_search.ShortDescription(value)
+	if sentence != "" && !strings.HasSuffix(sentence, ".") {
+		sentence += "."
 	}
-	// No character cap: the description column wraps, so a long first sentence
-	// costs an extra line rather than getting cut mid-word.
-	return value
+	return sentence
 }
 
 // runSyntaxCommand opens the stylesheet picker, or applies a name given

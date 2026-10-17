@@ -148,7 +148,6 @@ func TestModeConcurrencyAndRetainedWork(t *testing.T) {
 				_ = p.SetMode(Auto)
 				_ = p.SetMode(Plan)
 				_ = p.Mode()
-				_ = p.Revision()
 				_ = p.PriorWork()
 			}
 		})

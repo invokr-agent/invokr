@@ -32,7 +32,7 @@ func TestA04_StoredStateInjectionCannotEscapeGuards(t *testing.T) {
 	}
 
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("a04-list", "memory", map[string]any{"action": "list"}),
+		managedToolStep("a04-list", "memory", map[string]any{"action": "list"}),
 		providertest.NativeToolCallStep("a04-env", "shell", map[string]any{"command": "env"}),
 		providertest.ReplyStep("done"),
 	)

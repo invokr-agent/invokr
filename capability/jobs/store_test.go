@@ -77,6 +77,22 @@ func TestAdd_DuplicateName(t *testing.T) {
 	}
 }
 
+func TestUpdateDenyJobRefusesPrivilegedPolicy(t *testing.T) {
+	ctx := context.Background()
+	store := newTestStore(t)
+	job, err := store.Add(ctx, "privileged", "0 2 * * *", "original", "allow")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateDenyJob(ctx, job.ID, "0 3 * * *", "rewritten"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expected guarded update to refuse privileged job, got %v", err)
+	}
+	got, err := store.Get(ctx, job.ID)
+	if err != nil || got.Prompt != "original" || got.Schedule != "0 2 * * *" {
+		t.Fatalf("privileged job changed: %+v, %v", got, err)
+	}
+}
+
 func TestList_TwoJobs(t *testing.T) {
 	ctx := context.Background()
 	st := newTestStore(t)

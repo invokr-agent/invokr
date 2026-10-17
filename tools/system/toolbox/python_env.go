@@ -7,14 +7,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
+
+	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/core/sandbox"
 )
 
 var venvMuMap sync.Map // map[string]*sync.Mutex — one mutex per venv dir
@@ -194,16 +196,13 @@ func (c requirementsCache) checkPolicy(required []string, cfg config.ToolboxConf
 }
 
 func readRequirementsCache(path string) (requirementsCache, bool, error) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return requirementsCache{}, false, nil
+	cache, existed, err := fsutil.ReadJSON[requirementsCache](path)
+	if existed {
+		// Legacy hashes and malformed metadata cannot authorize reuse; ReadJSON
+		// already zeroed the cache, so the next run re-resolves.
+		return cache, true, nil
 	}
-	var cache requirementsCache
-	// Legacy hashes and malformed metadata cannot authorize reuse. Re-resolve.
-	if json.Unmarshal(data, &cache) != nil {
-		cache = requirementsCache{}
-	}
-	return cache, true, err
+	return cache, err != nil, err
 }
 
 // rebuildVenvIfNotShared deletes and recreates venvDir before a requirements

@@ -16,14 +16,11 @@ func Clamp01(value float64) float64 {
 }
 
 // ClampInt returns def when v <= 0, max when v > max, and v otherwise.
-func ClampInt(v, def, max int) int {
+func ClampInt(v, def, limit int) int {
 	if v <= 0 {
 		return def
 	}
-	if v > max {
-		return max
-	}
-	return v
+	return min(v, limit)
 }
 
 // Norm returns the Euclidean norm of vector, or 0 when the vector is empty
@@ -33,9 +30,6 @@ func Norm(vector []float32) float64 {
 	for _, value := range vector {
 		v := float64(value)
 		sum += v * v
-	}
-	if sum == 0 {
-		return 0
 	}
 	return math.Sqrt(sum)
 }
@@ -53,7 +47,3 @@ func CosineWithNorms(a []float32, normA float64, b []float32, normB float64) flo
 	}
 	return dot / (normA * normB)
 }
-
-// Cosine returns the cosine similarity of a and b, computing their norms. It
-// returns 0 for length mismatches, empty vectors, or a zero norm.
-func Cosine(a []float32, b []float32) float64 { return CosineWithNorms(a, Norm(a), b, Norm(b)) }

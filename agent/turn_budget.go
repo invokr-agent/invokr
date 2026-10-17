@@ -45,7 +45,6 @@ func newTurnBudget(settings config.AgentConfig, caps map[string]core.ToolCapabil
 	}
 }
 
-// exhausted reports whether the budget is spent or the raw ceiling reached.
 func (b *turnBudget) exhausted() bool {
 	return b.iterations >= b.hardCeiling || b.spent >= b.limit
 }
@@ -56,7 +55,6 @@ func (b *turnBudget) remaining() int {
 	return min(int(math.Ceil(b.limit-b.spent)), b.hardCeiling-b.iterations)
 }
 
-// limitTurns is the budget as a turn count, for the exhaustion reason.
 func (b *turnBudget) limitTurns() int { return int(math.Round(b.limit)) }
 
 // observe charges one completed turn against the budget and records what it
@@ -111,8 +109,6 @@ func (b *turnBudget) progressed(result turnResult) bool {
 	return false
 }
 
-// failedTool reports whether the tool has a failing outcome this turn; only
-// failures are recorded, so any outcome naming it is one.
 func failedTool(outcomes []turnpkg.ToolOutcome, tool string) bool {
 	return slices.ContainsFunc(outcomes, func(o turnpkg.ToolOutcome) bool { return o.Tool == tool })
 }

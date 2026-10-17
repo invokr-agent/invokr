@@ -1,8 +1,11 @@
 package config
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -14,6 +17,60 @@ func writeProfile(t *testing.T, home, name, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, name+".md"), []byte(content), 0o600); err != nil {
 		t.Fatalf("write profile: %v", err)
+	}
+}
+
+func TestJSONProfileOverlaysToolsModelAndMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	if err := os.MkdirAll(ProfilesDir(home), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data := `{"model":"fast","tools":{"allowlist":["read"]},"mode":"auto"}`
+	if err := os.WriteFile(filepath.Join(ProfilesDir(home), "researcher.json"), []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := AppConfig{SessionMode: "manual"}
+	cfg.Tools.Allowlist = []string{"shell"}
+	out, err := ApplyNamedProfile(cfg, home, "researcher")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Provider.Model != "fast" || out.SessionMode != "auto" || !slices.Equal(out.Tools.Allowlist, []string{"read"}) {
+		t.Fatalf("profile overlay: %+v", out)
+	}
+	names, err := ListProfiles(home)
+	if err != nil || !slices.Equal(names, []string{"researcher"}) {
+		t.Fatalf("profiles: %v %v", names, err)
+	}
+	path := filepath.Join(home, "config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetActiveProfile(path, "researcher"); err != nil {
+		t.Fatal(err)
+	}
+	persisted, err := loadTestFile(path)
+	if err != nil || persisted.Profile != "researcher" || persisted.SessionMode != "auto" {
+		t.Fatalf("persisted profile: %+v %v", persisted, err)
+	}
+	writeProfile(t, home, "researcher", "---\nmodel: markdown\n---\n")
+	out, err = ApplyNamedProfile(cfg, home, "researcher")
+	if err != nil || out.Provider.Model != "markdown" {
+		t.Fatalf("markdown precedence: %+v %v", out, err)
+	}
+}
+
+func TestJSONProfileRejectsUnrestrictedMode(t *testing.T) {
+	home := t.TempDir()
+	if err := os.MkdirAll(ProfilesDir(home), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ProfilesDir(home), "unsafe.json"), []byte(`{"mode":"yolo"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ApplyNamedProfile(AppConfig{}, home, "unsafe"); err == nil {
+		t.Fatal("accepted yolo mode")
 	}
 }
 
@@ -165,5 +222,45 @@ func TestApplyNamedProfileModelOnlyWithoutRouter(t *testing.T) {
 	}
 	if out.Agent.SystemPrompt != "" {
 		t.Fatalf("prompt should be untouched, got %q", out.Agent.SystemPrompt)
+	}
+}
+
+func TestSetActiveProfilePersistsMarkdownProfile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	writeProfile(t, home, "terse", "Be terse.\n")
+	path := filepath.Join(home, "config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetActiveProfile(path, "terse"); err != nil {
+		t.Fatalf("SetActiveProfile: %v", err)
+	}
+	cfg, err := loadTestFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile: %v", err)
+	}
+	if cfg.Agent.SystemPrompt != "Be terse." {
+		t.Fatalf("prompt = %q, want the persisted profile's", cfg.Agent.SystemPrompt)
+	}
+}
+
+func TestSetActiveProfileSurfacesStatErrors(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("INVOKR_HOME", home)
+	writeProfile(t, home, "terse", "Be terse.\n")
+	if err := os.Chmod(ProfilesDir(home), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(ProfilesDir(home), 0o700) })
+	if _, err := os.Stat(filepath.Join(ProfilesDir(home), "terse.md")); err == nil {
+		t.Skip("running as root: permissions are not enforced")
+	}
+	path := filepath.Join(home, "config.json")
+	if err := os.WriteFile(path, []byte(`{}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetActiveProfile(path, "terse"); !errors.Is(err, fs.ErrPermission) {
+		t.Fatalf("SetActiveProfile(unreadable dir) error = %v, want the stat error", err)
 	}
 }

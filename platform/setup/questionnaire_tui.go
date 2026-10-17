@@ -86,12 +86,16 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 
 	groups := append(modelGroup(accessible, &answers), personaGroup(accessible)...)
 	groups = append(groups, skillsGroup(accessible, &answers)...)
-	groups = append(groups,
-		huh.NewGroup(
-			question("Invokr home path", "Where config, memory, skills and the toolbox live.", &homeDisplay, accessible),
-			memoryQuestion(accessible, &answers.MemoryEnabled, &memoryAnswer),
-			question("Syntax highlighting theme", `"auto" matches the terminal background; /syntax changes it later.`, &answers.SyntaxTheme, accessible),
-		))
+	fields := []huh.Field{
+		question("Invokr home path", "Where config, memory, skills and the toolbox live.", &homeDisplay, accessible),
+		memoryQuestion(accessible, &answers.MemoryEnabled, &memoryAnswer),
+		question("Syntax highlighting theme", `"auto" matches the terminal background; /syntax changes it later.`, &answers.SyntaxTheme, accessible),
+	}
+	if !accessible {
+		fields = append(fields, huh.NewConfirm().Title("Reset JSON profiles?").
+			Description("Replace shipped JSON profiles in <home>/profiles.").Value(&answers.ResetToolTemplates))
+	}
+	groups = append(groups, huh.NewGroup(fields...))
 	if err := runForm(newForm(in, out, accessible, groups...), accessible); err != nil {
 		return QuestionnaireResult{}, err
 	}
@@ -310,7 +314,7 @@ func recoverSelectPanic(recovered any, err error) error {
 // default" option rather than an error: setup should still complete offline.
 var modelOptions = func(baseURL string) []huh.Option[string] {
 	fallback := []huh.Option[string]{
-		huh.NewOption(fmt.Sprintf("keep the default (%s)", constants.DefaultProviderModel), keepDefaultModel),
+		huh.NewOption("pick the server's first model at startup", keepDefaultModel),
 	}
 	baseURL = strings.TrimSpace(baseURL)
 	if baseURL == "" {

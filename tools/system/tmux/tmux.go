@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,9 +42,10 @@ const holderSession = "_invokr_holder"
 // server's dead sessions.
 var socketName = fmt.Sprintf("invokr-%d-%s", os.Getpid(), strings.ReplaceAll(uuid.NewString(), "-", "")[:4])
 
-// SocketName returns the private tmux server socket for this process; tests
-// use it to kill the server they spawned.
-func SocketName() string { return socketName }
+// hostServer points every tmux call at the user's own server ($TMUX or the
+// default socket) instead of the private one: no sandbox, no holder, and the
+// model can read and type into every session the user has (--use-host-tmux).
+var hostServer atomic.Bool
 
 // SocketPath is the tmux server socket. It lives in the workspace's shared tmp
 // directory, which the sandbox bind-mounts at /tmp, so the sandboxed server and
@@ -80,8 +82,8 @@ type tmuxArgs struct {
 	Session string   `json:"session,omitempty" desc:"Session name (required for send/read/kill)."`
 	Command string   `json:"command,omitempty" desc:"Shell command to run in the new session (open only)."`
 	Cwd     string   `json:"cwd,omitempty" desc:"Working directory for open, workspace-resolved."`
-	Keys    []string `json:"keys,omitempty" desc:"Keys for send-keys: literal text and/or tmux key names (Enter, C-c, Up, Escape...)."`
-	Literal bool     `json:"literal,omitempty" desc:"Send keys verbatim (-l), with no key-name interpretation."`
+	Keys    []string `json:"keys,omitempty" desc:"To submit, send text with literal:true and keys:[text], then separately send literal:false and keys:[Enter]. ok only means tmux accepted keys; read pane to verify."`
+	Literal bool     `json:"literal,omitempty" desc:"Send keys verbatim (-l); Enter then types text instead of submitting."`
 	Lines   int      `json:"lines,omitempty" desc:"Scrollback lines above the visible screen to include when reading; default 200, max 10000."`
 	WaitMS  int      `json:"wait_ms,omitempty" desc:"Wait up to 30000 ms before capturing to let the TUI render."`
 	Width   int      `json:"width,omitempty" desc:"Pane width for open; defaults to 80, clamped to 20-500."`
@@ -97,9 +99,14 @@ type preparedTmux struct {
 }
 
 func RegisterTmuxTool(c core.NativeRegistrar, deps core.CallerDeps, wsp workspace.Policy) {
+	hostServer.Store(deps.App.Tools.TmuxHostServer)
+	description := "Open and control tmux sessions for terminal applications. The session runs inside the namespace sandbox (workspace-only filesystem, minimal environment) with the host network, so a server it starts is reachable; where sandboxing is unavailable it runs on the host. Use this tool when a process must persist across calls; otherwise use the shell tool. Sessions persist after their command exits (list shows dead=1) — read the output, then kill the session when done. If a screen looks mid-render, read it again."
+	if hostServer.Load() {
+		description += " Host mode: this targets the user's own tmux server, unsandboxed; list shows their sessions and send/read accept targets like name:0.0. Never kill a session you did not open."
+	}
 	core.Register(c, core.Tool[preparedTmux]{
 		Spec: core.ToolSpec{
-			Name: tmuxToolName, Description: "Open and control tmux sessions for terminal applications. The session runs inside the namespace sandbox (workspace-only filesystem, minimal environment) with the host network, so a server it starts is reachable; where sandboxing is unavailable it runs on the host. Use this tool when a process must persist across calls; otherwise use the shell tool. Sessions persist after their command exits (list shows dead=1) — read the output, then kill the session when done. If a screen looks mid-render, read it again.",
+			Name: tmuxToolName, Description: description,
 			Example:    `{"name":"tmux","arguments":{"action":"open","command":"htop"}}`,
 			Parameters: core.SchemaFor[tmuxArgs](),
 			Metadata:   core.NativeMetadata("system", []string{constants.ShellTierReadonly, constants.ShellTierWrite}, constants.ApprovalPolicyAsk, core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true, ExecutesCode: true}),
@@ -121,7 +128,7 @@ func RegisterTmuxTool(c core.NativeRegistrar, deps core.CallerDeps, wsp workspac
 			posture, known := serverModes[plan.root]
 			serversMu.Unlock()
 			_, socketErr := os.Stat(SocketPath(plan.root))
-			req.Confined = sandbox.Available() && plan.root != "" && (known && posture == approval.Auto || !known && plan.args.Action == "open" && os.IsNotExist(socketErr))
+			req.Confined = !hostServer.Load() && sandbox.Available() && plan.root != "" && (known && posture == approval.Auto || !known && plan.args.Action == "open" && os.IsNotExist(socketErr))
 			req.Network = !req.ReadOnly
 			req.Publishes = shell.Publishes(plan.args.Command + " " + strings.Join(plan.args.Keys, " "))
 			if decision.Request == nil {
@@ -152,6 +159,12 @@ func tmuxApproval(plan preparedTmux) core.ApprovalDecision {
 			Summary: fmt.Sprintf("Send keys to %s: %s", plan.args.Session, strings.Join(plan.args.Keys, " ")),
 			Details: fmt.Sprintf("Session: %s\nKeys: %s", plan.args.Session, strings.Join(plan.args.Keys, " ")),
 		})
+	case "kill":
+		if hostServer.Load() {
+			return core.Ask(approval.Request{Tool: tmuxToolName, Tier: constants.ShellTierWrite, Reason: "the host tmux server holds the user's own sessions",
+				Summary: "Kill tmux session " + plan.args.Session})
+		}
+		return core.Auto()
 	default:
 		return core.Auto()
 	}
@@ -191,6 +204,9 @@ func validateTmuxArgs(args tmuxArgs) error {
 		if strings.TrimSpace(args.Session) == "" {
 			return fmt.Errorf("session is required for %s", args.Action)
 		}
+		if args.Action == "send" && strings.Join(args.Keys, "") == "" {
+			return fmt.Errorf("keys are required for send")
+		}
 	case "list":
 	default:
 		return fmt.Errorf("unsupported tmux action %q", args.Action)
@@ -227,15 +243,14 @@ func runTmuxAction(ctx context.Context, plan preparedTmux) (string, error) {
 }
 
 func sendKeys(ctx context.Context, plan preparedTmux) (string, error) {
-	args := plan.args
 	tmuxArgs := []string{"send-keys"}
-	if args.Literal {
+	if plan.args.Literal {
 		tmuxArgs = append(tmuxArgs, "-l")
 	}
 	// "--" stops option parsing so keys starting with "-" (e.g. sending the
 	// literal text "-l" to a REPL) reach the pane instead of tmux's getopt.
-	tmuxArgs = append(tmuxArgs, "-t", args.Session, "--")
-	tmuxArgs = append(tmuxArgs, args.Keys...)
+	tmuxArgs = append(tmuxArgs, "-t", plan.args.Session, "--")
+	tmuxArgs = append(tmuxArgs, plan.args.Keys...)
 	if _, err := runTmux(ctx, plan.root, tmuxArgs...); err != nil {
 		return "", err
 	}
@@ -244,9 +259,8 @@ func sendKeys(ctx context.Context, plan preparedTmux) (string, error) {
 }
 
 func readPane(ctx context.Context, plan preparedTmux) (string, error) {
-	args := plan.args
-	if args.WaitMS > 0 {
-		timer := time.NewTimer(time.Duration(args.WaitMS) * time.Millisecond)
+	if plan.args.WaitMS > 0 {
+		timer := time.NewTimer(time.Duration(plan.args.WaitMS) * time.Millisecond)
 		defer timer.Stop()
 		select {
 		case <-ctx.Done():
@@ -254,9 +268,9 @@ func readPane(ctx context.Context, plan preparedTmux) (string, error) {
 		case <-timer.C:
 		}
 	}
-	tmuxArgs := []string{"capture-pane", "-p", "-t", args.Session}
-	if args.Lines > 0 {
-		tmuxArgs = append(tmuxArgs, "-S", "-"+strconv.Itoa(args.Lines))
+	tmuxArgs := []string{"capture-pane", "-p", "-t", plan.args.Session}
+	if plan.args.Lines > 0 {
+		tmuxArgs = append(tmuxArgs, "-S", "-"+strconv.Itoa(plan.args.Lines))
 	}
 	return runTmux(ctx, plan.root, tmuxArgs...)
 }
@@ -268,7 +282,7 @@ func openSession(ctx context.Context, plan preparedTmux) (string, error) {
 	// always started on the holder session, never on the model's command: the
 	// visible session is created afterwards through an ordinary client, whose
 	// argv dies with the call.
-	if _, down := runTmux(ctx, plan.root, "list-sessions"); down != nil {
+	if _, down := runTmux(ctx, plan.root, "list-sessions"); down != nil && !hostServer.Load() {
 		if err := startServer(ctx, plan); err != nil {
 			return "", err
 		}
@@ -343,8 +357,7 @@ func hideHolder(out string) string {
 
 func listSessions(ctx context.Context, root string) (string, error) {
 	out, err := runTmux(ctx, root, "list-sessions", "-F", "#{session_name} #{session_created} #{pane_current_command} dead=#{pane_dead}")
-	var toolErr *core.ToolError
-	if errors.As(err, &toolErr) {
+	if toolErr, ok := errors.AsType[*core.ToolError](err); ok {
 		payload := strings.ToLower(toolErr.Payload)
 		if strings.Contains(payload, "no server running") || strings.Contains(payload, "error connecting") || strings.Contains(payload, "server exited unexpectedly") {
 			return "no sessions", nil
@@ -364,11 +377,13 @@ func killSession(ctx context.Context, plan preparedTmux) (string, error) {
 }
 
 func runTmux(ctx context.Context, root string, args ...string) (string, error) {
-	base := []string{"-S", SocketPath(root)}
-	conf := createServerConf("")
-	if conf != "" {
-		base = append(base, "-f", conf)
-		defer func() { _ = os.Remove(conf) }()
+	var base []string
+	if !hostServer.Load() {
+		base = []string{"-S", SocketPath(root)}
+		if conf := createServerConf(""); conf != "" {
+			base = append(base, "-f", conf)
+			defer func() { _ = os.Remove(conf) }()
+		}
 	}
 	res, err := core.RunProcess(ctx, core.ProcessSpec{
 		Name: "tmux", Args: append(base, args...), OutputLimit: constants.ShellDefaultMaxOutputBytes,

@@ -295,7 +295,7 @@ func TestCallerSkipsWebSearchWithoutConfiguredProvider(t *testing.T) {
 	cfg := config.AppConfig{}.WithDefaults().WebSearch
 	cfg.Providers = []string{constants.WebSearchProviderCustomHTTP}
 	cfg.CustomHTTP.Endpoint = "http://search.local/q"
-	if !HasConfiguredProvider(cfg) {
+	if len(ConfiguredProviders(cfg)) == 0 {
 		t.Fatal("custom_http endpoint should count as configured")
 	}
 
@@ -304,21 +304,21 @@ func TestCallerSkipsWebSearchWithoutConfiguredProvider(t *testing.T) {
 	cfg = config.AppConfig{}.WithDefaults().WebSearch
 	cfg.Providers = []string{constants.WebSearchProviderSearXNG}
 	cfg.SearXNG.Endpoint = "http://127.0.0.1:8888/search"
-	if !HasConfiguredProvider(cfg) {
+	if len(ConfiguredProviders(cfg)) == 0 {
 		t.Fatal("searxng endpoint should count as configured")
 	}
 	cfg.SearXNG.Endpoint = ""
 	if _, err := exec.LookPath(cfg.SearXNG.Engine); err == nil {
-		if !HasConfiguredProvider(cfg) {
+		if len(ConfiguredProviders(cfg)) == 0 {
 			t.Fatal("searxng should count as configured when the engine binary is present")
 		}
-	} else if HasConfiguredProvider(cfg) {
+	} else if len(ConfiguredProviders(cfg)) > 0 {
 		t.Fatal("searxng should not count as configured with no endpoint and no engine binary")
 	}
 	// The gate follows the configured engine, not a hard-coded docker: a
 	// binary that does not exist must not register the tool.
 	cfg.SearXNG.Engine = "invokr-no-such-engine"
-	if HasConfiguredProvider(cfg) {
+	if len(ConfiguredProviders(cfg)) > 0 {
 		t.Fatal("searxng counted as configured with a missing engine binary")
 	}
 }

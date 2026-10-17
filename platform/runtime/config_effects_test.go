@@ -1,10 +1,13 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
+	"github.com/invokr-ai/invokr/constants"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -17,10 +20,12 @@ import (
 
 func runtimeConfigFromEnv(t *testing.T) config.AppConfig {
 	t.Helper()
-	app, err := config.LoadFile(filepath.Join(t.TempDir(), "missing.json"))
+	t.Setenv("INVOKR_HOME", t.TempDir())
+	app, err := config.LoadDefaultFileWithProfile("")
 	if err != nil {
 		t.Fatalf("LoadFile() error = %v", err)
 	}
+	app.Provider.Model = cmp.Or(app.Provider.Model, "test-model")
 	return app
 }
 
@@ -79,7 +84,7 @@ func TestRuntime_ConfigEffectsInProviderRequests(t *testing.T) {
 	if !req.ParallelToolCalls {
 		t.Fatal("parallel_tool_calls = false, want true")
 	}
-	if !completionToolsContain(req.Tools, "tool_search") {
+	if !completionToolsContain(req.Tools, "tools") {
 		t.Fatalf("request tools do not contain tool_search: %#v", req.Tools)
 	}
 }
@@ -103,7 +108,7 @@ func TestRuntime_ConfigDisablesNativeToolDeclarations(t *testing.T) {
 	}
 
 	req := provider.Snapshot().CompletionRequests[0]
-	if completionToolsContain(req.Tools, "tool_search") {
+	if completionToolsContain(req.Tools, "tools") {
 		t.Fatalf("request tools contain tool_search despite disabled native requests: %#v", req.Tools)
 	}
 	if req.ParallelToolCalls {
@@ -174,7 +179,7 @@ import "fmt"
 func main() { fmt.Print("{\"result\":\"fixture ok\"}") }`,
 	})
 	provider := providertest.NewScripted(t,
-		providertest.ToolCallStep("tool_search", `{"query":"fixture_probe","include_schema":true}`),
+		providertest.ToolCallStep("tools", `{"query":"fixture_probe","action":"search"}`),
 		providertest.ReplyStep("found fixture"),
 	)
 	defer provider.Close()
@@ -201,4 +206,18 @@ func main() { fmt.Print("{\"result\":\"fixture ok\"}") }`,
 func completionToolsContain(tools any, name string) bool {
 	b, _ := json.Marshal(tools)
 	return strings.Contains(string(b), name)
+}
+
+func TestBootstrapDoesNotChangeCoreToolDefaults(t *testing.T) {
+	before := slices.Clone(constants.ManagedCoreTools)
+	defer func() { constants.ManagedCoreTools = before }()
+	app := runtimeConfigFromEnv(t)
+	app.Tools.Core = []string{"private_core"}
+	app.Agent.MaxTurns = -1
+	if _, err := Bootstrap(app, Options{}); err == nil {
+		t.Fatal("invalid configuration accepted")
+	}
+	if !slices.Equal(constants.ManagedCoreTools, before) {
+		t.Fatalf("bootstrap changed global policy: %v", constants.ManagedCoreTools)
+	}
 }

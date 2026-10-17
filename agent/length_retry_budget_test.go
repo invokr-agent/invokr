@@ -113,12 +113,9 @@ func TestLengthCutAfterRetryEndsRun(t *testing.T) {
 // included — still buys its own no-thinking retry instead of being written off
 // because an earlier turn used the run's only one.
 func TestLengthRetryBudgetIsPerTurn(t *testing.T) {
-	provider := &scriptedProvider{outputs: []*inference.Response{
-		lengthCutResponse(""),
-		{Message: inference.Message{Content: `{"type":"reply","message":"first"}`}},
-		lengthCutResponse(""),
-		{Message: inference.Message{Content: `{"type":"reply","message":"second"}`}},
-	}}
+	// The retries answer with a tool call, so no degenerate-retry nudge follows.
+	act := &inference.Response{Message: inference.Message{ToolCalls: []inference.ToolCall{{ID: "c1", Name: "edit", Arguments: "{}"}}}, FinishReason: inference.FinishToolCalls}
+	provider := &scriptedProvider{outputs: []*inference.Response{lengthCutResponse(""), act, lengthCutResponse(""), act}}
 	gateway := testModelGateway(provider)
 	gateway.events = events.NewOrderedDispatcher(zap.NewNop())
 	ctx := context.Background()
@@ -161,8 +158,10 @@ func TestLengthCutRetryRecoversTheAnswer(t *testing.T) {
 	}
 	retry := provider.requests[1]
 	last := retry.Messages[len(retry.Messages)-2]
-	if last.Role != inference.RoleUser || !strings.Contains(last.Content, "cut off by the output limit") {
-		t.Fatalf("retry's last message = %#v, want the answer-directly nudge", last)
+	// The scripted cut reports no usage, so no plan is kept and the nudge must
+	// not claim one is above (#653 review).
+	if last.Role != inference.RoleUser || last.Content != lengthRetryNudgeNoPlan {
+		t.Fatalf("retry's last message = %#v, want the no-plan nudge", last)
 	}
 	if len(kept) != len(msgs) {
 		t.Fatalf("kept %d messages, want the nudge and the cut partial left out of history", len(kept))

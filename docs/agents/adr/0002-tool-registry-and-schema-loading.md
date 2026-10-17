@@ -1,5 +1,7 @@
 # ADR 0002: Tool Registry And Schema Loading
 
+V5 supersedes schema loading/visibility with [ADR 0020](../../adr/0020-managed-tools.md).
+
 ## Status
 
 Accepted.

@@ -3,10 +3,6 @@ package file_search
 import (
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
 	"math"
 	"os"
 	"path/filepath"
@@ -15,6 +11,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-ai/invokr/support/mathutil"
+	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/system/workspace"
 )
 
 const (
@@ -74,7 +76,7 @@ type searchPlan struct {
 func RegisterFileSearchTool(c core.NativeRegistrar, deps core.CallerDeps, workspace workspace.Policy) {
 	core.Register(c, core.Tool[searchArgs]{
 		Spec: core.ToolSpec{
-			Name: "file_search", Description: "Search workspace files by filename, literal content, or regex. Uses read_workspace policy and returns line-numbered snippets.",
+			Name: "file_search", Description: "Search workspace filenames, literal content, or regex; return line-numbered snippets. Read-only.",
 			Example:    `{"name":"file_search","arguments":{"query":"HandleCall","mode":"auto","path_glob":"src/**","git_scope":"all","max_results":20,"context_lines":2}}`,
 			Parameters: core.SchemaFor[searchArgs](), Metadata: core.ReadWorkspaceMetadata("workspace", core.ToolCapabilities{ReadsWorkspace: true}),
 		},
@@ -172,7 +174,7 @@ func resolveGitScope(ctx context.Context, root, gitScope string) (statuses map[s
 // normalizeEnum defaults a blank enum argument and rejects any value outside
 // the allowed set, naming the field in the error.
 func normalizeEnum(field string, value string, allowed ...string) (string, error) {
-	value = core.FirstNonEmptyTrimmed(value, allowed[0])
+	value = strutil.FirstNonEmptyTrimmed(value, allowed[0])
 	if !slices.Contains(allowed, value) {
 		return "", fmt.Errorf("unsupported %s %q", field, value)
 	}
@@ -180,7 +182,7 @@ func normalizeEnum(field string, value string, allowed ...string) (string, error
 }
 
 func normalizePathGlob(pathGlob string) (string, error) {
-	pathGlob = core.FirstNonEmptyTrimmed(pathGlob, "**/*")
+	pathGlob = strutil.FirstNonEmptyTrimmed(pathGlob, "**/*")
 	slashed := filepath.ToSlash(pathGlob)
 	if filepath.IsAbs(pathGlob) || strings.Contains(slashed, "../") || strings.HasPrefix(slashed, "..") {
 		return "", fmt.Errorf("path_glob %q is outside allowed workspace roots", pathGlob)
@@ -417,7 +419,7 @@ func searchCandidate(path string, rel string, info os.FileInfo, plan searchPlan)
 	_, changed := plan.changedFiles[rel]
 	candidate := candidateFile{
 		absPath: path, relPath: rel, changed: changed, modTime: info.ModTime(),
-		gitStatus: core.FirstNonEmptyTrimmed(plan.statusByPath[rel], "unmodified"),
+		gitStatus: strutil.FirstNonEmptyTrimmed(plan.statusByPath[rel], "unmodified"),
 		vendor:    strings.Contains("/"+filepath.ToSlash(rel), "/vendor/"),
 		large:     info.Size() > largeFileBytes,
 	}
@@ -595,7 +597,7 @@ func gitScopePaths(ctx context.Context, root string, scope string, statuses map[
 func runGit(ctx context.Context, root string, args ...string) (string, error) {
 	res, err := core.RunProcess(ctx, core.ProcessSpec{Name: "git", Args: args, Dir: root, OutputLimit: gitOutputLimit})
 	if err != nil {
-		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), core.FirstNonEmptyTrimmed(res.Stderr, err.Error()))
+		return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strutil.FirstNonEmptyTrimmed(res.Stderr, err.Error()))
 	}
 	return res.Stdout, nil
 }
@@ -624,11 +626,11 @@ func statusName(code string) string {
 func dispatchAudit(dispatcher events.Dispatcher, ctx context.Context, args searchArgs, resultCount int, duration time.Duration, outcome string, err error) {
 	queryHash := ""
 	if strings.TrimSpace(args.Query) != "" {
-		queryHash = core.HashHex(args.Query)
+		queryHash = strutil.HashHex(args.Query)
 	}
 	core.AuditDetails(ctx, dispatcher, "file_search", outcome, map[string]any{
-		"policy_tier": policyTier, "query_hash": queryHash, "result_count": resultCount, "mode": core.FirstNonEmptyTrimmed(args.Mode, "auto"),
-		"git_scope": core.FirstNonEmptyTrimmed(args.GitScope, "all"),
-		"path_glob": core.FirstNonEmptyTrimmed(args.PathGlob, "**/*"), "duration_ms": duration.Milliseconds(),
+		"policy_tier": policyTier, "query_hash": queryHash, "result_count": resultCount, "mode": strutil.FirstNonEmptyTrimmed(args.Mode, "auto"),
+		"git_scope": strutil.FirstNonEmptyTrimmed(args.GitScope, "all"),
+		"path_glob": strutil.FirstNonEmptyTrimmed(args.PathGlob, "**/*"), "duration_ms": duration.Milliseconds(),
 	}, err)
 }

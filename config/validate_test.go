@@ -160,26 +160,6 @@ func TestValidateRejectsUnknownToolResultStrategy(t *testing.T) {
 	}
 }
 
-func TestValidateRejectsAgeTurnsBelowKeepTurnsOrNegative(t *testing.T) {
-	cfg := AppConfig{}
-	cfg.Agent.ToolResultKeepTurns = 5
-	cfg.Agent.ToolResultAgeTurns = 2
-	if err := cfg.Validate(nil); err == nil {
-		t.Fatal("age_turns below keep_turns accepted")
-	}
-	cfg = AppConfig{}
-	cfg.Agent.ToolResultAgeTurns = -1
-	if err := cfg.Validate(nil); err == nil {
-		t.Fatal("negative age_turns accepted")
-	}
-	cfg = AppConfig{}
-	cfg.Agent.ToolResultKeepTurns = 3
-	cfg.Agent.ToolResultAgeTurns = 3
-	if err := cfg.Validate(nil); err != nil {
-		t.Fatalf("age_turns == keep_turns rejected: %v", err)
-	}
-}
-
 func TestValidateRejectsTurnBudgetBounds(t *testing.T) {
 	cfg := AppConfig{}
 	cfg.Agent.ReadTurnWeight = 1.5
@@ -196,5 +176,16 @@ func TestValidateRejectsTurnBudgetBounds(t *testing.T) {
 	cfg.Agent.HardTurnMultiplier = 2
 	if err := cfg.Validate(nil); err != nil {
 		t.Fatalf("valid turn budget rejected: %v", err)
+	}
+}
+
+func TestValidateSkipsMissingDefaultDirs(t *testing.T) {
+	t.Setenv("INVOKR_HOME", t.TempDir())
+	core, logs := observer.New(zap.WarnLevel)
+	if err := (AppConfig{}).WithDefaults().Validate(zap.New(core)); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if n := logs.FilterMessage("configured directory does not exist").Len(); n != 0 {
+		t.Fatalf("got %d missing-dir warnings for default dirs, want 0", n)
 	}
 }

@@ -31,7 +31,7 @@ func FlaggedExecution(evidence []ExecutionEvidence) []ExecutionEvidence {
 
 // Historical evidence is bounded in prompts; the full ledger remains on disk.
 func AppendHistoricalExecution(message string, evidence []ExecutionEvidence) string {
-	if evidence == nil {
+	if len(evidence) == 0 {
 		return message
 	}
 	counts := map[string]int{}
@@ -45,14 +45,11 @@ func AppendHistoricalExecution(message string, evidence []ExecutionEvidence) str
 
 // AppendExecutionGuard is shared by plain, TUI and CLI rendering; nil is legacy/unavailable.
 func AppendExecutionGuard(message string, evidence []ExecutionEvidence) string {
-	if evidence == nil {
+	if len(evidence) == 0 {
 		return message
 	}
 	var out strings.Builder
-	fmt.Fprintf(&out, "%s\n\n[Execution evidence — does not establish full task verification]\n", strings.TrimSpace(message))
-	if len(evidence) == 0 {
-		out.WriteString("No tool evidence; verification unverified.\n")
-	}
+	fmt.Fprintf(&out, "%s\n\n[Execution history — not final task status; does not establish full task verification]\n", strings.TrimSpace(message))
 	for _, item := range evidence {
 		fmt.Fprintf(&out, "- %s %q: %s (%s)", item.Tool, item.CallID, item.Outcome, item.Freshness)
 		for _, field := range [][2]string{{"command", item.Command}, {"cwd", item.Cwd}, {"code", item.Code}} {

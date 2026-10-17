@@ -15,11 +15,16 @@ func WithSessionID(ctx context.Context, sessionID string) context.Context {
 }
 
 func SessionIDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
+	return contextValue[string](ctx, sessionIDContextKey)
+}
+
+// contextValue reads key from a possibly-nil ctx, yielding T's zero value when absent.
+func contextValue[T any](ctx context.Context, key contextKey) T {
+	var value T
+	if ctx != nil {
+		value, _ = ctx.Value(key).(T)
 	}
-	sessionID, _ := ctx.Value(sessionIDContextKey).(string)
-	return sessionID
+	return value
 }
 
 // WithDelegateDepth records how many levels of delegate_task nesting led to
@@ -32,9 +37,13 @@ func WithDelegateDepth(ctx context.Context, depth int) context.Context {
 }
 
 func DelegateDepthFromContext(ctx context.Context) int {
-	if ctx == nil {
-		return 0
-	}
-	depth, _ := ctx.Value(delegateDepthContextKey).(int)
-	return depth
+	return contextValue[int](ctx, delegateDepthContextKey)
+}
+
+// ToolCallIDKey identifies the dispatch call whose tool emits progress.
+type ToolCallIDKey struct{}
+
+func ToolCallIDFromContext(ctx context.Context) string {
+	id, _ := ctx.Value(ToolCallIDKey{}).(string)
+	return id
 }

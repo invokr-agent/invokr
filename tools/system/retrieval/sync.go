@@ -26,6 +26,7 @@ import (
 	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-ai/invokr/support/strutil"
 	"github.com/invokr-ai/invokr/tools/core"
 
 	"go.uber.org/zap"
@@ -292,7 +293,7 @@ func (s *Service) docRecord(doc sourceDoc) memorycore.Record {
 		Scope: config.ScopeProject, Kind: memorycore.KindDoc, Content: content, Source: memorycore.SourceSQLite,
 		Metadata: map[string]string{
 			docMetaWorkspace: s.workspaceKey(), docMetaPath: doc.pathOrID,
-			docMetaHash:    "sha256:" + core.HashHex(content),
+			docMetaHash:    "sha256:" + strutil.HashHex(content),
 			docMetaSize:    strconv.FormatInt(doc.fileSize, 10),
 			docMetaModTime: doc.fileModTime,
 			docMetaLines:   strconv.Itoa(countLines([]byte(content))),
@@ -447,4 +448,17 @@ func tokenize(text string) []string {
 	return strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
 		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
 	})
+}
+
+// IndexStatus reports how many doc records this workspace holds and when the
+// newest of them was written (zero when there are none).
+func (s *Service) IndexStatus(ctx context.Context) (int, time.Time, error) {
+	records, err := s.listDocRecords(ctx)
+	var last time.Time
+	for _, rec := range records {
+		if rec.UpdatedAt.After(last) {
+			last = rec.UpdatedAt
+		}
+	}
+	return len(records), last, err
 }

@@ -14,7 +14,7 @@ import (
 // surface in the parent's tool result. Delegation raises exactly one approval.
 func TestC15_Delegate(t *testing.T) {
 	provider := providertest.NewScripted(t,
-		providertest.NativeToolCallStep("c15-delegate", "delegate_task", map[string]any{
+		managedToolStep("c15-delegate", "delegate_task", map[string]any{
 			"tasks":        []map[string]any{{"label": "math", "prompt": "compute 17*19 without tools"}},
 			"max_parallel": 1,
 		}),
@@ -26,8 +26,8 @@ func TestC15_Delegate(t *testing.T) {
 
 	got := runInProc(t, home, provider.URL(), "delegate the math", grantAll)
 
-	if got.Resp.ToolCallCount != 1 {
-		t.Fatalf("tool_call_count = %d, want 1 (delegate_task)", got.Resp.ToolCallCount)
+	if got.Resp.ToolCallCount != 2 {
+		t.Fatalf("tool_call_count = %d, want 2 (enable + delegate_task)", got.Resp.ToolCallCount)
 	}
 	if len(got.failureKinds()) != 0 {
 		t.Fatalf("delegate_task should succeed: %#v", got.failureKinds())
@@ -37,7 +37,7 @@ func TestC15_Delegate(t *testing.T) {
 	}
 	// The child's reply is returned specifically as the delegate tool result.
 	results := toolResults(provider.Snapshot().CompletionRequests)
-	if !strings.Contains(results, `\"label\":\"math\"`) || !strings.Contains(results, `\"final_text\":\"child-canary-323\\n\\n[Execution evidence`) {
+	if !strings.Contains(results, `\"label\":\"math\"`) || !strings.Contains(results, `\"final_text\":\"child-canary-323\"`) {
 		t.Fatalf("delegate result missing child attribution: %s", results)
 	}
 	rows := memoryRows(t, home)

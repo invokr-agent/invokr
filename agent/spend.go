@@ -48,7 +48,6 @@ type spendCap struct {
 	lastCharge int64
 }
 
-// beginRequest clears the per-request accounting. Called once per Run.
 func (s *spendCap) beginRequest() {
 	s.estimated = 0
 	s.requestCharged, s.prevPromptTokens, s.lastCharge = 0, 0, 0
@@ -64,8 +63,6 @@ func (s spendCap) observeSummarizer(prompt, completion int64) {
 	s.summarizer.completion.Add(completion)
 }
 
-// summarized returns the session-total summarizer spend; nil-safe for
-// zero-value spendCaps in tests.
 func (s spendCap) summarized() (prompt, completion int64) {
 	if s.summarizer == nil {
 		return 0, 0
@@ -152,8 +149,6 @@ func newSpendCap(settings config.AgentConfig, pricing config.PricingConfig, logg
 	return spendCap{maxTokens: settings.MaxSessionTokens, maxCost: settings.MaxSessionCost, maxRequest: settings.MaxRequestTokens, pricing: pricing, summarizer: &summarizerMeter{}}
 }
 
-// exceeded reports why the request or session budget is spent, or "" when
-// neither is.
 func (s spendCap) exceeded(usage turnpkg.TokenUsage) string {
 	if reason := s.requestExceeded(usage); reason != "" {
 		return reason

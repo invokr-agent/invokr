@@ -16,10 +16,7 @@ func startupMode(cmd *cobra.Command) (*approval.Policy, error) {
 	publish, _ := f.GetBool("allow-publishing")
 	requested := slices.ContainsFunc([]string{"mode", "yolo", "allow-publishing"}, f.Changed)
 	if !isAgentCommand(cmd) && cmd.Name() != "exec" {
-		if requested {
-			return nil, fmt.Errorf("session mode flags are supported only by agent and exec")
-		}
-		return nil, nil
+		return nil, nil // other commands do not register the session flags
 	}
 	if !slices.Contains([]string{"manual", "auto", "plan"}, mode) {
 		return nil, fmt.Errorf("--mode must be manual, auto, or plan; use --yolo for unrestricted execution")
@@ -56,9 +53,6 @@ func ConfigureStartupModes(cfg *config.AppConfig, args []string) error {
 		return fmt.Errorf("--yolo conflicts with --mode and --sandbox")
 	}
 	if yolo {
-		if !isAgentCommand(command) && command.Name() != "exec" {
-			return fmt.Errorf("--yolo is supported only by agent and exec")
-		}
 		cfg.Sandbox.Enabled = false
 	}
 	return nil
