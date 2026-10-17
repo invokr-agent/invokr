@@ -46,6 +46,11 @@ func TestD06_ContextWarningAndCompaction(t *testing.T) {
 	for i, req := range requests {
 		tools, _ := json.Marshal(req.Tools)
 		t.Logf("DEBUG req %d tools=%dB", i, len(tools))
+		if i == 0 {
+			for _, line := range strings.Split(toText(req.Messages[0].Content), "\n") {
+				t.Logf("SYSP %s", line)
+			}
+		}
 		for j, m := range req.Messages {
 			raw, _ := json.Marshal(m)
 			txt := toText(m.Content)
