@@ -30,6 +30,6 @@ echo "==> recording (about a minute; a real turn against the configured model)"
 
 if command -v magick >/dev/null; then
   echo "==> optimizing"
-  magick "$OUT" -layers optimize -colors "${COLORS:-96}" "$OUT"
+  magick "$OUT" -layers optimize +dither -colors "${COLORS:-96}" "$OUT"
 fi
 ls -lh "$OUT" "$STILL"

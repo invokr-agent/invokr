@@ -17,6 +17,7 @@ loose part: they have to cover a model's think time, not a fixed animation.
 
 import fcntl
 import os
+import re
 import pty
 import select
 import struct
@@ -25,17 +26,17 @@ import termios
 import time
 
 import pyte
+from wcwidth import wcwidth
 from PIL import Image, ImageDraw, ImageFont
 
 PROMPT = os.environ.get(
     "PROMPT",
-    "Use the shell tool to run exactly: go build ./tools/core   "
-    "Then tell me if it compiled.",
+    "run go build ./tools/core — does it compile?",
 )
 DISPLAY_MODEL = os.environ.get("DEMO_MODEL_LABEL", "")
 ACTUAL_MODEL = os.environ.get("INVOKR_MODEL", "")
 
-COLS, ROWS = 100, 28
+COLS, ROWS = 100, 32
 FONT_PATH = "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf"
 # JetBrains Mono has no U+25D0 ◐, the running-spinner glyph, and draws it as a
 # .notdef box. Anything monospace that does have it works as a stand-in for the
@@ -141,10 +142,33 @@ def color(name, default):
     return default
 
 
+class Screen(pyte.Screen):
+    """pyte.Screen that widens text-presentation emoji followed by VS16.
+
+    A terminal draws U+1F5DC U+FE0F two columns wide; pyte counts one, so every
+    later cell on the row lands a column early and the text overwrites itself.
+    """
+
+    def draw(self, data):
+        super().draw(re.sub(".\ufe0f", lambda m: m[0][0] + (" " if wcwidth(m[0][0]) == 1 else ""), data))
+
+    def scroll_down(self, count=None):
+        """CSI T, which pyte lacks: a reverse index at the top margin scrolls the region down."""
+        y = self.cursor.y
+        self.cursor.y = self.margins.top if self.margins else 0
+        for _ in range(count or 1):
+            self.reverse_index()
+        self.cursor.y = y
+
+
+class Stream(pyte.ByteStream):
+    csi = {**pyte.ByteStream.csi, "T": "scroll_down"}
+
+
 def run(command):
     """Drive command in a pty, returning screen snapshots as (t, buffer)."""
-    screen = pyte.Screen(COLS, ROWS)
-    stream = pyte.ByteStream(screen)
+    screen = Screen(COLS, ROWS)
+    stream = Stream(screen)
     pid, fd = pty.fork()
     if pid == 0:
         os.environ.update(TERM="xterm-256color", COLORTERM="truecolor", LINES=str(ROWS), COLUMNS=str(COLS))
@@ -190,10 +214,14 @@ def snapshot(screen):
     rows = [[screen.buffer[y][x] for x in range(COLS)] for y in range(ROWS)]
     if DISPLAY_MODEL and ACTUAL_MODEL:
         for row in rows:
-            start = "".join(char.data for char in row).find(ACTUAL_MODEL)
+            # A wide glyph's second cell has empty data; count it so the index is a column.
+            start = "".join(char.data or " " for char in row).find(ACTUAL_MODEL)
             if start >= 0:
-                for offset, data in enumerate(DISPLAY_MODEL.ljust(len(ACTUAL_MODEL))[:len(ACTUAL_MODEL)]):
-                    row[start + offset] = row[start + offset]._replace(data=data)
+                # Swap the name in and shift the rest of the bar left, padding the right edge.
+                label = DISPLAY_MODEL[:len(ACTUAL_MODEL)]
+                row[start:] = ([row[start + i]._replace(data=c) for i, c in enumerate(label)]
+                               + row[start + len(ACTUAL_MODEL):]
+                               + [row[-1]._replace(data=" ")] * (len(ACTUAL_MODEL) - len(label)))
     return rows
 
 
@@ -287,7 +315,7 @@ def main():
         sys.exit("no frames captured")
 
     # Skip long unchanged waits without accelerating typed characters.
-    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [1200]
+    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [4000]  # hold the /context overlay long enough to read
     paletted = quantize(images)
     paletted[0].save(gif_path, save_all=True, append_images=paletted[1:],
                      duration=durations, loop=0, optimize=True, disposal=1)
