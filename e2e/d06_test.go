@@ -43,6 +43,18 @@ func TestD06_ContextWarningAndCompaction(t *testing.T) {
 	}
 
 	requests := provider.Snapshot().CompletionRequests
+	for i, req := range requests {
+		tools, _ := json.Marshal(req.Tools)
+		t.Logf("DEBUG req %d tools=%dB", i, len(tools))
+		for j, m := range req.Messages {
+			raw, _ := json.Marshal(m)
+			txt := toText(m.Content)
+			if len(txt) > 160 {
+				txt = txt[:160]
+			}
+			t.Logf("DEBUG   msg %d role=%s len=%d %q", j, m.Role, len(raw), txt)
+		}
+	}
 	if len(requests) != 5 {
 		t.Fatalf("completion requests = %d, want 5", len(requests))
 	}
