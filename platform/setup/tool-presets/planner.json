@@ -1,0 +1,6 @@
+{
+  "mode": "plan",
+  "tools": {
+    "allowlist": ["tools", "read", "web_search", "web_fetch", "todo"]
+  }
+}

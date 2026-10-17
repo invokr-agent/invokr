@@ -1,0 +1,43 @@
+services:
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    privileged: true
+    working_dir: /src
+    volumes:
+      - .:/src:ro
+      - e2e-go-cache:/root/.cache/go-build
+      - e2e-mod-cache:/go/pkg/mod
+
+  e2e-live:
+    profiles: [live]
+    extends: e2e
+    depends_on:
+      - llamacpp
+    environment:
+      INVOKR_E2E_LIVE: "1"
+      INVOKR_E2E_LIVE_URL: http://llamacpp:8080
+      # Empty means the SWE cases score the llamacpp model above; set it in
+      # .env.e2e to score a different one the same provider serves.
+      INVOKR_E2E_SWE_MODEL: ${INVOKR_E2E_SWE_MODEL:-}
+      INVOKR_E2E_SWE_TIMEOUT: ${INVOKR_E2E_SWE_TIMEOUT:-10m}
+    command: ["go", "test", "-tags", "e2e", "-timeout", "40m", "./e2e/..."]
+
+  llamacpp:
+    profiles: [live]
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    command: ["-m", "/models/ornith.gguf", "--host", "0.0.0.0", "--port", "8080", "-ngl", "999"]
+    volumes:
+      - ${ORNITH_GGUF_PATH:-/missing/ornith.gguf}:/models/ornith.gguf:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+volumes:
+  e2e-go-cache:
+  e2e-mod-cache:

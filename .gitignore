@@ -1,0 +1,37 @@
+cmd/data/*
+!cmd/data/.gitkeep
+data/memory.json
+data/user.json
+specs/*
+.idea/*
+*/.venv
+.tokf/cache/
+.invokr
+custom-golangci-lint
+size-report.html
+__pycache__/
+e2e-live.sh
+handovers/
+dist/
+invokr-agent
+invokr
+invokr-dev
+
+# Integration-test model downloads (see support/testutil.UseRepoModelCache)
+.modelcache/
+bench-results*.json
+bench/bench-*.json
+bench/invokr-bench
+
+# Bench tasks live in antonikliment/test-bench, not here (see bench/README.md)
+bench/tasks/
+bench/test-bench/
+bench/fetch_tasks.py
+
+# A/B bench raw outputs (jsonl/log/csv, per-task-rep work dirs) never get committed —
+# they stay in handovers/bench-logs/ (gitignored) or ~/.cache/invokr-ab/. Only
+# docs/private/bench/README.md (a written-up read) is tracked.
+docs/private/bench/*.jsonl
+docs/private/bench/*.log
+docs/private/bench/*.csv
+docs/private/bench/abwork/

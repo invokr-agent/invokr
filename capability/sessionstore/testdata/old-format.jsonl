@@ -1,0 +1,2 @@
+{"id":"m1","session_id":"old-format","role":"user","text":"hello","created_at":"2026-06-01T01:02:03Z"}
+{"id":"m2","session_id":"old-format","role":"assistant","text":"world","created_at":"2026-06-01T01:02:04Z"}

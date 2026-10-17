@@ -1,0 +1,6 @@
+{
+  "mode": "auto",
+  "tools": {
+    "allowlist": ["tools", "read", "web_search", "web_fetch"]
+  }
+}

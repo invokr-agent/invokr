@@ -1,0 +1,8 @@
+command = "* tokf-filter-stdin *"
+description = "Cap Invokr tool result output while preserving content"
+
+[on_success]
+head = 400
+
+[on_failure]
+tail = 80

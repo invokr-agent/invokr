@@ -1,0 +1,12 @@
+FROM golang:1.26
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv tmux sqlite3 util-linux ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+ENV INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1
+CMD ["go", "test", "-tags", "e2e", "-timeout", "20m", "./e2e/..."]
