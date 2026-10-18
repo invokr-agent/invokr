@@ -69,9 +69,11 @@ func (f *TokfResultFilter) FilterToolResult(ctx context.Context, meta core.ToolR
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
+	// A cancelled run can exit 0 when the group kill races the shell's own
+	// exit, so the context is checked too.
+	if err := cmd.Run(); err != nil || ctx.Err() != nil {
 		if f.logger != nil {
-			f.logger.Warn("tokf result filtering failed", zap.String("tool", meta.ToolName), zap.String("source", meta.Source), zap.String("stderr", strings.TrimSpace(stderr.String())), zap.Error(err))
+			f.logger.Warn("tokf result filtering failed", zap.String("tool", meta.ToolName), zap.String("source", meta.Source), zap.String("stderr", strings.TrimSpace(stderr.String())), zap.Error(err), zap.NamedError("ctx", ctx.Err()))
 		}
 		return input, nil
 	}
