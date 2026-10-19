@@ -8,7 +8,9 @@ permissions:
 
 jobs:
   approve:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    # Dependabot secrets are only exposed to runs Dependabot triggered, so a
+    # human push to a Dependabot PR would fail at token minting; skip it instead.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - id: metadata
