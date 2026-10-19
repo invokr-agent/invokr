@@ -223,3 +223,14 @@ func TestAutoGitCanCommitWithProtectedControlPaths(t *testing.T) {
 		t.Fatal("Auto created .invokr")
 	}
 }
+
+func TestGitPushShapesAreRedirected(t *testing.T) {
+	for line, want := range map[string]bool{
+		"git push": true, "git -C . push origin main": true, "env FOO=bar git push": true, "timeout 60 git push -u origin x": true,
+		"git stash push": false, "git status": false, "git log --grep push": false, "npm publish": false,
+	} {
+		if got := gitPushes(line); got != want {
+			t.Errorf("gitPushes(%q) = %v, want %v", line, got, want)
+		}
+	}
+}

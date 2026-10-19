@@ -616,14 +616,16 @@ func (m *model) alwaysAllowSelected() (tea.Model, tea.Cmd) {
 // only thing standing rules match on) rather than being it: `find … | sort`
 // grants `find … *`. An error means "a" is not offered for this request.
 func grantPattern(req approval.Request) (string, error) {
+	// A tool that names its own grant pattern (an outside-read directory, a
+	// push of one branch) is grantable even when it publishes.
+	if req.GrantPattern != "" && !req.Protected {
+		return req.GrantPattern, nil
+	}
 	if req.PolicyChecked && (req.Protected || req.Publishes) {
 		return "", errors.New("this operation requires one-time approval; approve with y")
 	}
 	if req.Outside {
-		if req.GrantPattern == "" {
-			return "", errors.New("too broad to grant (the root or home directory); approve once with y")
-		}
-		return req.GrantPattern, nil
+		return "", errors.New("too broad to grant (the root or home directory); approve once with y")
 	}
 	pattern, ok := approval.DerivePattern(req.Subject)
 	if !ok {
