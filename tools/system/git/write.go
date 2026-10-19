@@ -12,15 +12,19 @@ import (
 )
 
 type writeArgs struct {
-	argv    []string
-	Op      string   `json:"op" enum:"add,commit,branch_create,checkout,stash" desc:"Write operation to run."`
-	Paths   []string `json:"paths,omitempty" desc:"add: paths to stage."`
-	Message string   `json:"message,omitempty" desc:"commit: commit message; stash push: stash message."`
-	Name    string   `json:"name,omitempty" desc:"branch_create: new branch name; checkout: branch or commit to switch to."`
-	StashOp string   `json:"stash_op,omitempty" enum:"push,pop" desc:"stash: push (default) or pop."`
+	argv           []string
+	push           *pushPlan
+	Op             string   `json:"op" enum:"add,commit,branch_create,checkout,stash,push" desc:"Write operation to run."`
+	Paths          []string `json:"paths,omitempty" desc:"add: paths to stage."`
+	Message        string   `json:"message,omitempty" desc:"commit: commit message; stash push: stash message."`
+	Name           string   `json:"name,omitempty" desc:"branch_create: new branch name; checkout: branch or commit to switch to."`
+	StashOp        string   `json:"stash_op,omitempty" enum:"push,pop" desc:"stash: push (default) or pop."`
+	Remote         string   `json:"remote,omitempty" desc:"push: remote name; defaults to the branch's upstream remote, else origin."`
+	ForceWithLease bool     `json:"force_with_lease,omitempty" desc:"push: overwrite the remote branch only if it is where we last saw it."`
+	NoVerify       bool     `json:"no_verify,omitempty" desc:"push: skip the pre-push hook."`
 }
 
-const writeDescription = "Modify git: add stages paths; commit records staged changes; branch_create creates a branch; checkout switches branch/commit; stash pushes/pops. Requires approval. For push, pull, rebase, reset or other operations, use shell."
+const writeDescription = "Modify git: add stages paths; commit records staged changes; branch_create creates a branch; checkout switches branch/commit; stash pushes/pops; push sends the current branch to its remote with the user's git credentials. Requires approval. For pull, rebase, reset or other operations, use shell."
 
 func registerWriteTool(c core.NativeRegistrar, deps core.CallerDeps, root string) {
 	core.Register(c, core.Tool[writeArgs]{
@@ -30,12 +34,22 @@ func registerWriteTool(c core.NativeRegistrar, deps core.CallerDeps, root string
 			Parameters: core.SchemaFor[writeArgs](),
 			Metadata:   core.WriteWorkspaceAskMetadata("system", core.ToolCapabilities{ReadsWorkspace: true, WritesWorkspace: true}),
 		},
-		Prepare: func(_ context.Context, args writeArgs) (writeArgs, error) {
+		Prepare: func(ctx context.Context, args writeArgs) (writeArgs, error) {
 			var err error
+			if args.Op == "push" {
+				args.push, err = preparePush(ctx, root, args)
+				if err == nil {
+					args.argv = args.push.argv
+				}
+				return args, err
+			}
 			args.argv, err = writeArgv(args)
 			return args, err
 		},
 		Approve: func(_ context.Context, args writeArgs) core.ApprovalDecision {
+			if args.push != nil {
+				return core.Ask(args.push.request(root))
+			}
 			display := "git " + strings.Join(args.argv, " ")
 			return core.Ask(approval.Request{
 				Confined: sandbox.Available(), Writes: true,
@@ -46,7 +60,11 @@ func registerWriteTool(c core.NativeRegistrar, deps core.CallerDeps, root string
 		},
 		Approver: deps.Approver,
 		Execute: func(ctx context.Context, args writeArgs) (string, error) {
-			out, err := gitTextEnv(ctx, root, commitIdentityEnv(ctx, args.Op, root), args.argv...)
+			run := gitTextEnv
+			if args.push != nil {
+				run = hostGit
+			}
+			out, err := run(ctx, root, commitIdentityEnv(ctx, args.Op, root), args.argv...)
 			if err != nil {
 				return flagged(writeToolName, err)
 			}

@@ -25,6 +25,11 @@ func modeShellApproval(cfg config.ShellConfig, p preparedShellCommand) core.Appr
 		req = &approval.Request{Tool: "shell", Tier: string(p.tier), Subject: p.line, Summary: "Run " + p.line}
 	}
 	req.Confined, req.Writes = sandbox.Available() && p.mode != approval.YOLO, p.mode != approval.Plan
+	if req.Confined && p.publishes && gitPushes(p.line) {
+		// The sandbox mounts no ~/.ssh or ssh-agent, so this would fail late
+		// with "Host key verification failed" and read like a broken host.
+		return core.Deny("git push cannot authenticate inside the shell sandbox; use git_write with op=push, which pushes the current branch with the user's git credentials after approval")
+	}
 	req.Network, req.Publishes = p.networkAllowed(), p.publishes
 	req.RequiresScopedApproval = p.sandboxExec
 	if !req.Confined {
@@ -50,6 +55,38 @@ func Publishes(line string) bool {
 		return true
 	})
 	return result
+}
+
+// gitPushes reports a `git … push` call: the first git subcommand, after
+// global flags, is push (so `git stash push` is not one).
+func gitPushes(line string) bool {
+	file, err := syntax.NewParser().Parse(strings.NewReader(line), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(file, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok {
+			words := core.MapSlice(call.Args, func(arg *syntax.Word) string { word, _ := literalWord(arg); return word })
+			// Any git word, so env/timeout/xargs wrappers are caught too.
+			i := slices.IndexFunc(words, func(w string) bool { return filepath.Base(w) == "git" })
+			found = found || i >= 0 && gitSubcommand(words[i+1:]) == "push"
+		}
+		return true
+	})
+	return found
+}
+
+func gitSubcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "-C" || args[i] == "-c":
+			i++
+		case !strings.HasPrefix(args[i], "-"):
+			return args[i]
+		}
+	}
+	return ""
 }
 
 func publishesCall(call *syntax.CallExpr) bool {

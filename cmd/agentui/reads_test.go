@@ -32,3 +32,16 @@ func TestOutsideReadGrantPattern(t *testing.T) {
 		t.Fatalf("broad scope: err = %v", err)
 	}
 }
+
+// A push names its own grant (one remote and branch) and is grantable though
+// it publishes; a force push carries none and stays one-time.
+func TestPushGrantPattern(t *testing.T) {
+	req := approval.Request{Tool: "git_write", Publishes: true, PolicyChecked: true, Subject: "push origin feat", GrantPattern: "push origin feat"}
+	if got, err := grantPattern(req); err != nil || got != "push origin feat" {
+		t.Fatalf("pattern = %q, %v", got, err)
+	}
+	req.GrantPattern, req.Subject = "", "push --force-with-lease origin feat"
+	if _, err := grantPattern(req); err == nil || !strings.Contains(err.Error(), "one-time") {
+		t.Fatalf("force push: err = %v", err)
+	}
+}
