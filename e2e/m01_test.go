@@ -63,6 +63,7 @@ func TestM01_ElisionFallbackReduces(t *testing.T) {
 	}
 
 	requests := provider.Snapshot().CompletionRequests
+	logRequestSizes(t, requests)
 	elidedIndex := -1
 	sizes := make([]int, len(requests))
 	for i, req := range requests {

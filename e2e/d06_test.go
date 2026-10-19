@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ func TestD06_ContextWarningAndCompaction(t *testing.T) {
 	}
 
 	requests := provider.Snapshot().CompletionRequests
+	logRequestSizes(t, requests)
 	if len(requests) != 5 {
 		t.Fatalf("completion requests = %d, want 5", len(requests))
 	}
@@ -92,5 +94,23 @@ func toText(value any) string {
 		return value
 	default:
 		return ""
+	}
+}
+
+// DEBUG (throwaway): per-request message roles and byte sizes, to compare the
+// GitHub runner against local runs.
+func logRequestSizes(t *testing.T, requests []providertest.CompletionRequest) {
+	for i, req := range requests {
+		tools, _ := json.Marshal(req.Tools)
+		var parts []string
+		for _, m := range req.Messages {
+			b, _ := json.Marshal(m)
+			parts = append(parts, fmt.Sprintf("%s:%d", m.Role, len(b)))
+		}
+		t.Logf("DEBUG req %d tools=%d msgs=%v", i, len(tools), parts)
+		if i == 0 && len(req.Messages) > 0 {
+			b, _ := json.Marshal(req.Messages[0])
+			t.Logf("DEBUG system=%s", b)
+		}
 	}
 }
