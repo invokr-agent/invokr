@@ -8,7 +8,9 @@ permissions:
 
 jobs:
   approve:
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    # Dependabot secrets are only exposed to runs Dependabot triggered, so a
+    # human push to a Dependabot PR would fail at token minting; skip it instead.
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - id: metadata
@@ -31,3 +33,28 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+
+  # A push by anyone else means the PR is no longer what was approved. Dismiss
+  # every approval and turn off auto-merge so a human has to review it again.
+  # Uses GITHUB_TOKEN since the app secrets are not exposed to these runs.
+  revoke:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - run: |
+          if [ "$(gh pr view "$PR_URL" --json autoMergeRequest -q '.autoMergeRequest != null')" = true ]; then
+            gh pr merge --disable-auto "$PR_URL"
+          fi
+          gh api --paginate "repos/$REPO/pulls/$PR/reviews" -q '.[] | select(.state == "APPROVED") | .id' |
+            while read -r id; do
+              gh api -X PUT "repos/$REPO/pulls/$PR/reviews/$id/dismissals" \
+                -f event=DISMISS -f message="Pushed to by $ACTOR; needs human review."
+            done
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ github.token }}
