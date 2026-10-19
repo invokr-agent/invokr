@@ -40,6 +40,10 @@ type policy struct {
 	// sandboxExec marks a root that is not allowlisted but routed into the
 	// sandbox as project code (an interpreter or a workspace script).
 	sandboxExec bool
+	// scripts are the literal file paths those roots run, shown to the approver.
+	scripts []string
+	// written are the literal paths the line redirects output to.
+	written []string
 }
 
 // harmlessBuiltins run inside bash without reaching the allowlist: they touch
@@ -314,7 +318,7 @@ func (w *policyWalker) call(c *syntax.CallExpr) error {
 	if handled, err := w.wrapper(root, c); handled {
 		return err
 	}
-	args, argsLiteral := w.argWords(c.Args[1:])
+	args, argsLiteral := argWords(c.Args[1:])
 	if builtin, err := w.builtin(root, args, argsLiteral); builtin || err != nil {
 		return err
 	}
@@ -324,7 +328,7 @@ func (w *policyWalker) call(c *syntax.CallExpr) error {
 	// is how the model runs a script that imports the workspace.
 	w.allowBuildPrefixes(c)
 	if _, allowed := w.allowed[root]; !allowed || slices.Contains(sandboxInterpreters, root) {
-		return w.route(root)
+		return w.route(root, scriptOf(root, args, argsLiteral))
 	}
 	tier := classifyShellCommand(root, args)
 	if !argsLiteral && ruleInspectsFlags(root) {
@@ -422,10 +426,22 @@ func cdLeavesWorkspace(args []string, argsLiteral bool) bool {
 	return len(args) != 1 || !argsLiteral || strings.HasPrefix(args[0], "-") || argEscapesWorkspace(args[0])
 }
 
+// scriptOf names the file a routed root runs: the root itself for a
+// script path, else an interpreter's first literal, non-flag argument.
+func scriptOf(root string, args []string, argsLiteral bool) string {
+	if strings.Contains(root, "/") {
+		return root
+	}
+	if !slices.Contains(sandboxInterpreters, root) || len(args) == 0 || !argsLiteral || strings.HasPrefix(args[0], "-") {
+		return ""
+	}
+	return args[0]
+}
+
 // route admits an interpreter or a workspace script that is not on the
 // allowlist as sandboxed project code; anything else is refused with the
 // allowlist, as before.
-func (w *policyWalker) route(root string) error {
+func (w *policyWalker) route(root, script string) error {
 	label := shellCommandLabel(w.line)
 	// allowAny without a sandbox runs project code on the host, like any other root.
 	if sandboxExecCandidate(root, w.wsp, w.baseDir) && (sandboxExecReady() || !w.allowAny) {
@@ -433,10 +449,16 @@ func (w *policyWalker) route(root string) error {
 			return fmt.Errorf("command %q is not allowed; %s", label, interpreterNote(root))
 		}
 		w.pol.sandboxExec = true
+		if script != "" {
+			w.pol.scripts = append(w.pol.scripts, script)
+		}
 		w.demote(shellTierWrite, root+" runs project code")
 		return nil
 	}
 	if w.allowAny {
+		if script != "" {
+			w.pol.scripts = append(w.pol.scripts, script)
+		}
 		w.demote(shellTierWrite, root+" is not on the allowlist")
 		return nil
 	}
@@ -486,6 +508,9 @@ func (w *policyWalker) redirect(r *syntax.Redirect) {
 		if literal && target == "/dev/null" {
 			return
 		}
+		if literal {
+			w.pol.written = append(w.pol.written, target)
+		}
 		w.demote(shellTierWrite, "redirects output to a file")
 	default:
 		w.demote(shellTierWrite, "uses a "+r.Op.String()+" redirect")
@@ -496,7 +521,7 @@ func (w *policyWalker) redirect(r *syntax.Redirect) {
 // expansion is rendered as its source text; argsLiteral reports whether every
 // word was a plain literal, so a rule that inspects flags can fail closed on
 // a flag hiding in a variable.
-func (w *policyWalker) argWords(words []*syntax.Word) ([]string, bool) {
+func argWords(words []*syntax.Word) ([]string, bool) {
 	out := make([]string, 0, len(words))
 	literal := true
 	for _, word := range words {

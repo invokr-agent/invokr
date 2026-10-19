@@ -367,10 +367,16 @@ func (p *TurnProcessor) executeTool(ctx context.Context, turn int, id, label str
 	if err != nil {
 		return p.handleToolError(ctx, turn, id, label, call, 0, err)
 	}
-	if resolved != call {
-		call = resolved
+	if resolved.Note == "" {
+		return p.runTool(ctx, turn, id, label, resolved)
 	}
+	p.logger.Warn(label+" rerouted from shell", zap.Int("turn", turn), zap.String("tool", resolved.Name), zap.String("from", string(call.Arguments)), zap.String("arguments", string(resolved.Arguments)))
+	output, rawHash, outcome := p.runTool(ctx, turn, id, label, resolved)
+	return output + "\n\n" + resolved.Note, rawHash, outcome
+}
 
+// runTool executes a resolved call; see executeTool.
+func (p *TurnProcessor) runTool(ctx context.Context, turn int, id, label string, call *core.ToolCall) (string, string, *turnpkg.ToolOutcome) {
 	if id == "" {
 		// Default (non-native) path has no native tool-call ID; it is single-call
 		// per turn, so (turn, name) is a stable correlation key for the UI.
