@@ -157,6 +157,15 @@ func (s *Session) Send(ctx context.Context, message string) (turn.AgentResponse,
 	return s.runner.Run(ctx, RunRequest{SessionID: s.sessionID, Message: message})
 }
 
+// SendImages is Send with images attached to the user message. It refuses when
+// the server reports the model cannot read images.
+func (s *Session) SendImages(ctx context.Context, message string, images []inference.ContentBlock) (turn.AgentResponse, error) {
+	if !s.runner.providerContext.AcceptsImages() {
+		return turn.AgentResponse{}, fmt.Errorf("model %s does not accept images", s.runner.providerContext.Model())
+	}
+	return s.runner.Run(ctx, RunRequest{SessionID: s.sessionID, Message: message, Images: images})
+}
+
 func (s *Session) ToolSpecs() []core.ToolSpec {
 	if catalog, ok := s.tools.(interface{ AvailableSpecs() []core.ToolSpec }); ok {
 		return catalog.AvailableSpecs()

@@ -202,6 +202,9 @@ func (c *Client) probeProps(ctx context.Context, root, model string) (ProviderMe
 			ReasoningEffort bool `json:"supports_reasoning_effort"`
 			EnableThinking  bool `json:"supports_enable_thinking"`
 		} `json:"chat_template_caps"`
+		Modalities *struct {
+			Vision bool `json:"vision"`
+		} `json:"modalities"`
 	}
 	found, err := c.getJSON(ctx, endpoint, &props)
 	if err != nil {
@@ -212,6 +215,7 @@ func (c *Client) probeProps(ctx context.Context, root, model string) (ProviderMe
 		out.Reasoning, out.ReasoningEffort = ReasoningLlamaCpp, props.Caps.ReasoningEffort
 		out.EnableThinking = props.Caps.EnableThinking
 	}
+	out.NoVision = props.Modalities != nil && !props.Modalities.Vision
 	if out.ContextWindowTokens = max(props.Settings.NCtx, props.MaxModelLen); out.ContextWindowTokens > 0 {
 		out.Source = "llama.cpp " + metadataPath
 	}

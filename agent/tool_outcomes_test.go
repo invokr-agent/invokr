@@ -23,9 +23,11 @@ type sequenceGateway struct {
 	turns            []ModelTurn
 	next             int
 	continueRequests []ContinueModelRequest
+	beginRequests    []BeginModelRequest
 }
 
-func (g *sequenceGateway) Begin(context.Context, BeginModelRequest) (ModelTurn, error) {
+func (g *sequenceGateway) Begin(_ context.Context, req BeginModelRequest) (ModelTurn, error) {
+	g.beginRequests = append(g.beginRequests, req)
 	return g.take()
 }
 

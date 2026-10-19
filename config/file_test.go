@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/invokr-ai/invokr/constants"
@@ -311,5 +312,24 @@ func TestSetSetupFieldsKeepsUnrelatedKeys(t *testing.T) {
 	}
 	if provider["router"].(map[string]any)["active"] != "x" || zerfoo["model"] != "z" || raw["tools"].(map[string]any)["shell"] != true {
 		t.Fatalf("unrelated keys changed: %s", data)
+	}
+}
+
+func TestWorkspaceReadsValidatedAndPatched(t *testing.T) {
+	cfg := AppConfig{}.WithDefaults()
+	cfg.Workspace.Reads = "everywhere"
+	if err := cfg.Validate(nil); err == nil {
+		t.Fatal("unknown workspace.reads accepted")
+	}
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"provider":{"model":"m"}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetWorkspaceReads(path, ReadsAsk); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(path)
+	if !strings.Contains(string(data), `"reads": "ask"`) || !strings.Contains(string(data), `"model": "m"`) {
+		t.Fatalf("config = %s", data)
 	}
 }

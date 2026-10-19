@@ -144,6 +144,11 @@ func (c *ProviderContext) ReasoningSupport() (kind clients.ReasoningKind, templa
 	return c.caps.Reasoning, c.caps.ReasoningEffort, c.caps.EnableThinking
 }
 
+// AcceptsImages is false only when the server reported the model cannot read images.
+func (c *ProviderContext) AcceptsImages() bool {
+	return c == nil || readLocked(c, func() bool { return !c.caps.NoVision })
+}
+
 func (c *ProviderContext) Model() string { return readLocked(c, func() string { return c.model }) }
 
 // SetModel resets the limit to configured fallback until discovery completes.

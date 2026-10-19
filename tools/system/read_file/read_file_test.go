@@ -1,12 +1,15 @@
 package read_file
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/workspace"
@@ -24,7 +27,7 @@ func TestReadFileReturnsVerbatimContent(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := runReadFile("a.txt", readArgs{}, wsp)
+	got, err := runReadFile(context.Background(), "a.txt", readArgs{}, wsp)
 	if err != nil {
 		t.Fatalf("runReadFile: %v", err)
 	}
@@ -39,7 +42,7 @@ func TestReadFileRejectsTraversalAndSymlinkEscape(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, path := range []string{"../../../../etc/passwd", "etc-link/passwd"} {
-		if _, err := runReadFile(path, readArgs{}, wsp); err == nil {
+		if _, err := runReadFile(context.Background(), path, readArgs{}, wsp); err == nil {
 			t.Fatalf("expected %q to be rejected", path)
 		} else if !strings.Contains(err.Error(), "outside allowed workspace roots") {
 			t.Fatalf("unexpected error for %q: %v", path, err)
@@ -52,11 +55,11 @@ func TestReadFileRejectsHiddenPathUnlessAllowed(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".hidden"), []byte("secret"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runReadFile(".hidden", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "hidden") {
+	if _, err := runReadFile(context.Background(), ".hidden", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "hidden") {
 		t.Fatalf("expected hidden-path rejection, got %v", err)
 	}
 	allowed := workspace.NewWorkspacePolicy(config.WorkspaceConfig{Root: root, AllowHiddenPaths: true})
-	if got, err := runReadFile(".hidden", readArgs{}, allowed); err != nil || got != "secret" {
+	if got, err := runReadFile(context.Background(), ".hidden", readArgs{}, allowed); err != nil || got != "secret" {
 		t.Fatalf("allow_hidden_paths read = %q, %v", got, err)
 	}
 }
@@ -66,19 +69,19 @@ func TestReadFileRejectsDirectoryAndBinaryFile(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(root, "sub"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runReadFile("sub", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "not a regular file") {
+	if _, err := runReadFile(context.Background(), "sub", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "not a regular file") {
 		t.Fatalf("expected directory rejection, got %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "img.png"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runReadFile("img.png", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "binary") {
+	if _, err := runReadFile(context.Background(), "img.png", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "binary") {
 		t.Fatalf("expected binary-extension rejection, got %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "nul.txt"), []byte("ok\nbad\x00line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runReadFile("nul.txt", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "binary") {
+	if _, err := runReadFile(context.Background(), "nul.txt", readArgs{}, wsp); err == nil || !strings.Contains(err.Error(), "binary") {
 		t.Fatalf("expected mid-file NUL rejection, got %v", err)
 	}
 }
@@ -92,7 +95,7 @@ func TestReadFilePagesWithOffsetAndLimit(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "p.txt"), []byte(b.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := runReadFile("p.txt", readArgs{Offset: 3, Limit: 2}, wsp)
+	got, err := runReadFile(context.Background(), "p.txt", readArgs{Offset: 3, Limit: 2}, wsp)
 	if err != nil {
 		t.Fatalf("runReadFile: %v", err)
 	}
@@ -107,7 +110,7 @@ func TestReadFileTruncationMarkerAbsentOnCompleteRead(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "s.txt"), []byte("only line\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	got, err := runReadFile("s.txt", readArgs{}, wsp)
+	got, err := runReadFile(context.Background(), "s.txt", readArgs{}, wsp)
 	if err != nil {
 		t.Fatalf("runReadFile: %v", err)
 	}
@@ -149,7 +152,7 @@ func TestReadFileMetadataIsReadOnly(t *testing.T) {
 // A guessed filename gets the next step, not the host path (#572).
 func TestReadFileMissingPathPointsAtFileSearch(t *testing.T) {
 	wsp, _ := testPolicy(t, false)
-	_, err := runReadFile("internal/render/detail.go", readArgs{}, wsp)
+	_, err := runReadFile(context.Background(), "internal/render/detail.go", readArgs{}, wsp)
 	if err == nil || !strings.Contains(err.Error(), `"internal/render/detail.go" does not exist; run file_search`) || strings.Contains(err.Error(), "/tmp") {
 		t.Fatalf("err = %v", err)
 	}
@@ -162,7 +165,7 @@ func TestReadFilesBatchesUnderOneResult(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := runReadFiles([]string{"a.go", "missing.go", "b.go", "big.txt"}, wsp)
+	got := runReadFiles(context.Background(), []string{"a.go", "missing.go", "b.go", "big.txt"}, wsp)
 	for _, want := range []string{"=== a.go ===\npackage a\n", "=== b.go ===\npackage b\n", "=== missing.go ===\nerror: ", "not read (would exceed one result; read them in another call): big.txt"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in:\n%s", want, got)
@@ -170,5 +173,49 @@ func TestReadFilesBatchesUnderOneResult(t *testing.T) {
 	}
 	if len(got) > multiReadBytes+200 {
 		t.Fatalf("batch result %d bytes exceeds the budget", len(got))
+	}
+}
+
+type approverFunc func(context.Context, approval.Request) (approval.Decision, error)
+
+func (f approverFunc) RequestApproval(ctx context.Context, req approval.Request) (approval.Decision, error) {
+	return f(ctx, req)
+}
+
+// A batch mixing workspace and outside paths asks once, for the outside ones
+// only; approving reads them all, denying refuses the call.
+func TestReadOutsideWorkspaceAsksOncePerBatch(t *testing.T) {
+	wsp, root := testPolicy(t, false)
+	other := t.TempDir()
+	for path, body := range map[string]string{filepath.Join(root, "in.txt"): "inside", filepath.Join(other, "a.txt"): "alpha", filepath.Join(other, "b.txt"): "beta"} {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	paths := []string{"in.txt", filepath.Join(other, "a.txt"), filepath.Join(other, "b.txt")}
+	for _, approve := range []bool{true, false} {
+		var asked []approval.Request
+		p := approval.NewPolicy(approval.Manual, false)
+		p.SetOutsideReads(true)
+		ctx, done := p.Begin(context.Background(), approval.Request{Tool: "read"}, approverFunc(func(_ context.Context, req approval.Request) (approval.Decision, error) {
+			asked = append(asked, req)
+			return approval.Decision{Approved: approve, Reason: "no"}, nil
+		}))
+		err := approveOutside(ctx, paths, wsp)
+		if len(asked) != 1 || len(asked[0].Paths) != 2 {
+			t.Fatalf("approve=%v: prompts=%+v, want one for the two outside paths", approve, asked)
+		}
+		var denied *approval.DeniedError
+		if approve {
+			if err != nil {
+				t.Fatalf("approved: %v", err)
+			}
+			if got := runReadFiles(ctx, paths, wsp); !strings.Contains(got, "inside") || !strings.Contains(got, "alpha") || !strings.Contains(got, "beta") {
+				t.Fatalf("approved batch = %q", got)
+			}
+		} else if !errors.As(err, &denied) {
+			t.Fatalf("denied: err=%v, want DeniedError", err)
+		}
+		done()
 	}
 }

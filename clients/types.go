@@ -19,6 +19,9 @@ type ProviderMetadata struct {
 	// EnableThinking that it keys on the chat_template_kwargs switch instead.
 	Reasoning                       ReasoningKind
 	ReasoningEffort, EnableThinking bool
+	// NoVision reports the server said the model takes no image input
+	// (llama.cpp /props modalities); false when unknown.
+	NoVision bool
 }
 
 type SummaryInput struct {

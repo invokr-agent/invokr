@@ -34,25 +34,40 @@ type readArgs struct {
 func RegisterReadFileTool(c core.NativeRegistrar, wsp workspace.Policy) {
 	core.Register(c, core.Tool[readArgs]{
 		Spec: core.ToolSpec{
-			Name: "read", Description: "Read workspace text verbatim. Batch needed files in paths; use a one-item list for one file. offset/limit apply only to single-file reads.",
+			Name: "read", Description: "Read workspace text verbatim. Batch needed files in paths; use a one-item list for one file. offset/limit apply only to single-file reads. Absolute paths outside the workspace need the user's approval when /reads ask is on.",
 			Example:    `{"name":"read","arguments":{"paths":["README.md","src/app.py","src/models.py"]}}`,
 			Parameters: core.SchemaFor[readArgs](), Metadata: core.ReadWorkspaceMetadata("workspace", core.ToolCapabilities{ReadsWorkspace: true}),
 		},
 		Execute: func(ctx context.Context, args readArgs) (string, error) {
+			if err := approveOutside(ctx, args.Paths, wsp); err != nil {
+				return "", err
+			}
 			switch len(args.Paths) {
 			case 0:
 				return "", errors.New("paths is required: a list of files to read, one entry for a single file")
 			case 1:
-				return runReadFile(args.Paths[0], args, wsp)
+				return runReadFile(ctx, args.Paths[0], args, wsp)
 			default:
-				return runReadFiles(args.Paths, wsp), nil
+				return runReadFiles(ctx, args.Paths, wsp), nil
 			}
 		},
 	})
 }
 
-func runReadFile(path string, args readArgs, wsp workspace.Policy) (string, error) {
-	abs, err := wsp.Resolve(path)
+// approveOutside asks once for every path beyond the roots; denying it refuses
+// the whole call. Paths that fail to resolve are left for runReadFile to report.
+func approveOutside(ctx context.Context, paths []string, wsp workspace.Policy) error {
+	var outside []string
+	for _, path := range paths {
+		if abs, ok, err := wsp.ResolveRead(ctx, path); err == nil && ok {
+			outside = append(outside, abs)
+		}
+	}
+	return workspace.AuthorizeOutsideReads(ctx, workspace.CommonDir(outside), outside...)
+}
+
+func runReadFile(ctx context.Context, path string, args readArgs, wsp workspace.Policy) (string, error) {
+	abs, _, err := wsp.ResolveRead(ctx, path)
 	if err != nil {
 		return "", err
 	}
@@ -85,11 +100,11 @@ func runReadFile(path string, args readArgs, wsp workspace.Policy) (string, erro
 // in a handful of batched shell calls where invokr spent one read_file call
 // per file (#577); this is the same batch as a native read. Files that would
 // push the result past multiReadBytes are named, not silently dropped.
-func runReadFiles(paths []string, wsp workspace.Policy) string {
+func runReadFiles(ctx context.Context, paths []string, wsp workspace.Policy) string {
 	var b strings.Builder
 	var skipped []string
 	for _, p := range paths {
-		text, err := runReadFile(p, readArgs{}, wsp)
+		text, err := runReadFile(ctx, p, readArgs{}, wsp)
 		if err != nil {
 			text = "error: " + err.Error()
 		}

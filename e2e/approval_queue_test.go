@@ -32,10 +32,10 @@ func twoShellStep() providertest.CompletionStep {
 	}}
 }
 
-var queuePending = regexp.MustCompile(`APPROVAL\s+step \d+ of 2|approval queue \(2 pending\)`)
+var queuePending = regexp.MustCompile(`APPROVAL\s+\d+ of 2|approval queue \(2 pending\)`)
 
 // TestApprovalQueueApproveAll drives the TUI until two approvals are queued,
-// presses A (approve-all), and confirms both calls ran and the turn completed.
+// presses A (yes to all), and confirms both calls ran and the turn completed.
 func TestApprovalQueueApproveAll(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("BLOCKED: tmux not installed")
@@ -53,7 +53,7 @@ func TestApprovalQueueApproveAll(t *testing.T) {
 	s.submit("run two commands")
 	s.waitFor(queuePending, 5*time.Second)
 
-	s.send("A") // approve-all
+	s.send("Y") // yes to all
 	s.waitFor(regexp.MustCompile(`both approved and done`), 5*time.Second)
 
 	s.quit(5 * time.Second)
@@ -62,7 +62,7 @@ func TestApprovalQueueApproveAll(t *testing.T) {
 }
 
 // TestApprovalQueueDenyAll drives the TUI to the same two-pending state, presses
-// D (deny-all), and confirms both are denied and the turn still completes.
+// N (no to all), and confirms both are denied and the turn still completes.
 func TestApprovalQueueDenyAll(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("BLOCKED: tmux not installed")
@@ -80,7 +80,7 @@ func TestApprovalQueueDenyAll(t *testing.T) {
 	s.submit("run two commands")
 	s.waitFor(queuePending, 5*time.Second)
 
-	s.send("D") // deny-all
+	s.send("N") // no to all
 	s.waitFor(regexp.MustCompile(`denied all 2 pending requests`), 5*time.Second)
 	s.waitFor(regexp.MustCompile(`both denied and done`), 5*time.Second)
 

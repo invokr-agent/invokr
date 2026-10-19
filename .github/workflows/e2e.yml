@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Read-only token: no job here writes to the repository.
+permissions:
+  contents: read
+
 jobs:
   e2e:
     runs-on: ubuntu-latest

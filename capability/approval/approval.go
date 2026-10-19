@@ -28,6 +28,13 @@ type Request struct {
 	// pattern like `docs/*` must cover every touched path — a wildcard can
 	// never swallow the separator and hide an extra path.
 	SubjectIsPathList bool
+	// Outside marks a read beyond the workspace roots. Only the user or a
+	// standing grant may approve it: no mode's read-only auto-approval does.
+	Outside bool
+	// GrantPattern, when set, is the pattern an "always" decision stores
+	// instead of one derived from Subject. Empty on an Outside request means
+	// it can only be approved once.
+	GrantPattern string
 }
 
 type Decision struct {

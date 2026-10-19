@@ -80,8 +80,8 @@ grant covers the call; blocked in Plan) or `always_ask` (prompt every call; gran
 
 ### In the TUI
 
-Pending approvals collect in a queue (`APPROVAL  step X of N`):
-`a` approve, `d` deny, `g` always allow, `x` always deny, `A` approve-all, `D`/`esc` deny-all, `v` details.
+Pending approvals collect in a boxed queue (`APPROVAL  X of N`):
+`y` yes, `a` always (grants the first two words of the command, e.g. `go test *`; shown only when a safe pattern exists), `n` no, `Y` yes-to-all, `N`/`esc` no-to-all, `v` details.
 Shift+Tab cycles Manual, Auto, and Plan; `/mode` selects one directly and
 `/approvals` is an alias. Auto approves workspace edits and execution whose
 owner proves confinement, including network and local commits. Protected edits,
@@ -149,8 +149,8 @@ to `--allow-all`, which is strictly worse.
 ### Standing denials
 
 A standing denial is the same record with `deny` set: same file, scopes,
-expiry, pattern grammar, and audit trail. It is created with `x` in the
-approval queue (mirroring `g`) or `/grants deny <tool> <hours> <pattern>`, and
+expiry, pattern grammar, and audit trail. It is created with
+`/grants deny <tool> <hours> <pattern>`, and
 listed and revoked through `/grants`.
 
 - **Precedence is deny-overrides.** If both a grant and a denial apply to a
@@ -446,7 +446,13 @@ nested `unshare` fails in an unprivileged container. See ADR 0005.
   (`INVOKR_WORKSPACE_READONLY_ROOTS`) adds roots that are readable but refuse
   every write — `edit`, `apply_patch`, `code_interpreter` outputs and the
   shell's writable mounts all deny them; hidden paths are excluded unless
-  `workspace.allow_hidden_paths` is set. The spill directory (below) is
+  `workspace.allow_hidden_paths` is set. `workspace.reads: ask`
+  (`INVOKR_WORKSPACE_READS`, `/reads ask`, Ctrl+O, or `invokr setup`) lets
+  `read` and `file_search` (its `dir` argument) reach paths beyond the roots,
+  but only after the user approves each call; no mode auto-approves it, and a
+  standing grant ("a") covers one directory, never `/` or the home directory.
+  Hidden and protected paths stay refused, and the shell sandbox still mounts
+  only the roots. Writes never leave the roots. The spill directory (below) is
   auto-appended to the extra roots so `read_file` can page spilled output;
   the policy makes no read/write distinction, so write tools can reach it too.
 - **State on disk**: `~/.invokr` holds config, memory, sessions, and

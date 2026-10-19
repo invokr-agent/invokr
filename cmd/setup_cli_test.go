@@ -22,7 +22,7 @@ func TestSetupCmdUsesQuestionnaireDefaults(t *testing.T) {
 
 	cmd := NewSetupCmd()
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("\n\n\n\n"))
+	cmd.SetIn(strings.NewReader("\n\n\n\n\n"))
 	cmd.SetOut(&out)
 
 	if err := cmd.Execute(); err != nil {
@@ -54,7 +54,7 @@ func TestSetupCmdUsesCustomAnswers(t *testing.T) {
 
 	cmd := NewSetupCmd()
 	var out bytes.Buffer
-	cmd.SetIn(strings.NewReader("http://provider.local:9090\n" + home + "\nno\ncatppuccin-mocha\n"))
+	cmd.SetIn(strings.NewReader("http://provider.local:9090\n" + home + "\nno\ncatppuccin-mocha\nno\n"))
 	cmd.SetOut(&out)
 
 	if err := cmd.Execute(); err != nil {
@@ -77,7 +77,7 @@ func TestRootSetupCmdSkipsRuntimeBootstrap(t *testing.T) {
 	root, cleanup := NewRootCmd(config.AppConfig{})
 	defer func() { _ = cleanup() }()
 	var out bytes.Buffer
-	root.SetIn(strings.NewReader("\n\n\n\n"))
+	root.SetIn(strings.NewReader("\n\n\n\n\n"))
 	root.SetOut(&out)
 	root.SetArgs([]string{"setup"})
 

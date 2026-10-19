@@ -31,8 +31,8 @@ func TestTUITranscriptFolds(t *testing.T) {
 
 	s.waitFor(regexp.MustCompile(`agent started`), 10*time.Second)
 	s.submit("run seq")
-	s.waitFor(regexp.MustCompile(`APPROVAL\s+step \d+ of \d+`), 10*time.Second)
-	s.send("a")
+	s.waitFor(regexp.MustCompile(`APPROVAL`), 10*time.Second)
+	s.send("y")
 	// Collapsed: 12 output lines, 5-line tail => 7 hidden behind the fold.
 	s.waitFor(regexp.MustCompile(`▸ 7 more lines`), 10*time.Second)
 	s.waitFor(regexp.MustCompile(`fold turn done`), 10*time.Second)

@@ -371,6 +371,26 @@ func TestClient_MetadataDetectsLlamaCppReasoningEffort(t *testing.T) {
 	}
 }
 
+// TestClient_MetadataReadsVisionModality: only an explicit modalities.vision
+// false marks the model text-only; an absent field stays unknown.
+func TestClient_MetadataReadsVisionModality(t *testing.T) {
+	t.Parallel()
+	for body, want := range map[string]bool{
+		`{"build_info":"b1","modalities":{"vision":false}}`: true,
+		`{"build_info":"b1","modalities":{"vision":true}}`:  false,
+		`{"build_info":"b1"}`:                               false,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte(body))
+		}))
+		metadata, err := NewClient(server.URL+"/v1").Metadata(context.Background(), "m")
+		server.Close()
+		if err != nil || metadata.NoVision != want {
+			t.Fatalf("%s: NoVision=%v err=%v, want %v", body, metadata.NoVision, err, want)
+		}
+	}
+}
+
 // TestClient_MetadataDetectsOtherReasoningScales covers the non-llama.cpp
 // kinds: OpenRouter by host, Ollama by /api/version once /props is absent,
 // and Anthropic from the router provider type without any request.

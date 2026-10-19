@@ -2,6 +2,7 @@ package agentui
 
 import (
 	"cmp"
+	"errors"
 	"image/color"
 	"slices"
 
@@ -42,8 +43,8 @@ type settingField struct {
 }
 
 type setupDraft struct {
-	baseURL, model               string
-	memory, save, resetTemplates bool
+	baseURL, model                        string
+	memory, outside, save, resetTemplates bool
 }
 
 type settingsPanel struct {
@@ -152,7 +153,8 @@ func (m *model) saveSetup() {
 	if !s.save {
 		return
 	}
-	if err := config.SetSetupFields(path, s.baseURL, s.model, s.memory); err != nil {
+	reads := map[bool]string{false: config.ReadsWorkspace, true: config.ReadsAsk}[s.outside]
+	if err := errors.Join(config.SetSetupFields(path, s.baseURL, s.model, s.memory), config.SetWorkspaceReads(path, reads)); err != nil {
 		m.commandMessage("settings: " + err.Error())
 		return
 	}
@@ -196,6 +198,7 @@ func (m *model) sessionSettings() []huh.Field {
 		m.choice(1, "Model", currentModel(m.session), m.settings.models, func(m *model, v string) { runModelCommand(m, "/model "+v, nil) }),
 		m.choice(1, "Mode", string(m.policy.Mode()), modes, argSetter((*model).setApprovalMode)),
 		m.choice(1, "Auto publishing", publishing, []string{"ask", "allow"}, argSetter((*model).setPublishing)),
+		m.choice(1, "Reads outside workspace", readsState(m.policy), []string{config.ReadsWorkspace, config.ReadsAsk}, argSetter((*model).setReads)),
 	}
 	if rs, ok := m.session.(reasoningSession); ok {
 		fields = append(fields, m.choice(1, "Reasoning", cmp.Or(rs.ReasoningEffort().Level, "default"), reasoningLevels, func(m *model, v string) {
@@ -223,11 +226,12 @@ func (m *model) setupSettings() []huh.Field {
 	// env on top, and Save would then write a temporary override to disk.
 	cfg, _, _ := fsutil.ReadJSON[config.AppConfig](config.DefaultConfigPath())
 	s := &m.settings.setup
-	*s = setupDraft{baseURL: cfg.Provider.BaseURL, model: cfg.Provider.Model, memory: cfg.Memory.Zerfoo.Enabled}
+	*s = setupDraft{baseURL: cfg.Provider.BaseURL, model: cfg.Provider.Model, memory: cfg.Memory.Zerfoo.Enabled, outside: cfg.Workspace.Reads == config.ReadsAsk}
 	return []huh.Field{
 		huh.NewInput().Title("Provider URL").Value(&s.baseURL),
 		huh.NewInput().Title("Default model").Value(&s.model),
 		huh.NewConfirm().Title("Memory (zerfoo)").Value(&s.memory),
+		huh.NewConfirm().Title("Reads outside workspace").Description("Ask before each read beyond the workspace (workspace.reads).").Affirmative("Ask").Negative("Refuse").Value(&s.outside),
 		huh.NewNote().Title("Home").Description(config.InvokrHomeDir() + "\nApplies after restart; an active router profile's provider/model win at runtime."),
 		huh.NewConfirm().Title("Reset JSON profiles?").Description("Replace shipped JSON profiles in profiles.").Affirmative("Reset").Negative("Keep").Value(&s.resetTemplates),
 		huh.NewConfirm().Title("Write config.json?").Affirmative("Save").Negative("Cancel").Value(&s.save),

@@ -27,6 +27,8 @@ func TestTUIClearStartsNewSession(t *testing.T) {
 	s.waitFor(regexp.MustCompile(`agent started`), 10*time.Second)
 	s.submit("old-conversation-marker-739")
 	s.waitFor(regexp.MustCompile(`old turn done`), 10*time.Second)
+	// The reply renders before the turn ends; /clear is refused until the footer shows.
+	s.waitFor(regexp.MustCompile(`e2e-scripted · \d+ms`), 10*time.Second)
 	s.submit("/clear")
 	s.waitFor(regexp.MustCompile(`new session started`), 10*time.Second)
 	s.submit("new conversation")

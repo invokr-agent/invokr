@@ -12,6 +12,7 @@ import (
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
+	inference "github.com/rivt-ai/go-inference-router"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
@@ -58,6 +59,8 @@ type model struct {
 	chat       tuikit.MemoList
 	help       help.Model
 	input      textarea.Model
+	// images are attached to the next submitted prompt.
+	images     []inference.ContentBlock
 	spinner    spinner.Model
 	keys       keyMap
 	history    []string
@@ -228,6 +231,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateToolToggle(toggle)
 		return m, nil
 	}
+	if updated, cmd, ok := m.updateImageMsg(msg); ok {
+		return updated, cmd
+	}
 	// huh's own messages (field focus, blink) come back through here, so an
 	// open settings form sees every non-key message as well as the model.
 	if _, isKey := msg.(tea.KeyPressMsg); m.settings.open && !isKey {
@@ -346,6 +352,8 @@ func (m *model) updateReadlineKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool
 	case key.Matches(msg, m.keys.CycleMode):
 		m.cycleApprovalMode()
 		return m, nil, true
+	case key.Matches(msg, m.input.KeyMap.Paste):
+		return m, clipboardImageCmd(msg), true
 	case key.Matches(msg, m.keys.EOF) && m.input.Value() == "":
 		updated, cmd := m.handleInterrupt()
 		return updated, cmd, true
@@ -521,8 +529,8 @@ func (m *model) updateQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	case key.Matches(msg, m.keys.ApproveItem, m.keys.DenyItem):
 		updated, cmd := m.decideSelectedItem(key.Matches(msg, m.keys.ApproveItem))
 		return updated, cmd, true
-	case key.Matches(msg, m.keys.AlwaysAllow, m.keys.AlwaysDeny):
-		updated, cmd := m.alwaysDecideSelected(key.Matches(msg, m.keys.AlwaysDeny))
+	case key.Matches(msg, m.keys.AlwaysAllow):
+		updated, cmd := m.alwaysAllowSelected()
 		return updated, cmd, true
 	case key.Matches(msg, m.keys.ApproveAll, m.keys.DenyAll):
 		updated, cmd := m.decideAll(key.Matches(msg, m.keys.ApproveAll))
@@ -542,7 +550,7 @@ func (m *model) updateApprovalDetailKey(msg tea.KeyPressMsg) bool {
 	if m.approvals.cursor >= len(items) {
 		return false
 	}
-	total := len(approvalDetailLines(items[m.approvals.cursor].Pending.Request, m.mainWidth()))
+	total := len(approvalDetailLines(items[m.approvals.cursor].Pending.Request, m.mainWidth()-6)) // inside the panel box
 	switch {
 	case key.Matches(msg, m.keys.PageUp):
 		m.approvals.Scroll(-approvalDetailHeight, total)
@@ -576,20 +584,13 @@ func (m *model) decideSelectedItem(approved bool) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// standingGrantHours is how long "g"/"x" stops the queue asking about a call. A
+// standingGrantHours is how long "a" stops the queue asking about a call. A
 // day covers a working session without becoming an invisible permanent policy.
 const standingGrantHours = 24
 
-// alwaysDecideSelected records a standing grant (deny=false) or standing denial
-// (deny=true) for the request under the cursor and then applies that decision,
-// so "g"/"x" is one keystroke rather than decide-then-/grants.
-//
-// The rule matches the request's Subject, which is the only thing standing
-// rules match on. A request that carries no Subject can never be covered by
-// one, so the key declines rather than acting under a rule that would not
-// actually match the next identical call.
-func (m *model) alwaysDecideSelected(deny bool) (tea.Model, tea.Cmd) {
-	verb := ruleVerb[deny]
+// alwaysAllowSelected records a standing grant for the request under the
+// cursor and approves it, so "a" is one keystroke rather than y-then-/grants.
+func (m *model) alwaysAllowSelected() (tea.Model, tea.Cmd) {
 	items := m.approvalQueue.Snapshot()
 	if m.grants == nil || len(items) == 0 || m.approvals.cursor >= len(items) {
 		m.chatLog.Append(message{role: "tool", text: "standing grants are disabled"})
@@ -597,41 +598,38 @@ func (m *model) alwaysDecideSelected(deny bool) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	req := items[m.approvals.cursor].Pending.Request
-	pattern, err := m.addStandingRule(req, deny)
+	pattern, err := grantPattern(req)
+	if err == nil {
+		_, err = m.grants.Add(approval.Grant{Tool: req.Tool, Tier: req.Tier, ArgPattern: pattern, Scope: approval.ScopeGlobal,
+			ExpiresAt: time.Now().Add(standingGrantHours * time.Hour), Reason: "always-allowed from the approval queue"})
+	}
 	if err != nil {
-		m.chatLog.Append(message{role: "error", text: "cannot always-" + verb + " " + req.Tool + ": " + err.Error()})
+		m.chatLog.Append(message{role: "error", text: "cannot always-allow " + req.Tool + ": " + err.Error()})
 		m.syncChatViewport(true)
 		return m, nil
 	}
-	m.chatLog.Append(message{role: "tool", text: fmt.Sprintf("always %sing %s %q for %dh (/grants to revoke)", verb, req.Tool, pattern, standingGrantHours)})
-	return m.decideSelectedItem(!deny)
+	m.chatLog.Append(message{role: "tool", text: fmt.Sprintf("always allowing %s %q for %dh (/grants to revoke)", req.Tool, pattern, standingGrantHours)})
+	return m.decideSelectedItem(true)
 }
 
-// addStandingRule stores the rule and returns the pattern it matches on, which
-// is derived from the subject rather than being the subject itself: a literal
-// pipeline can never be a valid grant pattern, so a grant on `find … | sort`
-// covers `find …` and its later arguments instead.
-func (m *model) addStandingRule(req approval.Request, deny bool) (string, error) {
-	if !deny && req.PolicyChecked && (req.Protected || req.Publishes) {
-		return "", errors.New("this operation requires one-time approval; approve with a")
+// grantPattern is the pattern "a" would grant, derived from the Subject (the
+// only thing standing rules match on) rather than being it: `find … | sort`
+// grants `find … *`. An error means "a" is not offered for this request.
+func grantPattern(req approval.Request) (string, error) {
+	if req.PolicyChecked && (req.Protected || req.Publishes) {
+		return "", errors.New("this operation requires one-time approval; approve with y")
 	}
-	if strings.TrimSpace(req.Subject) == "" {
-		return "", errors.New("this request carries no matchable subject")
+	if req.Outside {
+		if req.GrantPattern == "" {
+			return "", errors.New("too broad to grant (the root or home directory); approve once with y")
+		}
+		return req.GrantPattern, nil
 	}
 	pattern, ok := approval.DerivePattern(req.Subject)
 	if !ok {
-		return "", errors.New("not grantable: contains a pipeline/redirect — approve once with a")
+		return "", errors.New("no safe pattern for this command; approve once with y")
 	}
-	_, err := m.grants.Add(approval.Grant{
-		Deny:       deny,
-		Tool:       req.Tool,
-		Tier:       req.Tier,
-		ArgPattern: pattern,
-		Scope:      approval.ScopeGlobal,
-		ExpiresAt:  time.Now().Add(standingGrantHours * time.Hour),
-		Reason:     "always-decided from the approval queue",
-	})
-	return pattern, err
+	return pattern, nil
 }
 
 func (m *model) decideAll(approved bool) (tea.Model, tea.Cmd) {
@@ -1063,8 +1061,10 @@ func (m *model) submit() (*model, tea.Cmd) {
 
 	sendCtx, cancel := context.WithCancel(m.ctx)
 	m.cancelSend = cancel
+	images := m.images
+	m.images = nil
 	return m, tea.Batch(func() tea.Msg {
-		resp, err := m.session.Send(sendCtx, text)
+		resp, err := m.send(sendCtx, text, images)
 		return responseMsg{text: resp.Message, usage: resp.Usage, failures: resp.ToolFailures, evidence: resp.ExecutionEvidence, err: err}
 	}, m.persistHistoryCmd(text), m.spinner.Tick)
 }

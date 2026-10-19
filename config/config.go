@@ -422,7 +422,16 @@ type WorkspaceConfig struct {
 	// reference checkouts the agent may consult and must not modify.
 	ReadonlyRoots    []string `json:"readonly_roots,omitempty" env:"INVOKR_WORKSPACE_READONLY_ROOTS"`
 	AllowHiddenPaths bool     `json:"allow_hidden_paths,omitempty" env:"INVOKR_WORKSPACE_ALLOW_HIDDEN_PATHS"`
+	// Reads is "workspace" (default: native reads stay inside the roots) or
+	// "ask" (read and file_search may reach any other path after approval).
+	Reads string `json:"reads,omitempty" env:"INVOKR_WORKSPACE_READS"`
 }
+
+// Values of WorkspaceConfig.Reads.
+const (
+	ReadsWorkspace = "workspace"
+	ReadsAsk       = "ask"
+)
 
 type ToolboxConfig struct {
 	Dir       string `json:"dir,omitempty" env:"INVOKR_TOOLBOX_DIR"`

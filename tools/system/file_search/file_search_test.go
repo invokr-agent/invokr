@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/tools"
@@ -386,5 +387,46 @@ func TestFileSearchResolvesSymlinkCandidatesBeforeReading(t *testing.T) {
 	out, _ := json.Marshal(resp)
 	if strings.Contains(string(out), "outside") || strings.Contains(string(out), "hidden") || !strings.Contains(string(out), "notes.txt") {
 		t.Fatalf("symlinked candidates leaked or plain file missing: %s", out)
+	}
+}
+
+type approverFunc func(context.Context, approval.Request) (approval.Decision, error)
+
+func (f approverFunc) RequestApproval(ctx context.Context, req approval.Request) (approval.Decision, error) {
+	return f(ctx, req)
+}
+
+// An outside dir is searched after one approval for that dir; results carry
+// absolute paths so a follow-up read does not resolve them inside the workspace,
+// and hidden files there stay out.
+func TestFileSearchOutsideDirAsksOnce(t *testing.T) {
+	other := t.TempDir()
+	mustWriteFile(t, filepath.Join(other, "notes", "spec.md"), "needle here\n")
+	mustWriteFile(t, filepath.Join(other, ".secret", "key.md"), "needle hidden\n")
+	caller := newFileSearchCaller(t, t.TempDir(), nil)
+	var asked []approval.Request
+	p := approval.NewPolicy(approval.Auto, false)
+	p.SetOutsideReads(true)
+	ctx, done := p.Begin(context.Background(), approval.Request{Tool: "file_search"}, approverFunc(func(_ context.Context, req approval.Request) (approval.Decision, error) {
+		if req.Outside {
+			asked = append(asked, req)
+		}
+		return approval.Decision{Approved: true}, nil
+	}))
+	defer done()
+
+	out, err := caller.HandleCall(ctx, &core.ToolCall{Name: "file_search", Arguments: json.RawMessage(fmt.Sprintf(`{"query":"needle","mode":"literal","dir":%q}`, other))})
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+	var resp searchResponse
+	if err := json.Unmarshal([]byte(out), &resp); err != nil {
+		t.Fatalf("decode %q: %v", out, err)
+	}
+	if len(asked) != 1 || asked[0].GrantPattern != other+"/*" {
+		t.Fatalf("prompts = %+v, want one granting %s/*", asked, other)
+	}
+	if len(resp.Results) != 1 || resp.Results[0].Path != filepath.Join(other, "notes", "spec.md") {
+		t.Fatalf("results = %+v, want only the absolute non-hidden match", resp.Results)
 	}
 }

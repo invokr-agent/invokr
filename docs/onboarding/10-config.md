@@ -35,7 +35,7 @@ that need explicit cache markers), `Agent` (system_prompt, summarizer_model,
 temperature, n_predict, max_turns, run_timeout, max_session_tokens, max_session_cost,
 native_tool_calling, parallel_tool_calls, context warning/compact
 percents), `Log`, `Memory` (dir + `Zerfoo`, `RecallGate`, `Forgetting`),
-`Workspace` (root, extra_roots, readonly_roots, allow_hidden_paths), `ApplyPatchEnabled`,
+`Workspace` (root, extra_roots, readonly_roots, allow_hidden_paths, reads), `ApplyPatchEnabled`,
 `Toolbox` (dirs, runtimes, isolation, limits, package policy), `Skills`,
 `Agents` (subagent defs dir), `Shell`, `WebSearch`,
 `CodeInterpreter`, `MCP` (servers map), `Sandbox`, `Messaging`

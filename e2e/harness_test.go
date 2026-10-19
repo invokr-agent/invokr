@@ -77,10 +77,6 @@ func newHome(t *testing.T, providerURL string) testHome {
 	// The dynamic budget itself has its own unit tests.
 	app.Agent.ReadTurnWeight, app.Agent.HardTurnMultiplier, app.Agent.TurnExtension = 1, 1, -1
 	app.Workspace.Root = workspace
-	// Runner-installed language servers (rust-analyzer on ubuntu-latest) add
-	// lsp tools to the prompt and break tight context-window fixtures.
-	lspEnabled := false
-	app.LSP.Enabled = &lspEnabled
 	app.Toolbox.Dir = state.ToolboxDir
 	app.Toolbox.TokfDisabled = true
 	app.Toolbox.TokfHome = state.TokfHome
@@ -94,6 +90,10 @@ func newHome(t *testing.T, providerURL string) testHome {
 	// These cases assert exact scripted completion counts, so keep it off. The
 	// tmux TUI case inherits this through the config.json written below.
 	app.Memory.DisableSessionTitles = true
+	// Language servers register lsp_* tools from whatever the host has
+	// installed (GitHub's runner ships rust-analyzer), which grows the system
+	// prompt and shifts the tight-window compaction cases (D06, M01).
+	app.LSP.Enabled = new(false)
 	data, err := json.MarshalIndent(app, "", "  ")
 	if err != nil {
 		t.Fatal(err)
