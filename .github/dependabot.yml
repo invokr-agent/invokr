@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Every ecosystem below waits before adopting a release. A compromised
+  # version is typically live for hours to days before it is caught and yanked,
+  # and without a cooldown Dependabot opens a PR inside exactly that window.
+  # Waiting costs us nothing on a weekly schedule and moves us out of it.
+  - package-ecosystem: gomod
+    directories: ["/", "/tools/customlint"]
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go-dependencies:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns: ["*"]
