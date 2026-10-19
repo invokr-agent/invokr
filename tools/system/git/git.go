@@ -1,7 +1,7 @@
 // Package git provides native git tools: git_read (read-only inspection with
-// large-diff drill-down) and git_write (staging/commit/branch/stash, always
-// approval-gated). Everything else — push, pull, rebase, reset — stays on the
-// shell tool.
+// large-diff drill-down) and git_write (staging/commit/branch/stash and push
+// of the current branch, always approval-gated). Everything else — pull,
+// rebase, reset — stays on the shell tool.
 package git
 
 import (

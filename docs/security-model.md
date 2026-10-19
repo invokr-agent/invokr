@@ -57,6 +57,7 @@ A tier is a plain string attached to an approval request. The ones in the tree:
 | `execute_write_command` | `shell`, `tmux` | May modify files. Prompts unless `shell.allow_write_commands`. |
 | `execute_network_command` | `shell`, `code_interpreter` | Can reach the network. Prompts unless `shell.allow_network_commands`. |
 | `write_workspace` | `apply_patch`, `edit`, `git_write`, `create_tool` | Writes workspace files. |
+| `publish` | `git_write` (`op: push`) | Pushes the current branch with the host's git credentials. Always publishing: Plan refuses it, Manual and Auto ask. |
 | `read_workspace` | `file_search`, `tool_search`, `retrieval`, `code_interpreter` | Reads workspace files. |
 | `retrieval_index_write` | `retrieval` | Writes the workspace index. |
 | `code_execution` | `code_interpreter` | Runs Python. |
@@ -492,3 +493,18 @@ Run `invokr doctor` to see which of these are actually active on your machine:
 it reports namespace sandbox availability, container engine presence, the
 configured `code_interpreter` backend (not the auto-selected one), and the
 grants file state.
+
+## Git push
+
+`git_write` with `op: push` is the only way the agent pushes. The shell sandbox
+mounts neither `~/.ssh` nor the ssh-agent socket, so a sandboxed shell
+`git push` is refused up front with a pointer to `git_write`. The push runs
+host git, outside the sandbox, so the user's keys, agent, `known_hosts` and
+credential helpers work without ever entering the model's shell. It only ever
+sends the current branch to its own name (`HEAD:refs/heads/<branch>`), to a
+configured remote (the branch's upstream remote, else `origin`; never a URL).
+The approval shows the remote URL and the commits being pushed. An "always"
+grant covers one remote and branch for 24 hours; a `force_with_lease` push is
+never covered by a grant. Pre-push hooks run on the host unless `no_verify` is
+set, and the prompt warns when `core.hooksPath` points inside the workspace,
+where the agent can edit the hook.
