@@ -90,6 +90,10 @@ func newHome(t *testing.T, providerURL string) testHome {
 	// These cases assert exact scripted completion counts, so keep it off. The
 	// tmux TUI case inherits this through the config.json written below.
 	app.Memory.DisableSessionTitles = true
+	// Language servers register lsp_* tools from whatever the host has
+	// installed (GitHub's runner ships rust-analyzer), which grows the system
+	// prompt and shifts the tight-window compaction cases (D06, M01).
+	app.LSP.Enabled = new(false)
 	data, err := json.MarshalIndent(app, "", "  ")
 	if err != nil {
 		t.Fatal(err)
