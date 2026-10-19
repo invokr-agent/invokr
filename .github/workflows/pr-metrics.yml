@@ -12,10 +12,10 @@ jobs:
   metrics:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26"
           cache: true
@@ -25,7 +25,7 @@ jobs:
           -json pr-metrics.json -html pr-metrics.html | tee pr-metrics.txt
       - name: complexity-diff
         run: grep -i complexity pr-metrics.txt || echo "no complexity changes found"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pr-metrics
           path: pr-metrics.*
