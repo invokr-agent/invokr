@@ -37,6 +37,7 @@ type searchArgs struct {
 	GitScope     string `json:"git_scope,omitempty" enum:"all,tracked,changed,staged,unstaged" desc:"Optional git file scope."`
 	MaxResults   int    `json:"max_results,omitempty" desc:"Maximum results, capped at 100."`
 	ContextLines *int   `json:"context_lines,omitempty" desc:"Snippet context lines, capped at 5."`
+	Dir          string `json:"dir,omitempty" desc:"Optional absolute directory outside the workspace to search instead; needs the user's approval when /reads ask is on."`
 }
 
 type searchResponse struct {
@@ -96,6 +97,11 @@ func runFileSearch(dispatcher events.Dispatcher, ctx context.Context, args searc
 		dispatchAudit(dispatcher, ctx, args, resultCount, time.Since(started), core.Outcome(err), err)
 	}()
 
+	if args.Dir != "" {
+		if wsp, err = outsideScope(ctx, args.Dir, wsp); err != nil {
+			return "", err
+		}
+	}
 	plan, err := prepareSearchPlan(ctx, args, wsp)
 	if err != nil {
 		return "", err
@@ -107,9 +113,31 @@ func runFileSearch(dispatcher events.Dispatcher, ctx context.Context, args searc
 		return "", err
 	}
 	results = results[:min(len(results), plan.args.MaxResults)]
+	if args.Dir != "" {
+		// Relative to the outside dir, a path would read back against the workspace.
+		for i := range results {
+			results[i].Path = filepath.ToSlash(results[i].absPath)
+		}
+	}
 	resultCount = len(results)
 
 	return core.MarshalResult("file_search", searchResponse{Results: results})
+}
+
+// outsideScope narrows the search to dir, a directory beyond the roots, once the
+// user approves it. Inside the workspace, path_glob already narrows a search.
+func outsideScope(ctx context.Context, dir string, wsp workspace.Policy) (workspace.Policy, error) {
+	abs, outside, err := wsp.ResolveRead(ctx, dir)
+	if err != nil {
+		return wsp, err
+	}
+	if !outside {
+		return wsp, fmt.Errorf("dir %q is inside the workspace; use path_glob to narrow a workspace search", dir)
+	}
+	if err := workspace.AuthorizeOutsideReads(ctx, abs, abs); err != nil {
+		return wsp, err
+	}
+	return wsp.ScopedTo(abs), nil
 }
 
 func prepareSearchPlan(ctx context.Context, args searchArgs, wsp workspace.Policy) (searchPlan, error) {

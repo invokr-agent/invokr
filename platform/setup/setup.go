@@ -52,6 +52,9 @@ type Answers struct {
 	// MemoryEnabled records whether built-in Zerfoo memory recall was enabled.
 	// Models download lazily on first use, so setup performs no install step.
 	MemoryEnabled bool
+	// OutsideReads sets workspace.reads to "ask": read and file_search may
+	// reach paths beyond the workspace after the user approves each one.
+	OutsideReads bool
 	// SyntaxTheme is the chroma stylesheet for fenced code. It is optional:
 	// empty leaves the UI to pick one matching the terminal background.
 	SyntaxTheme string
@@ -247,6 +250,9 @@ func writeConfiguredDefault(path string, homeDir string, answers Answers) (bool,
 		cfg.Provider.Model = model
 	}
 	cfg.Memory.Zerfoo.Enabled = answers.MemoryEnabled
+	if answers.OutsideReads {
+		cfg.Workspace.Reads = config.ReadsAsk
+	}
 	cfg.UI.SyntaxTheme = strings.TrimSpace(answers.SyntaxTheme)
 	cfg.Provider.Router = defaultRouterConfig(cfg.Provider)
 	// The workspace root defaults to the cwd at setup time; persisting it would

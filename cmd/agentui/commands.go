@@ -14,6 +14,7 @@ import (
 	humanize "github.com/dustin/go-humanize"
 
 	"github.com/antonikliment/tuikit"
+	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
@@ -72,6 +73,7 @@ func init() {
 		{name: "approvals", usage: "/approvals [manual|auto|plan]", summary: "alias for /mode", handler: voidCmd((*model).setApprovalMode)},
 		{name: "mode", usage: "/mode [manual|auto|plan]", summary: "show or set session mode (shift+tab cycles)", handler: voidCmd((*model).setApprovalMode)},
 		{name: "publishing", usage: "/publishing [ask|allow]", summary: "publishing permission for this Auto session", handler: voidCmd((*model).setPublishing)},
+		{name: "reads", usage: "/reads [workspace|ask]", summary: "reads outside the workspace: refuse, or ask each time (this session)", handler: voidCmd((*model).setReads)},
 		{name: "clear", usage: "/clear", summary: "start a new session (keep saved history and memory)", handler: runClearCommand},
 		{name: "compact", usage: "/compact", summary: "compact context before next turn", handler: sessionCmd(compactCommandText), plain: sessionText(compactCommandText)},
 		{name: "context", usage: "/context", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
@@ -288,6 +290,20 @@ func (m *model) setPublishing(args []string) {
 		state = "allow"
 	}
 	m.commandMessage("Auto publishing: " + state + " (this session only)")
+}
+
+func (m *model) setReads(args []string) {
+	if len(args) == 1 && slices.Contains([]string{config.ReadsWorkspace, config.ReadsAsk}, args[0]) {
+		m.policy.SetOutsideReads(args[0] == config.ReadsAsk)
+	} else if len(args) != 0 {
+		m.commandMessage("usage: /reads [workspace|ask]")
+		return
+	}
+	m.commandMessage("reads outside the workspace: " + readsState(m.policy) + " (this session only)")
+}
+
+func readsState(p *approval.Policy) string {
+	return map[bool]string{false: config.ReadsWorkspace, true: config.ReadsAsk}[p.OutsideReads()]
 }
 
 func (m *model) modeBanner() string {

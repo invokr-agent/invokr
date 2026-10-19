@@ -41,7 +41,8 @@ const keepDefaultModel = ""
 const defaultMemoryAnswer = "no"
 
 // scriptedQuestions is how many answers a scripted run must supply: base URL,
-// home path, memory, syntax theme — the model select is interactive-only.
+// home path, memory, syntax theme, outside reads — the model select is
+// interactive-only.
 //
 // Invariant, because the truncation check compares this against
 // byteReader.served(): served() counts *lines* handed to the fields, and one
@@ -52,7 +53,7 @@ const defaultMemoryAnswer = "no"
 // anticipates), re-prompts and consumes an extra line, which would make a
 // complete run look truncated. Adding either means counting answers rather
 // than lines.
-const scriptedQuestions = 4
+const scriptedQuestions = 5
 
 // runQuestionnaireHuh runs the setup questionnaire as huh forms. With
 // accessible set — stdin is not a terminal, or TERM=dumb — the forms run in
@@ -61,7 +62,7 @@ const scriptedQuestions = 4
 // implementation. A blank line accepts each question's default.
 func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (QuestionnaireResult, error) {
 	answers := Answers{ProviderBaseURL: DefaultProviderBaseURL, SyntaxTheme: SyntaxThemeAuto}
-	homeDisplay, memoryAnswer := defaultHomePrompt(), defaultMemoryAnswer
+	homeDisplay, memoryAnswer, outsideAnswer := defaultHomePrompt(), defaultMemoryAnswer, defaultMemoryAnswer
 
 	var piped *byteReader
 	if accessible {
@@ -90,6 +91,7 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 		question("Invokr home path", "Where config, memory, skills and the toolbox live.", &homeDisplay, accessible),
 		memoryQuestion(accessible, &answers.MemoryEnabled, &memoryAnswer),
 		question("Syntax highlighting theme", `"auto" matches the terminal background; /syntax changes it later.`, &answers.SyntaxTheme, accessible),
+		yesNoQuestion(accessible, "Let the agent read outside the workspace?", "It asks before each such read; /reads changes it later.", &answers.OutsideReads, &outsideAnswer),
 	}
 	if !accessible {
 		fields = append(fields, huh.NewConfirm().Title("Reset JSON profiles?").
@@ -102,6 +104,7 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 
 	if accessible {
 		answers.MemoryEnabled = parseYes(memoryAnswer)
+		answers.OutsideReads = parseYes(outsideAnswer)
 		// huh's accessible runner swallows read errors (Form.runAccessible
 		// discards every field's error and returns nil), so a truncated pipe
 		// would otherwise complete with silent defaults and exit 0. Report it
@@ -190,7 +193,10 @@ func question(title, description string, value *string, accessible bool) huh.Fie
 // pre-huh vocabulary (y/yes/true/1) and treats anything else as "no" without
 // consuming another line.
 func memoryQuestion(accessible bool, enabled *bool, answer *string) huh.Field {
-	const title, hint = "Enable built-in memory recall?", "Zerfoo models download on first use."
+	return yesNoQuestion(accessible, "Enable built-in memory recall?", "Zerfoo models download on first use.", enabled, answer)
+}
+
+func yesNoQuestion(accessible bool, title, hint string, enabled *bool, answer *string) huh.Field {
 	if accessible {
 		return huh.NewInput().Title(fmt.Sprintf("%s [y/N] (%s)", title, hint)).Value(answer)
 	}

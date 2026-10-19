@@ -27,6 +27,7 @@ type Policy struct {
 	mu      sync.Mutex
 	mode    Mode
 	publish bool
+	outside bool
 	store   *Store
 	loadErr error
 	active  map[Mode]int
@@ -68,6 +69,31 @@ func (p *Policy) SetPublishing(allow bool) {
 	p.publish = allow
 }
 func (p *Policy) Publishing() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.publish }
+
+// SetOutsideReads lets read and file_search ask to reach paths beyond the
+// workspace roots (workspace.reads "ask"), for this session.
+func (p *Policy) SetOutsideReads(on bool) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.outside = on
+}
+func (p *Policy) OutsideReads() bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.outside
+}
+
+// OutsideReadsAllowed reports the session switch for the call in ctx.
+func OutsideReadsAllowed(ctx context.Context) bool {
+	s, ok := ctx.Value(callKey{}).(*callState)
+	return ok && s.policy.OutsideReads()
+}
 func (p *Policy) SetStore(store *Store, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -223,10 +249,16 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 	if d, ok := store.Decide(req); ok {
 		return d, true
 	}
-	if s.mode != Manual && (req.ReadOnly || req.Confined) {
+	if autoApproved(s.mode, req) {
 		return Decision{Approved: true, Reason: string(s.mode) + " session policy"}, true
 	}
 	return Decision{}, false
+}
+
+// autoApproved is the session policy's own yes for reads and confined work;
+// a read outside the workspace never gets it.
+func autoApproved(mode Mode, req Request) bool {
+	return mode != Manual && !req.Outside && (req.ReadOnly || req.Confined)
 }
 
 func blockedInPlan(req Request) bool {

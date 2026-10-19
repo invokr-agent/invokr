@@ -3,6 +3,7 @@ package approval
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -35,6 +36,9 @@ func TestModeAuthorization(t *testing.T) {
 		{"plan-host", Plan, Request{}, false, false, false, true},
 		{"plan-publish", Plan, Request{Confined: true, Publishes: true}, true, true, false, true},
 		{"yolo", YOLO, Request{Writes: true, Publishes: true, Protected: true}, true, false, false, false},
+		{"manual-outside", Manual, Request{ReadOnly: true, Outside: true}, true, false, true, false},
+		{"auto-outside", Auto, Request{ReadOnly: true, Outside: true}, true, false, true, false},
+		{"plan-outside", Plan, Request{ReadOnly: true, Outside: true}, true, false, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			policy := NewPolicy(tc.mode, tc.publish)
@@ -104,6 +108,33 @@ func TestPendingApprovalCannotCrossModeChange(t *testing.T) {
 	})
 	if _, err := Authorize(ctx, approver, req, true); err == nil {
 		t.Fatal("stale write approved after switching Plan")
+	}
+}
+
+// A standing grant covers an outside read in every mode, but only when it
+// covers each path; nothing else approves one without asking.
+func TestOutsideReadNeedsGrantCoveringEveryPath(t *testing.T) {
+	store := newTestStore(t)
+	grant := testGrant(t, "/src/other/*")
+	grant.Tool = "outside_read"
+	mustAdd(t, store, grant)
+	for _, mode := range []Mode{Manual, Auto, Plan} {
+		p := NewPolicy(mode, false)
+		p.SetStore(store, nil)
+		for paths, wantPrompt := range map[string]bool{"/src/other/a.md": false, "/src/other/a.md /etc/hosts": true} {
+			req := Request{Tool: "outside_read", ReadOnly: true, Outside: true, SubjectIsPathList: true, Subject: paths, Paths: strings.Fields(paths)}
+			ctx, done := p.Begin(context.Background(), req)
+			prompted := false
+			a := modeApprover(func(context.Context, Request) (Decision, error) {
+				prompted = true
+				return Decision{Approved: true}, nil
+			})
+			_, err := Authorize(ctx, a, req, true)
+			done()
+			if err != nil || prompted != wantPrompt {
+				t.Fatalf("%s %q: err=%v prompted=%v", mode, paths, err, prompted)
+			}
+		}
 	}
 }
 

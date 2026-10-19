@@ -619,6 +619,12 @@ func grantPattern(req approval.Request) (string, error) {
 	if req.PolicyChecked && (req.Protected || req.Publishes) {
 		return "", errors.New("this operation requires one-time approval; approve with y")
 	}
+	if req.Outside {
+		if req.GrantPattern == "" {
+			return "", errors.New("too broad to grant (the root or home directory); approve once with y")
+		}
+		return req.GrantPattern, nil
+	}
 	pattern, ok := approval.DerivePattern(req.Subject)
 	if !ok {
 		return "", errors.New("no safe pattern for this command; approve once with y")

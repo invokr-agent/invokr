@@ -110,6 +110,7 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 
 	eventDispatcher, approvalBroker := events.NewOrderedDispatcher(l.Named("events")), approval.NewBroker()
 	approvalBroker.Policy = opts.Policy
+	opts.Policy.SetOutsideReads(app.Workspace.Reads == config.ReadsAsk)
 	zerfooWorker, embeddingProvider := startZerfooWorker(app)
 	memoryManager, err := newMemoryManager(app, eventDispatcher, zerfooWorker, provider, providerContext, l)
 	if err != nil {

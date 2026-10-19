@@ -49,6 +49,10 @@ cursor. Shift+Tab cycles Manual → Auto → Plan; `/mode manual|auto|plan`
 selects one directly (`/approvals` is an alias). Auto approves workspace edits
 and confined execution. Plan permits inspection and verification with read-only
 sources. `/publishing ask|allow` controls recognized publishing in Auto.
+`/reads workspace|ask` sets whether `read` and `file_search` may reach paths
+outside the workspace for this session; with `ask` every such read prompts in
+every mode, and `a` grants the containing directory for 24 hours. Persist it with
+`workspace.reads` (`INVOKR_WORKSPACE_READS`), Ctrl+O → Setup, or `invokr setup`.
 `--mode auto` and `--mode plan` also work with `exec`, which denies any remaining
 interactive approval requests. Modes reset on launch, including resumed sessions.
 In a non-git workspace, Auto removes a newly created root `.git` directory and

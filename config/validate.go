@@ -2,6 +2,7 @@ package config
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -46,13 +47,7 @@ func (c AppConfig) Validate(logger *zap.Logger) error {
 			return fmt.Errorf("config: %s must not be negative", check.name)
 		}
 	}
-	if err := validateTurnBudget(c.Agent); err != nil {
-		return err
-	}
-	if err := validateMCP(c.MCP.Servers); err != nil {
-		return err
-	}
-	if err := validateToolResultStrategies(c.Agent); err != nil {
+	if err := errors.Join(validateTurnBudget(c.Agent), validateMCP(c.MCP.Servers), validateToolResultStrategies(c.Agent), validateWorkspaceReads(c.Workspace.Reads)); err != nil {
 		return err
 	}
 	logger = cmp.Or(logger, zap.NewNop())
@@ -61,6 +56,13 @@ func (c AppConfig) Validate(logger *zap.Logger) error {
 	warnMissingDir(logger, "skills.dir", c.Skills.Dir, def.Skills.Dir)
 	warnMissingDir(logger, "agents.dir", c.Agents.Dir, def.Agents.Dir)
 	warnMissingDir(logger, "toolbox.dir", c.Toolbox.Dir, def.Toolbox.Dir)
+	return nil
+}
+
+func validateWorkspaceReads(reads string) error {
+	if reads != "" && reads != ReadsWorkspace && reads != ReadsAsk {
+		return fmt.Errorf("config: workspace.reads must be %q or %q, got %q", ReadsWorkspace, ReadsAsk, reads)
+	}
 	return nil
 }
 

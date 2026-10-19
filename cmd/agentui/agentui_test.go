@@ -680,7 +680,7 @@ func TestModel_SubmitBareHelpAliasShowsHelp(t *testing.T) {
 // the turn underneath, and the transcript keeps rendering behind it.
 func TestModel_OverlayIsModalAndFloatsOverChat(t *testing.T) {
 	m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, nil, nil)
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 48})
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 52})
 	m = updated.(*model)
 	m.chatLog.Append(message{role: "user", text: "unmistakable-user-line"})
 	m.sending = true

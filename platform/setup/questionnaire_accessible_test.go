@@ -136,7 +136,7 @@ func TestScriptedMemoryAnswerVocabulary(t *testing.T) {
 	} {
 		t.Run(answer, func(t *testing.T) {
 			home := t.TempDir()
-			in := strings.NewReader("http://llm.local:9090\n" + home + "\n" + answer + "\ncatppuccin-mocha\n")
+			in := strings.NewReader("http://llm.local:9090\n" + home + "\n" + answer + "\ncatppuccin-mocha\nno\n")
 
 			result, err := RunQuestionnaire(in, &bytes.Buffer{})
 			if err != nil {
@@ -192,8 +192,8 @@ func TestRecoverSelectPanicReraisesOtherPanics(t *testing.T) {
 	_ = recoverSelectPanic("some unrelated panic", nil)
 }
 
-// A scripted run keeps the four-answer shape the pre-huh plain path had: the
-// model question is interactive-only, so no /v1/models probe happens and no
+// A scripted run answers five questions in a fixed order: the model question
+// is interactive-only, so no /v1/models probe happens and no
 // extra input line is consumed.
 func TestScriptedQuestionnaireSkipsTheModelQuestion(t *testing.T) {
 	orig := modelOptions
@@ -204,7 +204,7 @@ func TestScriptedQuestionnaireSkipsTheModelQuestion(t *testing.T) {
 	t.Cleanup(func() { modelOptions = orig })
 
 	home := t.TempDir()
-	in := strings.NewReader("http://llm.local:9090\n" + home + "\nyes\ncatppuccin-mocha\n")
+	in := strings.NewReader("http://llm.local:9090\n" + home + "\nyes\ncatppuccin-mocha\nyes\n")
 	var out bytes.Buffer
 
 	result, err := RunQuestionnaire(in, &out)
@@ -218,11 +218,11 @@ func TestScriptedQuestionnaireSkipsTheModelQuestion(t *testing.T) {
 	if strings.Contains(out.String(), "Default model") {
 		t.Fatalf("expected no model question in scripted output, got %q", out.String())
 	}
-	// The four answers still land on the four questions that remain.
+	// The five answers land on the five scripted questions.
 	if result.ProviderBaseURL != "http://llm.local:9090" || result.HomeDir != home {
 		t.Fatalf("answers misaligned: %+v", result)
 	}
-	if !result.MemoryEnabled || result.SyntaxTheme != "catppuccin-mocha" {
+	if !result.MemoryEnabled || result.SyntaxTheme != "catppuccin-mocha" || !result.OutsideReads {
 		t.Fatalf("answers misaligned: %+v", result)
 	}
 }
@@ -232,7 +232,7 @@ func TestScriptedQuestionnaireSkipsTheModelQuestion(t *testing.T) {
 // accessible mode are folded into the titles instead.
 func TestScriptedQuestionnaireOutputIsPlainText(t *testing.T) {
 	home := t.TempDir()
-	in := strings.NewReader("http://llm.local:9090\n" + home + "\nno\nauto\n")
+	in := strings.NewReader("http://llm.local:9090\n" + home + "\nno\nauto\nno\n")
 	var out bytes.Buffer
 
 	if _, err := RunQuestionnaire(in, &out); err != nil {

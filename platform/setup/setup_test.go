@@ -223,7 +223,7 @@ func TestRunQuestionnaireUsesDisplayedDefaults(t *testing.T) {
 	userHome := t.TempDir()
 	t.Setenv("HOME", userHome)
 
-	in := strings.NewReader("\n\n\n\n")
+	in := strings.NewReader("\n\n\n\n\n")
 	var out bytes.Buffer
 
 	result, err := RunQuestionnaire(in, &out)
@@ -269,7 +269,7 @@ func TestRunQuestionnaireHomeDefaultHonorsInvokrHomeEnv(t *testing.T) {
 	wantHome := filepath.Join(t.TempDir(), "isolated-home")
 	t.Setenv("INVOKR_HOME", wantHome)
 
-	in := strings.NewReader("\n\n\n\n")
+	in := strings.NewReader("\n\n\n\n\n")
 	var out bytes.Buffer
 
 	result, err := RunQuestionnaire(in, &out)
@@ -287,7 +287,7 @@ func TestRunQuestionnaireHomeDefaultHonorsInvokrHomeEnv(t *testing.T) {
 
 func TestRunQuestionnaireUsesCustomAnswers(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "custom-invokr")
-	in := strings.NewReader("http://llm.local:9090\n" + home + "\nno\ncatppuccin-mocha\n")
+	in := strings.NewReader("http://llm.local:9090\n" + home + "\nno\ncatppuccin-mocha\nno\n")
 	var out bytes.Buffer
 
 	result, err := RunQuestionnaire(in, &out)
@@ -355,7 +355,7 @@ func TestQuestionnaireRecordsTheOptionalSyntaxTheme(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
-			in := strings.NewReader("http://llm.local:9090\n" + home + "\nno\n" + tc.answer + "\n")
+			in := strings.NewReader("http://llm.local:9090\n" + home + "\nno\n" + tc.answer + "\nno\n")
 			result, err := RunQuestionnaire(in, &bytes.Buffer{})
 			if err != nil {
 				t.Fatalf("RunQuestionnaire returned error: %v", err)

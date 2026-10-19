@@ -446,7 +446,13 @@ nested `unshare` fails in an unprivileged container. See ADR 0005.
   (`INVOKR_WORKSPACE_READONLY_ROOTS`) adds roots that are readable but refuse
   every write — `edit`, `apply_patch`, `code_interpreter` outputs and the
   shell's writable mounts all deny them; hidden paths are excluded unless
-  `workspace.allow_hidden_paths` is set. The spill directory (below) is
+  `workspace.allow_hidden_paths` is set. `workspace.reads: ask`
+  (`INVOKR_WORKSPACE_READS`, `/reads ask`, Ctrl+O, or `invokr setup`) lets
+  `read` and `file_search` (its `dir` argument) reach paths beyond the roots,
+  but only after the user approves each call; no mode auto-approves it, and a
+  standing grant ("a") covers one directory, never `/` or the home directory.
+  Hidden and protected paths stay refused, and the shell sandbox still mounts
+  only the roots. Writes never leave the roots. The spill directory (below) is
   auto-appended to the extra roots so `read_file` can page spilled output;
   the policy makes no read/write distinction, so write tools can reach it too.
 - **State on disk**: `~/.invokr` holds config, memory, sessions, and

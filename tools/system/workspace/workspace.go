@@ -149,11 +149,21 @@ func (p Policy) Resolve(path string) (string, error) {
 		if rebased, ok := p.rebaseOnRoot(path); ok {
 			return rebased, nil
 		}
-		// The root is named: a model probing absolute paths was never told
-		// where it actually was, and spent turns guessing.
-		return "", fmt.Errorf("path %q is outside allowed workspace roots (workspace root is %q); use a path relative to it", path, p.Root)
+		return "", &OutsideError{Path: path, Root: p.Root, resolved: candidate}
 	}
 	return candidate, nil
+}
+
+// OutsideError is a path that resolves outside every root.
+type OutsideError struct {
+	Path, Root string
+	resolved   string
+}
+
+// The root is named: a model probing absolute paths was never told where it
+// actually was, and spent turns guessing.
+func (e *OutsideError) Error() string {
+	return fmt.Sprintf("path %q is outside allowed workspace roots (workspace root is %q); use a path relative to it", e.Path, e.Root)
 }
 
 // rebaseOnRoot answers an absolute path that is outside every root but names
