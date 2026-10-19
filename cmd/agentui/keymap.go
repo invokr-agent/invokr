@@ -7,7 +7,7 @@ type keyMap struct {
 	PageUp, PageDn, Home, End, Up, Down                      key.Binding
 	QueueUp, QueueDown, ExpandItem                           key.Binding
 	ApproveItem, DenyItem, ApproveAll, DenyAll               key.Binding
-	AlwaysAllow, AlwaysDeny                                  key.Binding
+	AlwaysAllow                                              key.Binding
 	ScrollUp, ScrollDown, ToggleHints, Interrupt             key.Binding
 	Redraw, EOF, CycleMode                                   key.Binding
 	FocusTranscript, FoldToggle, FoldPrev, FoldNext, Palette key.Binding
@@ -38,20 +38,16 @@ func defaultKeyMap(showViewSwitch bool) keyMap {
 		Down:        key.NewBinding(key.WithKeys("down"), key.WithHelp("↓", "history/down")),
 		QueueUp:     key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("↑/k", "prev item")),
 		QueueDown:   key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("↓/j", "next item")),
-		ApproveItem: key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "approve")),
-		DenyItem:    key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "deny")),
-		ApproveAll:  key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "approve all")),
-		DenyAll:     key.NewBinding(key.WithKeys("D", "esc"), key.WithHelp("D/esc", "deny all")),
+		ApproveItem: key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "yes")),
+		DenyItem:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "no")),
+		ApproveAll:  key.NewBinding(key.WithKeys("Y"), key.WithHelp("Y", "yes all")),
+		DenyAll:     key.NewBinding(key.WithKeys("N", "esc"), key.WithHelp("N/esc", "no all")),
 		ExpandItem:  key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "details")),
-		// The design writes this "always allow <tool>". A standing grant is
-		// always bound to an argument pattern (ADR 0008), so what "g" grants is
-		// this call, not the tool at large — the help text says so.
-		AlwaysAllow: key.NewBinding(key.WithKeys("g"), key.WithHelp("g", "always allow this call")),
-		// "x" mirrors "g": a standing denial, same scope/expiry/pattern shape,
-		// so "always deny" is as durable as "always allow".
-		AlwaysDeny: key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "always deny this call")),
-		ScrollUp:   key.NewBinding(key.WithKeys("shift+up"), key.WithHelp("shift+↑", "scroll up")),
-		ScrollDown: key.NewBinding(key.WithKeys("shift+down"), key.WithHelp("shift+↓", "scroll down")),
+		// y/a/n is the Codex/OpenCode set. A standing grant is always bound to an
+		// argument pattern (ADR 0008); the panel's hint names the pattern.
+		AlwaysAllow: key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "always")),
+		ScrollUp:    key.NewBinding(key.WithKeys("shift+up"), key.WithHelp("shift+↑", "scroll up")),
+		ScrollDown:  key.NewBinding(key.WithKeys("shift+down"), key.WithHelp("shift+↓", "scroll down")),
 		// ctrl+g rather than the more obvious ctrl+k: bubbles/textarea binds
 		// ctrl+k to delete-after-cursor, and the app's keymap is checked first,
 		// so taking it would silently remove an editing key from the prompt.

@@ -64,6 +64,8 @@ type Runner struct {
 
 type RunRequest struct {
 	SessionID, Message string
+	// Images ride on the user message as content blocks.
+	Images []inference.ContentBlock
 }
 
 type ModelGateway interface {
@@ -106,6 +108,7 @@ var (
 
 type BeginModelRequest struct {
 	SessionID, Message string
+	Images             []inference.ContentBlock
 	// History carries the prior conversation thread (system message at index 0),
 	// if any, so a new user turn continues the same conversation rather than
 	// starting fresh each call.

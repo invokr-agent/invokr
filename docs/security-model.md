@@ -80,8 +80,8 @@ grant covers the call; blocked in Plan) or `always_ask` (prompt every call; gran
 
 ### In the TUI
 
-Pending approvals collect in a queue (`APPROVAL  step X of N`):
-`a` approve, `d` deny, `g` always allow, `x` always deny, `A` approve-all, `D`/`esc` deny-all, `v` details.
+Pending approvals collect in a boxed queue (`APPROVAL  X of N`):
+`y` yes, `a` always (grants the first two words of the command, e.g. `go test *`; shown only when a safe pattern exists), `n` no, `Y` yes-to-all, `N`/`esc` no-to-all, `v` details.
 Shift+Tab cycles Manual, Auto, and Plan; `/mode` selects one directly and
 `/approvals` is an alias. Auto approves workspace edits and execution whose
 owner proves confinement, including network and local commits. Protected edits,
@@ -149,8 +149,8 @@ to `--allow-all`, which is strictly worse.
 ### Standing denials
 
 A standing denial is the same record with `deny` set: same file, scopes,
-expiry, pattern grammar, and audit trail. It is created with `x` in the
-approval queue (mirroring `g`) or `/grants deny <tool> <hours> <pattern>`, and
+expiry, pattern grammar, and audit trail. It is created with
+`/grants deny <tool> <hours> <pattern>`, and
 listed and revoked through `/grants`.
 
 - **Precedence is deny-overrides.** If both a grant and a denial apply to a

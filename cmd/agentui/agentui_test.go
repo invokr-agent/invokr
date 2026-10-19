@@ -308,7 +308,7 @@ func TestApprovalRenderingPreservesSummaryAndExpandedFields(t *testing.T) {
 	expanded := ansi.Strip(renderApprovalQueuePanel([]approval.QueueItem{item}, 0, true, 0, defaultKeyMap(false), help.New(), 40))
 	expanded += ansi.Strip(renderApprovalQueuePanel([]approval.QueueItem{item}, 0, true, 100, defaultKeyMap(false), help.New(), 40))
 	for _, want := range []string{
-		"Tool: shell-tool", "Tier: write-tier", "Summary: unabridgedtoken",
+		"shell-tool", "write-tier", "Summary: unabridgedtoken",
 		"Reason: specific reason", "Details:", "complete command details",
 	} {
 		if !strings.Contains(expanded, want) {
@@ -330,7 +330,7 @@ func TestApprovalPanelRendersFieldGridAndDimNeighbours(t *testing.T) {
 	}, 0, false, 0, defaultKeyMap(false), help.New(), width)
 	plain := ansi.Strip(panel)
 
-	for _, want := range []string{"why     Run a shell command", "subject git clean -fd"} {
+	for _, want := range []string{"Run a shell command", "git clean -fd"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("approval panel missing field %q:\n%s", want, plain)
 		}
@@ -339,17 +339,20 @@ func TestApprovalPanelRendersFieldGridAndDimNeighbours(t *testing.T) {
 	if strings.Contains(plain, "[code_execution]") {
 		t.Fatalf("tier still rendered as a bracketed tag:\n%s", plain)
 	}
-	if !strings.Contains(panel, ui.Invokr.Pill(ui.Invokr.Warn, "code_execution")) {
+	if !strings.Contains(panel, ui.Invokr.Pill(ui.Invokr.Warn, "code execution")) {
 		t.Fatalf("tier is not on a pill:\n%q", panel)
 	}
 	// A queued neighbour is one dim row, without its own field grid.
 	if !strings.Contains(plain, "apply_patch  Edit main.go") {
 		t.Fatalf("queued neighbour missing its row:\n%s", plain)
 	}
-	if strings.Count(plain, "why ") != 1 {
+	if strings.Count(plain, "Run a shell command") != 1 {
 		t.Fatalf("neighbour drew a field grid of its own:\n%s", plain)
 	}
-	if !strings.Contains(plain, "g always allow this call") {
+	if !strings.Contains(plain, "Y yes all") {
+		t.Fatalf("a queue of two lacks yes-to-all:\n%s", plain)
+	}
+	if !strings.Contains(plain, `a always "git clean *"`) {
 		t.Fatalf("panel missing the always-allow affordance:\n%s", plain)
 	}
 	assertLinesWithinWidth(t, panel, width)
@@ -372,7 +375,7 @@ func TestAlwaysAllowGrantsTheSubjectThenApproves(t *testing.T) {
 	}()
 	waitForQueueLen(t, m.approvalQueue, 1)
 
-	m.updateKey(testTextKey("g")) //nolint:errcheck
+	m.updateKey(testTextKey("a")) //nolint:errcheck
 	if decision := <-done; !decision.Approved {
 		t.Fatalf("always-allow did not approve the pending request: %+v", decision)
 	}
@@ -380,7 +383,7 @@ func TestAlwaysAllowGrantsTheSubjectThenApproves(t *testing.T) {
 	if len(grants) != 1 {
 		t.Fatalf("grant count = %d, want 1", len(grants))
 	}
-	if grants[0].Tool != "shell" || grants[0].ArgPattern != "git clean -fd *" {
+	if grants[0].Tool != "shell" || grants[0].ArgPattern != "git clean *" {
 		t.Fatalf("grant = %+v, want it bound to the pattern derived from the subject", grants[0])
 	}
 }
@@ -395,7 +398,7 @@ func TestAlwaysAllowRefusesARequestWithNoSubject(t *testing.T) {
 	go broker.RequestApproval(ctx, approval.Request{Tool: "shell", Summary: "no subject"}) //nolint:errcheck
 	waitForQueueLen(t, m.approvalQueue, 1)
 
-	m.updateKey(testTextKey("g")) //nolint:errcheck
+	m.updateKey(testTextKey("a")) //nolint:errcheck
 	// Nothing standing grants could match, so the request must stay pending
 	// rather than be approved under a grant that would never fire again.
 	if got := m.approvalQueue.Len(); got != 1 {
@@ -404,7 +407,7 @@ func TestAlwaysAllowRefusesARequestWithNoSubject(t *testing.T) {
 	if got := len(m.grants.List()); got != 0 {
 		t.Fatalf("grant count = %d, want none", got)
 	}
-	if !strings.Contains(ansi.Strip(m.chatContent()), "no matchable subject") {
+	if !strings.Contains(ansi.Strip(m.chatContent()), "no safe pattern") {
 		t.Fatalf("no explanation in the transcript: %q", ansi.Strip(m.chatContent()))
 	}
 }
@@ -1078,7 +1081,7 @@ func TestModel_QueueRendersWhenItemsPresent(t *testing.T) {
 	waitForQueueLen(t, m.approvalQueue, 2)
 
 	content := m.chatContent()
-	if !strings.Contains(content, "APPROVAL") || !strings.Contains(content, "step 1 of 2") {
+	if !strings.Contains(content, "APPROVAL") || !strings.Contains(content, "1 of 2") {
 		t.Fatalf("expected approval queue panel in chatContent, got: %q", content)
 	}
 }
@@ -1110,13 +1113,13 @@ func TestModel_NarrowApprovalFlowShowsDetailsBeforeDecision(t *testing.T) {
 
 	m.updateKey(testTextKey("v")) //nolint:errcheck
 	expanded := ansi.Strip(m.View().Content)
-	for _, want := range []string{"Tool: shell", "Tier: code_execution", "Reason: command changes workspace state", "Details:", "git clean -fd -- path with spaces"} {
+	for _, want := range []string{"code execution", "Reason: command changes", "Details:", "git clean -fd -- path with spaces"} {
 		if !strings.Contains(expanded, want) {
 			t.Errorf("expanded approval missing %q: %q", want, expanded)
 		}
 	}
 
-	m.updateKey(testTextKey("d")) //nolint:errcheck
+	m.updateKey(testTextKey("n")) //nolint:errcheck
 	if err := <-done; err == nil {
 		t.Fatal("approval succeeded after deny")
 	}
@@ -1138,7 +1141,7 @@ func TestModel_QueueApproveItem(t *testing.T) {
 	}()
 	waitForQueueLen(t, m.approvalQueue, 1)
 
-	m.updateKey(testTextKey("a")) //nolint:errcheck
+	m.updateKey(testTextKey("y")) //nolint:errcheck
 	select {
 	case err := <-done:
 		if err != nil {
@@ -1165,7 +1168,7 @@ func TestModel_QueueDenyItem(t *testing.T) {
 	}()
 	waitForQueueLen(t, m.approvalQueue, 1)
 
-	m.updateKey(testTextKey("d")) //nolint:errcheck
+	m.updateKey(testTextKey("n")) //nolint:errcheck
 	select {
 	case err := <-done:
 		var denied *approval.DeniedError
@@ -1192,7 +1195,7 @@ func TestModel_QueueApproveAll(t *testing.T) {
 	}
 	waitForQueueLen(t, m.approvalQueue, 3)
 
-	m.updateKey(testTextKey("A")) //nolint:errcheck
+	m.updateKey(testTextKey("Y")) //nolint:errcheck
 	for i := 0; i < 3; i++ {
 		select {
 		case err := <-errs:
@@ -1220,7 +1223,7 @@ func TestModel_QueueDenyAll_via_D(t *testing.T) {
 	}
 	waitForQueueLen(t, m.approvalQueue, 2)
 
-	m.updateKey(testTextKey("D")) //nolint:errcheck
+	m.updateKey(testTextKey("N")) //nolint:errcheck
 	for i := 0; i < 2; i++ {
 		select {
 		case err := <-errs:
@@ -1741,9 +1744,9 @@ func TestModel_PendingApprovalLeavesTypingToTheInput(t *testing.T) {
 
 	// On an empty input line the dedicated decision keys still act.
 	m.input.SetValue("")
-	m.updateKey(testTextKey("d")) //nolint:errcheck
+	m.updateKey(testTextKey("n")) //nolint:errcheck
 	if err := <-done; err == nil {
-		t.Fatal("d should still deny the selected request")
+		t.Fatal("n should still deny the selected request")
 	}
 }
 
@@ -1799,7 +1802,7 @@ func TestModel_PendingApprovalDefersToChat(t *testing.T) {
 	if !strings.Contains(view, "Chat •") || strings.Contains(view, "APPROVAL") {
 		t.Fatalf("pending approval indicator/render = %q", view)
 	}
-	m.updateKey(testTextKey("a")) //nolint:errcheck
+	m.updateKey(testTextKey("y")) //nolint:errcheck
 	if queue.Len() != 1 {
 		t.Fatal("hidden approval action should not be accepted")
 	}
@@ -1811,7 +1814,7 @@ func TestModel_PendingApprovalDefersToChat(t *testing.T) {
 	if m.logPanel.mode != modeChat {
 		t.Fatal("pending approval should lock view switching in Chat")
 	}
-	m.updateKey(testTextKey("a")) //nolint:errcheck
+	m.updateKey(testTextKey("y")) //nolint:errcheck
 	if err := <-done; err != nil {
 		t.Fatalf("approve pending request: %v", err)
 	}
@@ -2013,21 +2016,11 @@ func TestCopyNoticeExpires(t *testing.T) {
 	}
 }
 
-// A piped subject is not a legal grant pattern, so always-allow must decline
-// with an explanation rather than storing a rule the store would reject.
+// A subject with no derivable pattern is not offered "always", and a stray
+// "a" refuses rather than storing a rule the store would reject.
 func TestAlwaysAllowRefusesAPipedSubject(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	broker := approval.NewBroker()
-	m := newTestModelWithQueue(ctx, broker)
-	m.grants = approval.NewStore(filepath.Join(t.TempDir(), "grants.json"))
-
-	_, err := m.addStandingRule(approval.Request{Tool: "shell", Subject: "| sort"}, false)
-	if err == nil {
-		t.Fatalf("addStandingRule accepted an underivable subject")
-	}
-	if len(m.grants.List()) != 0 {
-		t.Fatalf("grants = %+v, want none", m.grants.List())
+	if _, err := grantPattern(approval.Request{Tool: "shell", Subject: "| sort"}); err == nil {
+		t.Fatalf("grantPattern accepted an underivable subject")
 	}
 }
 
@@ -2047,13 +2040,18 @@ func TestElideSubjectBreaksAtPipelineBoundariesAndElides(t *testing.T) {
 	}
 }
 
-func TestApprovalFieldsDropsARedundantWhy(t *testing.T) {
-	fields := approvalFields(approval.Request{Summary: "Run git status", Subject: "git status"}, 60)
-	if len(fields) != 1 || fields[0][0] != "subject" {
-		t.Fatalf("fields = %+v, want only the subject row", fields)
+func TestApprovalPanelDropsARedundantWhy(t *testing.T) {
+	panel := func(summary string) string {
+		item := approval.QueueItem{Pending: approval.Pending{Request: approval.Request{Tool: "shell", Summary: summary, Subject: "git status"}}}
+		return ansi.Strip(renderApprovalQueuePanel([]approval.QueueItem{item}, 0, false, 0, defaultKeyMap(false), help.New(), 60))
 	}
-	fields = approvalFields(approval.Request{Summary: "list the repo layout", Subject: "git status"}, 60)
-	if len(fields) != 2 || fields[0][1] != "list the repo layout" {
-		t.Fatalf("fields = %+v, want a distinct why kept", fields)
+	if got := panel("Run git status"); strings.Contains(got, "Run git status") {
+		t.Fatalf("panel repeats the subject as its why:\n%s", got)
+	}
+	if got := panel("Run git status"); strings.Contains(got, "yes all") {
+		t.Fatalf("a single request offered yes-to-all:\n%s", got)
+	}
+	if got := panel("list the repo layout"); !strings.Contains(got, "list the repo layout") {
+		t.Fatalf("panel dropped a distinct why:\n%s", got)
 	}
 }

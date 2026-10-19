@@ -332,58 +332,79 @@ func trimErr(s string) string {
 }
 
 func renderApprovalQueuePanel(items []approval.QueueItem, cursor int, expanded bool, detailOffset int, keys keyMap, hints help.Model, width int) string {
+	inner := max(1, width-6) // margin + border + padding, as inputBox
 	var b strings.Builder
-	b.WriteString(renderApprovalHeader(len(items), cursor, width) + "\n")
+	b.WriteString(renderApprovalHeader(len(items), cursor) + "\n")
 	for i, item := range items {
-		b.WriteString(renderQueueItemLine(item, i == cursor, expanded && i == cursor, detailOffset, width))
-		b.WriteString("\n")
+		b.WriteString(renderQueueItemLine(item, i == cursor, expanded && i == cursor, detailOffset, inner) + "\n")
+		if i == cursor && i < len(items)-1 {
+			b.WriteString("\n")
+		}
 	}
-	bindings := []key.Binding{keys.ApproveItem, keys.DenyItem, keys.AlwaysAllow, keys.AlwaysDeny, keys.ExpandItem, keys.ApproveAll, keys.DenyAll}
+	bindings := []key.Binding{keys.ApproveItem}
+	if pattern, err := grantPattern(items[min(cursor, len(items)-1)].Pending.Request); err == nil {
+		always := keys.AlwaysAllow
+		always.SetHelp("a", fmt.Sprintf("always %q", pattern))
+		bindings = append(bindings, always)
+	}
+	bindings = append(bindings, keys.DenyItem, keys.ExpandItem)
+	if len(items) > 1 {
+		bindings = append(bindings, keys.ApproveAll, keys.DenyAll)
+	}
 	if expanded {
 		bindings = append(bindings, keys.PageUp, keys.PageDn)
 	}
-	b.WriteString("  " + wrapText(hints.ShortHelpView(bindings), max(1, width-2)))
-	return b.String()
+	hints.ShortSeparator = "  "
+	b.WriteString("\n" + wrapText(hints.ShortHelpView(bindings), inner))
+	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(ui.Invokr.Palette.Yellow).Padding(0, 1).Width(max(20, width-2))
+	return box.Render(b.String())
 }
 
-// renderApprovalHeader is the design's "APPROVAL · step 2 of 3" banner with a
-// pip per queued item: settled ones green, the current one amber, the rest dim.
-func renderApprovalHeader(total, cursor, width int) string {
-	// One pip per queued item, indexed by where it sits relative to the cursor:
-	// settled ones green, the current one amber, the rest dim.
+// renderApprovalHeader is "APPROVAL", plus "2 of 3" and a pip per queued item
+// (settled green, current amber, rest dim) once there is more than one.
+func renderApprovalHeader(total, cursor int) string {
+	head := ui.Invokr.Warn.Bold(true).Render("APPROVAL")
+	if total < 2 {
+		return head
+	}
 	pipStyles := []lipgloss.Style{ui.Invokr.Success, ui.Invokr.Warn, ui.Invokr.Muted}
 	pips := make([]string, total)
 	for i := range total {
 		pips[i] = pipStyles[cmp.Compare(i, cursor)+1].Render("━━")
 	}
-	head := ui.Invokr.Warn.Bold(true).Render("APPROVAL") + "  " + ui.Invokr.Muted.Render(fmt.Sprintf("step %d of %d", cursor+1, total)) + "  " + strings.Join(pips, " ")
-	return wrapText(head, width)
+	return head + "  " + ui.Invokr.Muted.Render(fmt.Sprintf("%d of %d", cursor+1, total)) + "  " + strings.Join(pips, " ")
 }
 
+// renderQueueItemLine is the selected request — headline, the command in bold,
+// why it asks in dim, or the details when expanded — or a dim neighbour row.
 func renderQueueItemLine(item approval.QueueItem, selected, expanded bool, detailOffset, width int) string {
-	if !selected {
-		return renderQueueNeighbour(item.Pending.Request, width)
-	}
 	req := item.Pending.Request
-	var b strings.Builder
-	b.WriteString("  " + wrapText(renderApprovalHeadline(req), max(1, width-2)))
+	if !selected {
+		return renderQueueNeighbour(req, width)
+	}
+	lines := []string{"", renderApprovalHeadline(req), ""}
+	subject := strings.TrimSpace(req.Subject)
+	for _, line := range elideSubject(subject, max(1, width-4), approvalSubjectLines) {
+		lines = append(lines, "    "+ui.Invokr.Text.Bold(true).Render(line))
+	}
+	// "Run <subject>" is the subject again with a verb in front.
+	if why := approvalWhy(req); why != "" && why != "Run "+subject && !expanded {
+		for _, line := range wrapLines(why, max(1, width-4)) {
+			lines = append(lines, "    "+ui.Invokr.Muted.Render(line))
+		}
+	}
 	if expanded {
-		lines := approvalDetailLines(req, width)
-		start := min(max(0, detailOffset), max(0, len(lines)-approvalDetailHeight))
-		end := min(len(lines), start+approvalDetailHeight)
-		for _, line := range lines[start:end] {
-			b.WriteString("\n    " + renderApprovalDetailLine(line))
+		details := approvalDetailLines(req, width)
+		start := min(max(0, detailOffset), max(0, len(details)-approvalDetailHeight))
+		end := min(len(details), start+approvalDetailHeight)
+		for _, line := range details[start:end] {
+			lines = append(lines, "    "+renderApprovalDetailLine(line))
 		}
-		if len(lines) > approvalDetailHeight {
-			position := fmt.Sprintf("details %d-%d/%d", start+1, end, len(lines))
-			b.WriteString("\n    " + ui.Invokr.Muted.Render(position))
+		if len(details) > approvalDetailHeight {
+			lines = append(lines, "    "+ui.Invokr.Muted.Render(fmt.Sprintf("details %d-%d/%d", start+1, end, len(details))))
 		}
-		return b.String()
 	}
-	for _, field := range approvalFields(req, max(1, width-len("    ")-approvalLabelWidth)) {
-		b.WriteString("\n" + renderApprovalField(field[0], field[1], width))
-	}
-	return b.String()
+	return strings.Join(lines, "\n")
 }
 
 // renderApprovalHeadline is the design's selected-request line: the tool in
@@ -391,6 +412,8 @@ func renderQueueItemLine(item approval.QueueItem, selected, expanded bool, detai
 func renderApprovalHeadline(req approval.Request) string {
 	head := ui.Invokr.Accent.Render("► ") + ui.Invokr.Text.Bold(true).Render(req.Tool)
 	if tier := strings.TrimSpace(req.Tier); tier != "" {
+		// execute_write_command → write: the pill names the risk, not the enum.
+		tier = strings.ReplaceAll(strings.TrimSuffix(strings.TrimPrefix(tier, "execute_"), "_command"), "_", " ")
 		head += "  " + ui.Invokr.Pill(ui.Invokr.Warn, tier)
 	}
 	return head
@@ -405,25 +428,6 @@ func renderQueueNeighbour(req approval.Request, width int) string {
 		line += "  " + strings.Join(strings.Fields(why), " ")
 	}
 	return "    " + ui.Invokr.Muted.Render(ansi.Truncate(line, max(1, width-4), "…"))
-}
-
-// approvalFields is the design's why/cwd/limits grid, narrowed to what an
-// approval.Request actually carries. There is no cwd and no limits on the type;
-// plumbing them from the tool layer is out of scope (see the gap doc), so the
-// grid is what the request can answer: why it is asking, and the exact subject
-// a standing grant would match against.
-func approvalFields(req approval.Request, width int) [][2]string {
-	fields := make([][2]string, 0, 2)
-	subject := strings.TrimSpace(req.Subject)
-	// "Run <subject>" is the subject again with a verb in front; showing it
-	// above the subject row makes the reader diff two identical commands.
-	if why := approvalWhy(req); why != "" && why != "Run "+subject {
-		fields = append(fields, [2]string{"why", why})
-	}
-	if subject != "" {
-		fields = append(fields, [2]string{"subject", strings.Join(elideSubject(subject, width, approvalSubjectLines), "\n")})
-	}
-	return fields
 }
 
 // approvalSubjectLines is how many lines of the command the collapsed row
@@ -477,34 +481,11 @@ func approvalWhy(req approval.Request) string {
 	return cmp.Or(strings.TrimSpace(req.Summary), strings.TrimSpace(req.Reason))
 }
 
-// approvalLabelWidth keeps the field labels in one column so the values line up.
-const approvalLabelWidth = 8
-
-func renderApprovalField(label, value string, width int) string {
-	const gutter = "    "
-	indent := gutter + strings.Repeat(" ", approvalLabelWidth)
-	lines := []string{}
-	for _, line := range strings.Split(value, "\n") {
-		lines = append(lines, wrapLines(line, max(1, width-len(indent)))...)
-	}
-	out := make([]string, 0, len(lines))
-	for i, line := range lines {
-		prefix := indent
-		if i == 0 {
-			prefix = gutter + ui.Invokr.Muted.Render(fmt.Sprintf("%-*s", approvalLabelWidth, label))
-		}
-		// Style each line on its own: a lipgloss style rendered over a whole
-		// multi-line block pads every line out to the longest one, which pushes
-		// the first row past the pane edge once the indent is added.
-		out = append(out, prefix+ui.Invokr.Text.Render(line))
-	}
-	return strings.Join(out, "\n")
-}
-
 const approvalDetailHeight = 12
 
 func approvalDetailLines(req approval.Request, width int) []string {
-	fields := [][2]string{{"Tool", req.Tool}, {"Tier", req.Tier}, {"Summary", req.Summary}, {"Reason", req.Reason}}
+	// Tool and tier are already on the headline.
+	fields := [][2]string{{"Summary", req.Summary}, {"Reason", req.Reason}}
 	contentWidth := max(1, width-4)
 	out := make([]string, 0, len(fields)+1)
 	for _, field := range fields {

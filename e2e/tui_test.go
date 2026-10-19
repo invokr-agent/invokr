@@ -38,7 +38,7 @@ func TestC18_TUIInterruption(t *testing.T) {
 	}
 
 	s.submit("request approval")
-	s.waitFor(regexp.MustCompile(`APPROVAL\s+step \d+ of \d+|approval required|approval requested|approval queue \(\d+ pending\)`), 5*time.Second)
+	s.waitFor(regexp.MustCompile(`APPROVAL|approval required|approval requested|approval queue \(\d+ pending\)`), 5*time.Second)
 	s.send("C-c")
 	s.waitFor(regexp.MustCompile(`(?s)stopped.*stopped`), 5*time.Second)
 	if !s.alive() {

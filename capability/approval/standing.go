@@ -452,13 +452,18 @@ func lastByte(s string) byte {
 // so `git status*` covers `git status --short` but not `git statusx --force`.
 func wildcardSafe(prev byte, s string) bool {
 	switch {
-	case !printableASCII(s), strings.ContainsAny(s, patternMetachars), strings.Contains(s, ".."):
+	case !printableASCII(s), strings.ContainsAny(s, patternMetachars), dotDotSegment(s):
 		return false
 	case s == "" || !alphanumeric(prev):
 		return true
 	default:
 		return !alphanumeric(s[0])
 	}
+}
+
+// dotDotSegment reports a ".." path segment (traversal); Go's "./..." is not one.
+func dotDotSegment(s string) bool {
+	return slices.Contains(strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == ' ' || r == '\t' }), "..")
 }
 
 func alphanumeric(b byte) bool {
@@ -485,22 +490,18 @@ func DenyReason(req Request) string {
 }
 
 // DerivePattern turns a request subject into a grant pattern that
-// validatePattern will accept: the first pipeline segment (the subject cut at
-// the first shell metacharacter), trimmed, with a trailing " *" so later
-// arguments still match. It reports false when nothing grantable remains — a
-// subject that starts with a metacharacter, or one whose first segment is too
-// short to be a meaningful grant.
+// validatePattern will accept: the first two words of the first pipeline
+// segment (the subject cut at the first shell metacharacter) plus " *", so
+// `go test ./...` grants `go test *`. It reports false when nothing grantable
+// remains — a subject that starts with a metacharacter, a word containing
+// "..", or a prefix too short to be a meaningful grant.
 func DerivePattern(subject string) (string, bool) {
-	head := subject
 	if i := strings.IndexAny(subject, patternMetachars); i >= 0 {
-		head = subject[:i]
+		subject = subject[:i]
 	}
-	head = strings.TrimSpace(head)
-	if head == "" {
-		return "", false
-	}
-	pattern := head + " *"
-	if validatePattern(pattern) != nil {
+	words := strings.Fields(subject)
+	pattern := strings.Join(words[:min(2, len(words))], " ") + " *"
+	if len(words) == 0 || validatePattern(pattern) != nil {
 		return "", false
 	}
 	return pattern, true

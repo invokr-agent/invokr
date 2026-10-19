@@ -94,7 +94,7 @@ SCRIPTS = {
         (0.6, Typed(PROMPT), True),        # the prompt, typed a character at a time
         (1.0, "\r", True),                 # send it
         (18.0, None, True),                # thinking, then the approval panel
-        (0.4, "a", True),                  # approve the shell call
+        (0.4, "a", True),                  # always-allow go build, so follow-ups run
         (75.0, None, True),                # the tool runs and the answer streams
         # Written in one go rather than Typed: while the completion popup is
         # open, pyte keeps the transcript text under it instead of repainting
@@ -315,7 +315,7 @@ def main():
         sys.exit("no frames captured")
 
     # Skip long unchanged waits without accelerating typed characters.
-    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [4000]  # hold the /context overlay long enough to read
+    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [10000]  # hold the /context overlay long enough to read
     paletted = quantize(images)
     paletted[0].save(gif_path, save_all=True, append_images=paletted[1:],
                      duration=durations, loop=0, optimize=True, disposal=1)

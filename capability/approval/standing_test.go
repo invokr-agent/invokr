@@ -44,6 +44,7 @@ func TestGlobMatchAcceptsIntendedCalls(t *testing.T) {
 		{"git status*", "git status"},
 		{"git status*", "git status --short"},
 		{"go test ./*", "go test ./capability/approval"},
+		{"go test *", "go test ./..."}, // "..." is Go's package wildcard, not traversal
 		{"kubectl get *pods", "kubectl get -n default pods"},
 		{"ls -la", "ls -la"},
 	}
@@ -78,6 +79,8 @@ func TestGlobMatchDeniesNonMatchingCalls(t *testing.T) {
 		{"backslash escape", "git status*", "git status \\; rm"},
 		// Path traversal in the wildcard region.
 		{"traversal in wildcard", "cat ./docs/*", "cat ./docs/../../../etc/shadow"},
+		{"bare traversal", "cat *", "cat .."},
+		{"traversal after space", "cat *", "cat x ../etc/shadow"},
 		// Unicode lookalikes must not match their ASCII pattern.
 		{"cyrillic lookalike", "git status", "gіt status"},
 		{"fullwidth lookalike", "git status", "ｇit status"},
@@ -577,7 +580,8 @@ func TestDerivePattern(t *testing.T) {
 		want    string
 		ok      bool
 	}{
-		{"find /home/x -type d | grep -v .git | sort", "find /home/x -type d *", true},
+		{"find /home/x -type d | grep -v .git | sort", "find /home/x *", true},
+		{"go test ./...", "go test *", true},
 		{"git status", "git status *", true},
 		{"ls > out.txt", "", false}, // "ls " is under the 4-literal-character floor
 		{"| sort", "", false},

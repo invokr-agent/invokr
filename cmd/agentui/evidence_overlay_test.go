@@ -150,7 +150,7 @@ func TestEvidenceOverlayDoesNotStealApprovalAndPlainKeepsGuard(t *testing.T) {
 	if m.overlay.IsOpen() {
 		t.Fatal("evidence overlay obscured pending approval")
 	}
-	m.updateKey(testTextKey("d"))
+	m.updateKey(testTextKey("n"))
 	<-done
 
 	var out bytes.Buffer

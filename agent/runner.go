@@ -974,7 +974,7 @@ func turnSignatureKey(calls []toolCallSignature) string {
 
 func (r *Runner) nextModelTurn(ctx context.Context, turn int, req RunRequest, messages []inference.Message, completedCalls int) (ModelTurn, error) {
 	if turn == 0 {
-		return r.modelGateway.Begin(ctx, BeginModelRequest{SessionID: req.SessionID, Message: req.Message, History: messages})
+		return r.modelGateway.Begin(ctx, BeginModelRequest{SessionID: req.SessionID, Message: req.Message, Images: req.Images, History: messages})
 	}
 	return r.modelGateway.Continue(ctx, ContinueModelRequest{SessionID: req.SessionID, Messages: messages, CompletedCalls: completedCalls})
 }

@@ -261,7 +261,7 @@ func (g *OpenAIModelGateway) initialMessages(ctx context.Context, req BeginModel
 	if len(req.History) > 1 {
 		messages = append(messages, req.History[1:]...)
 	}
-	return append(messages, inference.UserMessage(prompt.User)), nil
+	return append(messages, inference.UserMessage(prompt.User, req.Images...)), nil
 }
 
 // PromptBreakdown returns the last-built system prompt's per-section sizes and
