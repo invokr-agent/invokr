@@ -82,6 +82,7 @@ type preparedShellCommand struct {
 	// sandboxExec marks a line running project code (an interpreter or a
 	// workspace script), which is always asked for.
 	sandboxExec, isolateEnv bool
+	scripts, written        []string
 	// allowNetwork mirrors config's allow_network_commands: the operator has
 	// said unattended network access is fine, so the sandbox keeps the host
 	// network namespace instead of unsharing it (#543).
@@ -230,7 +231,7 @@ func prepareShellCommand(call *core.ToolCall, cfg config.ShellConfig, workspace 
 	if len(pol.roots) > 0 {
 		command = pol.roots[0]
 	}
-	return preparedShellCommand{args: args, line: line, command: command, commands: pol.roots, allowedCommands: allowedList, tier: pol.tier, publishes: pol.publishes, reasons: pol.reasons, cwd: cwd, workspaceRoot: workspace.Root, roots: workspace.WritableRoots(), readonlyRoots: workspace.ReadOnlyRoots(), sandboxExec: pol.sandboxExec, allowNetwork: cfg.AllowNetworkCommands, timeoutMS: timeoutMS, maxOutputBytes: maxOutputBytes, isolateEnv: isolate, env: env, passthrough: cfg.EnvPassthrough}, nil
+	return preparedShellCommand{args: args, line: line, command: command, commands: pol.roots, allowedCommands: allowedList, tier: pol.tier, publishes: pol.publishes, reasons: pol.reasons, cwd: cwd, workspaceRoot: workspace.Root, roots: workspace.WritableRoots(), readonlyRoots: workspace.ReadOnlyRoots(), sandboxExec: pol.sandboxExec, scripts: pol.scripts, written: pol.written, allowNetwork: cfg.AllowNetworkCommands, timeoutMS: timeoutMS, maxOutputBytes: maxOutputBytes, isolateEnv: isolate, env: env, passthrough: cfg.EnvPassthrough}, nil
 }
 
 // networkAllowed reports whether the sandbox shares the host network
@@ -507,7 +508,42 @@ func shellApprovalRequest(cfg config.ShellConfig, plan preparedShellCommand) (*a
 	// "Run <line>" only repeats the subject, so it is the fallback.
 	summary := strings.TrimSpace(plan.args.Intent)
 	summary = cmp.Or(summary, "Run "+plan.line)
-	return &approval.Request{Tool: constants.ShellToolName, Tier: string(plan.tier), Summary: summary, Subject: plan.line, Reason: fmt.Sprintf("shell classified this as %s: %s", plan.tier, trigger), Details: fmt.Sprintf("Command: %s\nWorking directory: %s\nTier: %s\nTrigger: %s\nTimeout: %d ms\nMax output: %d bytes", plan.line, plan.cwd, plan.tier, trigger, plan.timeoutMS, plan.maxOutputBytes)}, nil
+	return &approval.Request{Tool: constants.ShellToolName, Tier: string(plan.tier), Summary: summary, Subject: plan.line, Reason: fmt.Sprintf("shell classified this as %s: %s", plan.tier, trigger), Details: fmt.Sprintf("Command: %s\nWorking directory: %s\nTier: %s\nTrigger: %s\nTimeout: %d ms\nMax output: %d bytes", plan.line, plan.cwd, plan.tier, trigger, plan.timeoutMS, plan.maxOutputBytes) + scriptDetails(plan.scripts, plan.written, plan.cwd)}, nil
+}
+
+// scriptDetails shows the approver what a script on the line runs: its
+// commands are never checked against the allowlist, so the prompt is the only
+// control on them. Display only; capped at 200 lines / 16 KB.
+func scriptDetails(scripts, written []string, cwd string) string {
+	abs := func(path string) string {
+		if filepath.IsAbs(path) {
+			return filepath.Clean(path)
+		}
+		return filepath.Join(cwd, path)
+	}
+	var b strings.Builder
+	for _, script := range scripts {
+		path := abs(script)
+		// The approval runs before a heredoc on this line writes the file.
+		if slices.ContainsFunc(written, func(w string) bool { return abs(w) == path }) {
+			fmt.Fprintf(&b, "\n\nScript %s: written by this command line (see Command above)", script)
+			continue
+		}
+		data, err := os.ReadFile(path) //nolint:gosec // display only, the approver sees what will run
+		if err != nil {
+			fmt.Fprintf(&b, "\n\nScript %s: unreadable (%v)", script, err)
+			continue
+		}
+		lines, truncated := strings.SplitAfter(string(data[:min(len(data), 16<<10)]), "\n"), len(data) > 16<<10
+		if len(lines) > 200 {
+			lines, truncated = lines[:200], true
+		}
+		fmt.Fprintf(&b, "\n\nScript %s:\n%s", script, strings.TrimRight(strings.Join(lines, ""), "\n"))
+		if truncated {
+			b.WriteString("\n… truncated")
+		}
+	}
+	return b.String()
 }
 
 func argsAfterSubcommand(args []string, subcommand string) []string {

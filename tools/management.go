@@ -9,6 +9,7 @@ import (
 	"github.com/invokr-ai/invokr/capability/sessionstore"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-ai/invokr/tools/system/shell"
 	"github.com/invokr-ai/invokr/tools/system/tool_search"
 )
 
@@ -126,7 +127,20 @@ func (c *Caller) changeEnabled(ctx context.Context, id string, args tool_search.
 
 // ResolveToolCall resolves before target policy, quotas and execution bookkeeping.
 func (c *Caller) ResolveToolCall(ctx context.Context, call *core.ToolCall) (*core.ToolCall, error) {
-	return tool_search.Resolve(call, func(name string) bool { return c.advertised(name) && toolInScope(ctx, name) }, c.protectedTool)
+	available := func(name string) bool { return c.advertised(name) && toolInScope(ctx, name) }
+	call, err := tool_search.Resolve(call, available, c.protectedTool)
+	if err != nil {
+		return nil, err
+	}
+	// A shell line a native tool covers runs as that tool; only core tools,
+	// so managed sessions accept the rewritten call without tools.run.
+	return shell.Reroute(call, func(name string) bool { return available(name) && c.protectedTool(name) && c.registered(name) }), nil
+}
+
+func (c *Caller) registered(name string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.native[name].handler != nil
 }
 
 func (c *Caller) checkManagedCall(ctx context.Context, call *core.ToolCall) error {

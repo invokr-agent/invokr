@@ -26,7 +26,10 @@ type NativeRegistrar interface {
 
 type ToolCall struct {
 	// Managed is trusted execution metadata, never accepted from model JSON.
-	Managed   bool            `json:"-"`
+	Managed bool `json:"-"`
+	// Note is trusted text appended to the model-facing result, e.g. after a
+	// shell line was rerouted to a native tool.
+	Note      string          `json:"-"`
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 }
