@@ -172,7 +172,7 @@ func Connect(ctx context.Context, stream jsonrpc2.Stream, cfg ServerConfig, root
 func (c *Client) initialize(ctx context.Context) error {
 	root := uri.File(c.root)
 	pid := int32(os.Getpid())
-	params := &protocol.InitializeParams{ProcessID: &pid, RootURI: &root}
+	params := &protocol.InitializeParams{ProcessID: &pid, RootURI: &root} //nolint:staticcheck // RootURI is deprecated but servers predating workspaceFolders still read it.
 	params.Capabilities.General = &protocol.GeneralClientCapabilities{PositionEncodings: offeredEncodings()}
 	// Reporting our PID is what lets a well-behaved server reap itself if
 	// invokr dies without a clean shutdown.
