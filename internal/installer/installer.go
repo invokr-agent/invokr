@@ -1,21 +1,40 @@
-// Package installer runs the release installer bundled into the binary. The
-// same script is published for first-time installs (see README's curl line), so
+// Package installer runs the release installer fetched at runtime from the
+// README's curl URL. The same script is published for first-time installs, so
 // upgrades and fresh installs share one tested code path.
 package installer
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 )
 
-//go:embed install.sh
-var script string
+// scriptURL is the installer README's curl line runs, so upgrades and fresh
+// installs share one script.
+const scriptURL = "https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh"
+
+// fetchScript downloads the installer; a failed or empty fetch is an error.
+func fetchScript(ctx context.Context) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, scriptURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("fetch install script: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != http.StatusOK || len(body) == 0 {
+		return "", fmt.Errorf("fetch install script: %s (%v)", resp.Status, err)
+	}
+	return string(body), nil
+}
 
 // Run downloads and installs a release over the running binary. An empty
 // version means the newest release.
@@ -32,6 +51,11 @@ func Run(ctx context.Context, version string, out io.Writer) error {
 	// It runs before any download starts, so a permissions problem costs the
 	// user a failed download on a slow mirror.
 	if err := checkWritable(dir); err != nil {
+		return err
+	}
+
+	script, err := fetchScript(ctx)
+	if err != nil {
 		return err
 	}
 

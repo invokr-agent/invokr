@@ -16,8 +16,8 @@ var runInstaller = installer.Run
 
 // UpgradeCommand replaces the running binary with a release build.
 //
-// The install goes through the same script the README pipes to sh, embedded
-// here at build time, so an upgrade cannot drift from a fresh install: same
+// The install goes through the same script the README pipes to sh, fetched at
+// runtime from that URL, so an upgrade cannot drift from a fresh install: same
 // download, same checksum verification, same placement. Invokr keeps nothing
 // running in the background, so unlike a daemon there is no service to stop
 // before the binary is replaced or to start after it; the next invocation is

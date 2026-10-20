@@ -3,11 +3,10 @@
 # matching release asset from GitHub Releases, verifies its checksum, and
 # installs the binary to ~/.local/bin.
 #
-#   curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/internal/installer/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh | sh
 #
-# The same file is embedded into the binary (internal/installer.go's go:embed
-# install.sh), so `invokr upgrade` runs this exact script: a fresh install and
-# an upgrade never drift apart.
+# `invokr upgrade` fetches this same file at runtime and feeds it to sh, so a
+# fresh install and an upgrade never drift apart.
 #
 # Env overrides:
 #   INVOKR_INSTALL_REPO      owner/repo to pull releases from (required if
