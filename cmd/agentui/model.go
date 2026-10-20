@@ -231,6 +231,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateToolToggle(toggle)
 		return m, nil
 	}
+	// An open approval dialog owns the keys, and a paste is no exception: left
+	// alone it lands on the parked draft the box only re-draws, and an image
+	// path would attach to a turn that cannot run yet.
+	if _, isPaste := msg.(tea.PasteMsg); isPaste && m.pendingApprovals() > 0 {
+		return m, nil
+	}
 	if updated, cmd, ok := m.updateImageMsg(msg); ok {
 		return updated, cmd
 	}
@@ -477,8 +483,8 @@ func (m *model) handleInterrupt() (tea.Model, tea.Cmd) {
 
 // updatePendingQueueKey routes a key to the approval queue while one is
 // pending: the open dialog owns every key, printable text included, because
-// inputArea locks the prompt for as long as it does (see approvalLockedHint)
-// and half-owned input would let the user type into a box that is not
+// inputArea locks the prompt for as long as it does, and half-owned input would
+// let the user type into a box that is not
 // listening. A line typed before the queue opened stays parked until the
 // dialog closes; ctrl+c is taken ahead of this in updateKey, so interrupting
 // a pending queue is unchanged.
@@ -816,19 +822,10 @@ func (m *model) inputArea() string {
 	// of a draft: the prompt is not listening (see updatePendingQueueKey), so
 	// repainting the parked text would invite typing that goes nowhere.
 	if m.pendingApprovals() > 0 {
-		return lockedInputBox(m.mainWidth()).Render(ui.Invokr.Muted.Render(approvalLockedHint))
+		locked := inputBox(m.mainWidth()).BorderForeground(ui.Invokr.Palette.Muted)
+		return locked.Render(ui.Invokr.Muted.Render("answer the approval above"))
 	}
 	return inputBox(m.mainWidth()).Render(m.input.View())
-}
-
-// approvalLockedHint is what the input box says while an approval dialog is
-// open: the one thing the user can do with the keys.
-const approvalLockedHint = "answer the approval above"
-
-// lockedInputBox is the prompt's frame with a dim border, so it still reads
-// as the input block without pretending it is ready for text.
-func lockedInputBox(width int) lipgloss.Style {
-	return inputBox(width).BorderForeground(ui.Invokr.Palette.Muted)
 }
 
 // inputBox frames the prompt in a rounded border. It replaces the filled

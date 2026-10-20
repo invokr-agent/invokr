@@ -1730,7 +1730,7 @@ func TestModel_ApprovalOpenLocksTheInput(t *testing.T) {
 		t.Fatalf("input = %q, want empty while an approval is open", got)
 	}
 	view := ansi.Strip(m.View().Content)
-	if !strings.Contains(view, approvalLockedHint) {
+	if !strings.Contains(view, "answer the approval above") {
 		t.Fatalf("locked input placeholder missing from %q", view)
 	}
 
@@ -1745,8 +1745,45 @@ func TestModel_ApprovalOpenLocksTheInput(t *testing.T) {
 		t.Fatal("n should still deny the selected request")
 	}
 	// The dialog closed: the prompt is a prompt again, not a locked note.
-	if view = ansi.Strip(m.View().Content); strings.Contains(view, approvalLockedHint) {
+	if view = ansi.Strip(m.View().Content); strings.Contains(view, "answer the approval above") {
 		t.Fatal("closed approval dialog must restore the input box")
+	}
+}
+
+// A paste is no exception to the lock: it is not a key, so the key routing alone
+// would leave it typing into the box the dialog owns. While an approval is open
+// the pasted text must stay out of the draft, and it must not decide the request.
+func TestModel_ApprovalOpenIgnoresPaste(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	broker := approval.NewBroker()
+	queue := approval.NewApprovalQueue(ctx, broker)
+	defer queue.Close()
+	m := newModel(ctx, &fakeSession{}, nil, queue, nil, false, nil, nil)
+	m.width, m.height = 80, 24
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := broker.RequestApproval(ctx, approval.Request{Tool: "shell"})
+		done <- err
+	}()
+	waitForQueueLen(t, queue, 1)
+
+	// A paste that reads like a decision letter must neither type nor decide: the
+	// box stays empty and the request is still pending.
+	_, _ = m.Update(tea.PasteMsg{Content: "y\n"})
+	if got := m.input.Value(); got != "" || len(m.images) != 0 || queue.Len() != 1 {
+		t.Fatalf("paste while an approval is open: input = %q, images = %d, pending = %d", got, len(m.images), queue.Len())
+	}
+	// A plain paste is held back the same way, so the locked note still shows.
+	_, _ = m.Update(tea.PasteMsg{Content: "ls -l"})
+	if got := m.input.Value(); got != "" || !strings.Contains(ansi.Strip(m.View().Content), "answer the approval above") {
+		t.Fatalf("paste while an approval is open: input = %q, want the locked note", got)
+	}
+	// The dialog still answers its own key once the pasted text is gone.
+	m.updateKey(testTextKey("n")) //nolint:errcheck
+	if err := <-done; err == nil {
+		t.Fatal("n should still deny the selected request")
 	}
 }
 
