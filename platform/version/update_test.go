@@ -39,8 +39,7 @@ func TestLatestVersionConcurrentStartsOneFetch(t *testing.T) {
 	fetchClient = srv.Client()
 	defer func() { releaseURL, fetchClient = origURL, origClient }()
 
-	// Clear any state left by a prior iteration's background refresh goroutine
-	// so the single-flight guard starts from a known idle point.
+	// Clear leftover state from a prior iteration's background refresh.
 	fetchMu.Lock()
 	fetching = false
 	latestVersion = ""
@@ -57,8 +56,8 @@ func TestLatestVersionConcurrentStartsOneFetch(t *testing.T) {
 		}()
 	}
 
-	// Wait until the first request has landed. If a second ever opens before
-	// the first is released, the single-flight guard failed.
+	// Wait until the first request lands; if a second opens before release,
+	// the single-flight guard failed.
 	select {
 	case <-started:
 	case <-time.After(10 * time.Second):
@@ -78,11 +77,9 @@ func TestLatestVersionConcurrentStartsOneFetch(t *testing.T) {
 	}
 }
 
-// TestUpdateAvailableFix covers the race the spec calls out: a background
-// refresh() goroutine reads Version during its fetch cycle, and a leftover
-// goroutine from a prior test would read it while a later test writes it. Each
-// test registers a cleanup that blocks until no fetch is in flight, so refresh()
-// cannot touch Version after the test's write completes.
+// TestUpdateAvailableFix covers the race where a background refresh() goroutine
+// reads Version during its fetch cycle. The cleanup blocks until no fetch is in
+// flight, so refresh() cannot touch Version after a test writes it.
 func TestUpdateAvailableFix(t *testing.T) {
 	origURL, origClient := releaseURL, fetchClient
 	origVersion := Version
@@ -98,14 +95,13 @@ func TestUpdateAvailableFix(t *testing.T) {
 		Version = origVersion
 	}()
 
-	// Cleanup: wait until no fetch is in flight so a background refresh cannot
-	// read Version while the next test writes it.
+	// Cleanup: block until no fetch is in flight so refresh cannot read Version
+	// while the next test writes it.
 	t.Cleanup(func() {
 		waitForFetchingIdle(t)
 	})
 
-	// Seed the cached state via the background refresh path, which reads
-	// Version while the single-flight guard is held.
+	// Seed cached state via the background refresh path.
 	go func() { refreshOnce(context.Background()) }()
 	waitForFetchingIdle(t)
 
@@ -122,14 +118,12 @@ func TestUpdateAvailableFix(t *testing.T) {
 	}
 }
 
-// TestRefreshReadsVersionDuringFetch proves the race fix end to end: a
-// background refresh cycle reads Version during its fetch cycle, and the
-// test's cleanup (and an explicit idle wait) blocks until fetching goes idle
-// so the goroutine cannot read Version after the test writes it. Under -race
-// this is clean because the idle wait observes the happens-before edge on
-// fetching. The goroutine is a single bounded refreshOnce (not an unbounded
-// refresh loop) so it completes on its own and leaves no leftover goroutine
-// that would race with a later test's global setup.
+// TestRefreshReadsVersionDuringFetch proves the race fix end to end: a background
+// refresh cycle reads Version during its fetch cycle, and the cleanup blocks
+// until fetching goes idle so the goroutine cannot read Version after the test
+// writes it. Under -race it is clean because the idle wait observes the
+// happens-before edge on fetching. The goroutine is a single bounded refreshOnce
+// (not an unbounded refresh loop) so it completes on its own.
 func TestRefreshReadsVersionDuringFetch(t *testing.T) {
 	origURL, origClient := releaseURL, fetchClient
 	origVersion := Version
@@ -145,13 +139,12 @@ func TestRefreshReadsVersionDuringFetch(t *testing.T) {
 		Version = origVersion
 	}()
 
-	// Cleanup: wait until no fetch is in flight so a background refresh cannot
-	// read Version while the next test writes it.
+	// Cleanup: block until no fetch is in flight.
 	t.Cleanup(func() { waitForFetchingIdle(t) })
 
 	// Background refresh reads Version during its fetch cycle (fetching == true).
 	go refreshOnce(context.Background())
-	// Block until that read has completed before the test writes Version again.
+	// Block until that read completes before the test writes Version again.
 	waitForFetchingIdle(t)
 
 	Version = "v4.5.6" // equal to latest -> no update available
@@ -161,10 +154,9 @@ func TestRefreshReadsVersionDuringFetch(t *testing.T) {
 	}
 }
 
-// waitForFetchingIdle blocks until no fetch is in flight. It is the race fix:
-// it guarantees refresh() is not mid-read of Version when a test tears down.
-// refreshOnce reads Version only while fetching is true, so observing
-// fetching == false establishes a happens-before edge to that read.
+// waitForFetchingIdle blocks until no fetch is in flight. refreshOnce reads
+// Version only while fetching is true, so observing fetching == false
+// establishes a happens-before edge to that read.
 func waitForFetchingIdle(t *testing.T) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
