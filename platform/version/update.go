@@ -12,17 +12,15 @@ import (
 	"golang.org/x/mod/semver"
 )
 
-const defaultReleaseURL = "https://api.github.com/repos/invokr-ai/invokr/releases/latest"
-
-var releaseURL = defaultReleaseURL
-
-const fetchTimeout = 10 * time.Second
-
-const backgroundRefreshInterval = time.Hour
-
-var fetchClient = http.DefaultClient
+const (
+	defaultReleaseURL = "https://api.github.com/repos/invokr-ai/invokr/releases/latest"
+	fetchTimeout      = 10 * time.Second
+)
 
 var (
+	releaseURL  = defaultReleaseURL
+	fetchClient = http.DefaultClient
+
 	latestVersion string
 	hasUpdate     bool
 	fetching      bool
@@ -38,44 +36,45 @@ func LatestVersion(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
+	_, err := fetchOnce(ctx)
+
+	fetchMu.Lock()
+	result := latestVersion
+	fetchMu.Unlock()
+	return result, err
+}
+
+func fetchOnce(ctx context.Context) (bool, error) {
 	fetchMu.Lock()
 	if fetching {
-		result := latestVersion
 		fetchMu.Unlock()
-		return result, nil
+		return false, nil
 	}
 	fetching = true
 	fetchMu.Unlock()
 
-	defer func() {
-		fetchMu.Lock()
-		fetching = false
-		fetchMu.Unlock()
-	}()
-
 	tag, err := fetchLatestVersion(ctx)
-	if err != nil {
-		return latestVersion, err
-	}
+
 	fetchMu.Lock()
-	latestVersion = tag
-	hasUpdate = semver.Compare(tag, Version) > 0
-	fetchMu.Unlock()
-	return latestVersion, nil
+	defer fetchMu.Unlock()
+	fetching = false
+	if err == nil {
+		latestVersion = tag
+		hasUpdate = semver.Compare(tag, Version) > 0
+	}
+	return true, err
 }
 
 func fetchLatestVersion(ctx context.Context) (string, error) {
-	url := releaseURL
-	client := fetchClient
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releaseURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("version: build request: %w", err)
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
-	resp, err := client.Do(req)
+	resp, err := fetchClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("version: lookup %s: %w", url, err)
+		return "", fmt.Errorf("version: lookup %s: %w", releaseURL, err)
 	}
 	defer func() {
 		if err := resp.Body.Close(); err != nil {
@@ -84,7 +83,7 @@ func fetchLatestVersion(ctx context.Context) (string, error) {
 	}()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("version: %s returned %s", url, resp.Status)
+		return "", fmt.Errorf("version: %s returned %s", releaseURL, resp.Status)
 	}
 
 	var rel releaseResponse
@@ -103,44 +102,7 @@ func UpdateAvailable() bool {
 	return hasUpdate
 }
 
-// Start launches the background refresh loop that keeps hasUpdate fresh for
-// UpdateAvailable(). Call once at startup.
-func Start() {
-	go refresh()
-}
-
-func refresh() {
-	ticker := time.NewTicker(backgroundRefreshInterval)
-	defer ticker.Stop()
-
-	for {
-		refreshOnce(context.Background())
-		<-ticker.C
-	}
-}
-
 func refreshOnce(ctx context.Context) bool {
-	fetchMu.Lock()
-	if fetching {
-		fetchMu.Unlock()
-		return false
-	}
-	fetching = true
-	fetchMu.Unlock()
-
-	defer func() {
-		fetchMu.Lock()
-		fetching = false
-		fetchMu.Unlock()
-	}()
-
-	tag, err := fetchLatestVersion(ctx)
-	if err != nil {
-		return true
-	}
-	fetchMu.Lock()
-	latestVersion = tag
-	hasUpdate = semver.Compare(tag, Version) > 0
-	fetchMu.Unlock()
-	return true
+	ran, _ := fetchOnce(ctx)
+	return ran
 }
