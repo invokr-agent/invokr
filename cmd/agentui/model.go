@@ -1087,7 +1087,24 @@ func requestContextCompaction(session turn.Session) {
 
 // modelName is the model the next turn will use, or "" when the session does
 // not expose one.
-func (m *model) modelName() string { return currentModel(m.session) }
+// modelName is the model cell: the model the backend reported serving when it
+// reports one, otherwise the configured name. A router profile's pin can serve a
+// model the configured name never mentions, and showing that name tells the user
+// nothing about what answered.
+func (m *model) modelName() string {
+	if rep, ok := m.session.(servedModelReporter); ok {
+		if served := strings.TrimSpace(rep.ServedModel()); served != "" {
+			return served
+		}
+	}
+	return currentModel(m.session)
+}
+
+// servedModelReporter is the narrow capability interface onto a session that
+// reports the model its provider echoed on the last response.
+type servedModelReporter interface {
+	ServedModel() string
+}
 
 // currentModel is the model a session will use next, or "" when the session
 // does not expose one.

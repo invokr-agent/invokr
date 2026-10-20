@@ -174,6 +174,11 @@ func (c *Client) Metadata(ctx context.Context, model string) (ProviderMetadata, 
 	if err != nil {
 		return ProviderMetadata{}, err
 	}
+	if out.ContextWindowTokens == 0 {
+		if window, listed := c.probeModels(ctx, root, model); listed && window > 0 {
+			out.ContextWindowTokens, out.Source = window, "models list"
+		}
+	}
 	switch {
 	case out.Reasoning != "":
 	case isOpenRouter(root):
@@ -220,6 +225,40 @@ func (c *Client) probeProps(ctx context.Context, root, model string) (ProviderMe
 		out.Source = "llama.cpp " + metadataPath
 	}
 	return out, found, nil
+}
+
+// probeModels reads a context limit from GET /v1/models for the servers that
+// answer no /props: routers and some llama forks report the window per model as
+// context, n_ctx, max_context or max_model_len. The listed entry matching model
+// wins; otherwise the widest listed window does. listed is false when the
+// endpoint is absent or lists no window at all.
+func (c *Client) probeModels(ctx context.Context, root, model string) (int64, bool) {
+	var listed modelsListing
+	found, err := c.getJSON(ctx, root+"/v1/models", &listed)
+	if err != nil || !found {
+		return 0, false
+	}
+	best := int64(0)
+	for _, entry := range listed.Data {
+		window := max(max(entry.Context, entry.NCtx), max(entry.MaxContext, entry.MaxModelLen))
+		if window == 0 {
+			continue
+		}
+		if entry.ID == model {
+			return window, true
+		}
+		best = max(best, window)
+	}
+	return best, best > 0
+}
+
+type modelsListing struct {
+	Data []modelListing
+}
+
+type modelListing struct {
+	ID                                     string
+	Context, NCtx, MaxContext, MaxModelLen int64
 }
 
 func isOpenRouter(root string) bool {
