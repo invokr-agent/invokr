@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -53,14 +54,14 @@ func LatestVersion(ctx context.Context) (string, error) {
 	}()
 
 	tag, err := fetchLatestVersion(ctx)
-
-	fetchMu.Lock()
-	if err == nil {
-		latestVersion = tag
+	if err != nil {
+		return latestVersion, err
 	}
+	fetchMu.Lock()
+	latestVersion = tag
+	hasUpdate = semver.Compare(tag, Version) > 0
 	fetchMu.Unlock()
-
-	return latestVersion, err
+	return latestVersion, nil
 }
 
 func fetchLatestVersion(ctx context.Context) (string, error) {
@@ -76,7 +77,11 @@ func fetchLatestVersion(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("version: lookup %s: %w", url, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("version: close response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("version: %s returned %s", url, resp.Status)
@@ -96,6 +101,12 @@ func UpdateAvailable() bool {
 	fetchMu.Lock()
 	defer fetchMu.Unlock()
 	return hasUpdate
+}
+
+// Start launches the background refresh loop that keeps hasUpdate fresh for
+// UpdateAvailable(). Call once at startup.
+func Start() {
+	go refresh()
 }
 
 func refresh() {
