@@ -1085,8 +1085,6 @@ func requestContextCompaction(session turn.Session) {
 	}
 }
 
-// modelName is the model the next turn will use, or "" when the session does
-// not expose one.
 // modelName is the model cell: the model the backend reported serving when it
 // reports one, otherwise the configured name. A router profile's pin can serve a
 // model the configured name never mentions, and showing that name tells the user

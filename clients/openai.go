@@ -240,7 +240,7 @@ func (c *Client) probeModels(ctx context.Context, root, model string) (int64, bo
 	}
 	best := int64(0)
 	for _, entry := range listed.Data {
-		window := max(max(entry.Context, entry.NCtx), max(max(entry.MaxContext, entry.MaxModelLen), metaNCtx(entry)))
+		window := max(max(entry.Context, entry.NCtx), max(max(entry.MaxContext, entry.MaxModelLen), entry.Meta.NCtx))
 		if window == 0 {
 			continue
 		}
@@ -262,21 +262,13 @@ type modelListing struct {
 	NCtx        int64  `json:"n_ctx"`
 	MaxContext  int64  `json:"max_context"`
 	MaxModelLen int64  `json:"max_model_len"`
-	// Meta is llama.cpp's nested block, which carries the window there.
-	Meta *modelMeta `json:"meta"`
+	// Meta is llama.cpp's nested block, which carries the window there. A
+	// listing without one leaves it zero.
+	Meta modelMeta `json:"meta"`
 }
 
 type modelMeta struct {
 	NCtx int64 `json:"n_ctx"`
-}
-
-// metaNCtx is the window inside a listed entry's meta block, zero when the
-// entry carries none.
-func metaNCtx(entry modelListing) int64 {
-	if entry.Meta == nil {
-		return 0
-	}
-	return entry.Meta.NCtx
 }
 
 func isOpenRouter(root string) bool {
