@@ -16,7 +16,7 @@ execution paths when available. See [Platforms](#platforms) for fallback behavio
 ### Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/internal/installer/install.sh | sh
 ```
 
 The installer supports Linux and macOS. It selects the release for your OS and

@@ -43,6 +43,8 @@ var budgets = []area{
 	// the cap should not be what stops the TUI catching up.
 	{"cmd/agentui", 6000},
 	{"cmd", 2500},
+	// 2026-10-21 set to the measured count when the upgrade command landed.
+	{"internal", 56},
 
 	// Agent loop and tool plumbing — the core of the core.
 	// 2026-09-17 +95: recoverable compaction archives, paired pin budget,
