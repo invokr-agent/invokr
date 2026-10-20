@@ -35,12 +35,7 @@ linters:
           # Repo-wide ceiling: the hard aggregate limit, enforced by gocloc. The per-area
           # budgets in budget_test.go bind underneath this number.
           #
-          # The cap exists to catch runaway growth, not to hold the project below its own
-          # class: measured against seven comparable harnesses, invokr is the second-smallest
-          # in its class with the broadest feature set, and crush — same language, same TUI
-          # framework — runs 2.2x larger with fewer features. See
-          # docs/private/reviews/2026-08-25-loc-vs-peer-harnesses.md.
-          #
+          # The cap exists to catch runaway growth, not to freeze the current line count.
           # Before raising it, lower it: trim implementation lines and set the cap to the
           # exact measured count. Raise only when the count forces it, and only to that
           # count — never above it. Change history: git log -p .golangci.yml
