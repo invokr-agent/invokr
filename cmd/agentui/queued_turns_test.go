@@ -10,9 +10,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// Enter while a turn runs queues the message instead of dropping it: the
-// queue renders dimmed above the input with its count, and flushes oldest
-// first when the turn ends.
+// Enter while a turn runs queues the message instead of dropping it, and the
+// queue flushes oldest-first when the turn ends.
 func TestModel_QueuedMessagesRenderAndFlushInOrder(t *testing.T) {
 	session := &fakeSession{}
 	m := newModel(context.Background(), session, nil, nil, nil, false, &fakePromptHistory{}, nil)
@@ -35,8 +34,10 @@ func TestModel_QueuedMessagesRenderAndFlushInOrder(t *testing.T) {
 		t.Fatalf("input = %q, calls = %#v", m.input.Value(), session.calls)
 	}
 
-	// The block rides above the input box: a count header, then one muted
-	// numbered line per message in send order.
+	// The queue block rides above the input box: a count header, then one dimmed
+	// numbered line per message, in send order. chatVisibleLines counts those
+	// rows, so the transcript gives the space up instead of the queue drawing
+	// over it.
 	view := ansi.Strip(m.View().Content)
 	if !strings.Contains(view, "2 queued \u00b7 sent when this turn ends") ||
 		!strings.Contains(view, "1 \u2981 first") || !strings.Contains(view, "2 \u2981 second") {
@@ -44,14 +45,13 @@ func TestModel_QueuedMessagesRenderAndFlushInOrder(t *testing.T) {
 	}
 
 	// One queued message per turn end, oldest first, so each response can
-	// react to the message before it.
+	// react to the message before it. The send is a command the caller runs,
+	// so the queued text shows here as that turn's user line in the transcript.
 	for _, want := range []string{"first", "second"} {
 		_, cmd := m.Update(responseMsg{text: "ok"})
 		if cmd == nil {
 			t.Fatalf("turn end with a queued message must send, got nil cmd")
 		}
-		// The send is a command the caller runs, so what shows here is the queued
-		// text landing as that turn's user line, and the queue holding the rest.
 		last := m.chatLog.Last()
 		if last == nil {
 			t.Fatalf("no user line, want %q", want)
@@ -60,15 +60,19 @@ func TestModel_QueuedMessagesRenderAndFlushInOrder(t *testing.T) {
 			t.Fatalf("last message = %q, want user %q", last.text, want)
 		}
 	}
-	// The queued send leaves a turn in flight and the input untouched.
-	if !m.sending || m.input.Value() != "" || len(m.queued) != 0 {
-		t.Fatalf("sending = %v, input = %q, queued = %#v", m.sending, m.input.Value(), m.queued)
+	// The queue drained fully, so later views draw no block at all.
+	if len(m.queued) != 0 {
+		t.Fatalf("queued = %#v, want empty", m.queued)
+	}
+	// The flush sends queued text, never the draft, so the input stayed empty.
+	if m.input.Value() != "" {
+		t.Fatalf("input = %q, want empty", m.input.Value())
 	}
 }
 
-// Up-arrow on an empty input pulls the newest queued message back for
-// editing, and it leaves the queue, so Enter re-queues the one edit instead
-// of sending a second copy of the original.
+// Up-arrow on an empty input pulls the newest queued message back for editing,
+// and it leaves the queue, so Enter re-queues the one edit rather than sending
+// a second copy of the original.
 func TestModel_UpPullsQueuedMessageBackForEditing(t *testing.T) {
 	session := &fakeSession{}
 	m := newModel(context.Background(), session, nil, nil, nil, false, &fakePromptHistory{}, nil)
@@ -79,8 +83,8 @@ func TestModel_UpPullsQueuedMessageBackForEditing(t *testing.T) {
 	}
 	// Up on an empty input, mid-turn, reads the queue rather than history.
 	m.updateKey(testKey(tea.KeyUp))
-	// The pull hands the newest message back at the caret's end and drops it
-	// from the queue, so it cannot be sent twice.
+	// The pull hands the newest message back whole, at the caret's end, and
+	// drops it from the queue, so it cannot be sent twice.
 	if m.input.Value() != "second" || fmt.Sprintf("%v", m.queued) != "[first]" {
 		t.Fatalf("input = %q, queued = %#v", m.input.Value(), m.queued)
 	}
@@ -90,23 +94,20 @@ func TestModel_UpPullsQueuedMessageBackForEditing(t *testing.T) {
 	if fmt.Sprintf("%v", m.queued) != "[first second (edited)]" {
 		t.Fatalf("queued = %#v, want [first second (edited)]", m.queued)
 	}
-	// The queue flushes in that order, one message per turn end.
-	for _, want := range []string{"first", "second (edited)"} {
-		m.Update(responseMsg{text: "ok"})
-		// The send is a command the caller runs, so what shows here is the queued
-		// text landing as that turn's user line, and the queue holding the rest.
-		last := m.chatLog.Last()
-		if last == nil {
-			t.Fatalf("no user line, want %q", want)
-		}
-		if last.role != "user" || last.text != want {
-			t.Fatalf("last message = %q, want user %q", last.text, want)
-		}
+	// A fresh draft has to survive the send the turn end starts.
+	m.input.SetValue("draft in flight")
+	_, cmd := m.Update(responseMsg{text: "ok"})
+	if cmd == nil {
+		t.Fatalf("turn end with a queued message must send, got nil cmd")
 	}
-	// The flush sends queued text, so it never reads or clears the input: the
-	// Enter that queued the edit already handed the input back empty.
-	if len(m.queued) != 0 || m.input.Value() != "" {
-		t.Fatalf("queued = %#v, input = %q", m.queued, m.input.Value())
+	// The flush sent the older message, so it is the newest user line.
+	last := m.chatLog.Last()
+	if last == nil || last.role != "user" || last.text != "first" {
+		t.Fatalf("last transcript line is not the queued user line")
+	}
+	// The draft is untouched, and the edited message is still queued.
+	if m.input.Value() != "draft in flight" || fmt.Sprintf("%v", m.queued) != "[second (edited)]" {
+		t.Fatalf("input = %q, queued = %#v", m.input.Value(), m.queued)
 	}
 }
 
@@ -119,13 +120,20 @@ func TestModel_QueuedMessagesLeaveInterruptUnchanged(t *testing.T) {
 	cancelled := false
 	m.cancelSend = func() { cancelled = true }
 	_, cmd := m.updateKey(testModifiedKey('c', tea.ModCtrl))
+	// ctrl+c must not become a send or a quit while messages are queued.
 	if isQuit(cmd) || !cancelled || !m.stopping {
-		// ctrl+c must not become a send or a quit while messages are queued.
-		t.Fatalf("cancelled = %v, stopping = %v, quit = %v", cancelled, m.stopping, isQuit(cmd))
+		t.Fatalf("cancelled = %v, stopping = %v", cancelled, m.stopping)
 	}
 	// The stop ends the turn, so the queued message flushes as the next turn;
 	// the stop itself neither drops it nor sends it.
 	if fmt.Sprintf("%v", m.queued) != "[later]" {
 		t.Fatalf("queued = %#v, want [later]", m.queued)
+	}
+	// esc is the same handler, so an esc with a queue pending behaves the same.
+	m.stopping = false
+	_, cmd = m.updateKey(testKey(tea.KeyEscape))
+	if isQuit(cmd) || len(m.queued) != 1 {
+		// The queue is not esc's to clear.
+		t.Fatalf("esc with a queue should interrupt, queued = %#v", m.queued)
 	}
 }
