@@ -1071,6 +1071,9 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if m.sending {
 		return m.queuePrompt(text)
 	}
+	// A message that actually gets sent hands the input back: a sent line left on the box keeps an open approval's decision keys off (they wait for an empty input) and glues the next typed slash command onto the stale prompt. Enter that queues still clears the box in queuePrompt.
+	m.input.Reset()
+	m.browsing, m.historyPos, m.draft = false, -1, ""
 
 	if text == "" {
 		return m, nil
