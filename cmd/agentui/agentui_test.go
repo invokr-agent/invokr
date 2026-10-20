@@ -1699,9 +1699,10 @@ func TestModel_LogsAutoFollowRespectsScroll(t *testing.T) {
 	}
 }
 
-// A pending approval must not turn ordinary typing into decisions: only the
-// dedicated decision keys act, everything printable else goes to the input.
-func TestModel_PendingApprovalLeavesTypingToTheInput(t *testing.T) {
+// While an approval dialog is open it owns every key but ctrl+c: the input box
+// is locked and rendered dim, so typing mid-turn can neither decide a request
+// nor land in a prompt nobody is listening to. Closing the dialog restores it.
+func TestModel_ApprovalOpenLocksTheInput(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	broker := approval.NewBroker()
@@ -1717,36 +1718,35 @@ func TestModel_PendingApprovalLeavesTypingToTheInput(t *testing.T) {
 	}()
 	waitForQueueLen(t, queue, 1)
 
-	// Once the input line holds text, every printable key belongs to it: the
-	// decision letters inside "abc" and "/clear" must decide nothing.
-	m.input.SetValue("note ")
-	for _, ch := range []string{"a", "b", "c", " ", "/", "c", "l", "e", "a", "r"} {
+	// A word with a decision letter in it must decide nothing and type nothing:
+	// the box stays empty and says where the keys go.
+	for _, ch := range []string{"a", "b", "c", " ", "x"} {
 		m.updateKey(testTextKey(ch)) //nolint:errcheck
 	}
 	if queue.Len() != 1 {
 		t.Fatal("typing must not decide a pending approval")
 	}
-	if got := m.input.Value(); got != "note abc /clear" {
-		t.Fatalf("input = %q, want %q", got, "note abc /clear")
-	}
-
-	// With text on the line, editing keys must reach the input too: a user
-	// who typed "x" can still backspace it rather than have the queue eat
-	// the keypress.
-	m.input.SetValue("x")
-	m.updateKey(tea.KeyPressMsg{Code: tea.KeyBackspace}) //nolint:errcheck
-	if queue.Len() != 1 {
-		t.Fatal("backspace must not decide a pending approval")
-	}
 	if got := m.input.Value(); got != "" {
-		t.Fatalf("input = %q, want backspace to clear it", got)
+		t.Fatalf("input = %q, want empty while an approval is open", got)
+	}
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, approvalLockedHint) {
+		t.Fatalf("locked input placeholder missing from %q", view)
 	}
 
-	// On an empty input line the dedicated decision keys still act.
-	m.input.SetValue("")
+	// The dialog's own keys still work, including the one whose letter also
+	// appears in the word the user tried to type.
+	m.updateKey(testTextKey("v")) //nolint:errcheck
+	if !m.approvals.expanded {
+		t.Fatal("v must still expand the selected approval")
+	}
 	m.updateKey(testTextKey("n")) //nolint:errcheck
 	if err := <-done; err == nil {
 		t.Fatal("n should still deny the selected request")
+	}
+	// The dialog closed: the prompt is a prompt again, not a locked note.
+	if view = ansi.Strip(m.View().Content); strings.Contains(view, approvalLockedHint) {
+		t.Fatal("closed approval dialog must restore the input box")
 	}
 }
 
