@@ -112,9 +112,11 @@ func TestModel_UpPullsQueuedMessageBackForEditing(t *testing.T) {
 }
 
 // Queuing leaves the interrupt alone: mid-turn ctrl+c still cancels the turn
-// in flight and keeps the UI open, and it neither drops nor sends the queue.
+// in flight and keeps the UI open, and the canceled turn end neither drops nor
+// flushes the queue.
 func TestModel_QueuedMessagesLeaveInterruptUnchanged(t *testing.T) {
-	m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, &fakePromptHistory{}, nil)
+	session := &fakeSession{}
+	m := newModel(context.Background(), session, nil, nil, nil, false, &fakePromptHistory{}, nil)
 	m.sending = true
 	m.queued = []string{"later"}
 	cancelled := false
@@ -124,16 +126,24 @@ func TestModel_QueuedMessagesLeaveInterruptUnchanged(t *testing.T) {
 	if isQuit(cmd) || !cancelled || !m.stopping {
 		t.Fatalf("cancelled = %v, stopping = %v", cancelled, m.stopping)
 	}
-	// The stop ends the turn, so the queued message flushes as the next turn;
-	// the stop itself neither drops it nor sends it.
-	if fmt.Sprintf("%v", m.queued) != "[later]" {
-		t.Fatalf("queued = %#v, want [later]", m.queued)
+	// The canceled send comes back as a response, and that turn end must not
+	// spend the queue: a stopped turn flushes nothing, so the queued message
+	// survives and no send runs.
+	_, _ = m.Update(responseMsg{err: context.Canceled})
+	last := m.chatLog.Last()
+	if fmt.Sprintf("%v", m.queued) != "[later]" || len(session.calls) != 0 || last == nil || last.text != "\u23f9 stopped" {
+		t.Fatalf("stopped turn end: queued = %#v, calls = %#v, last = %#v", m.queued, session.calls, last)
 	}
 	// esc is the same handler, so an esc with a queue pending behaves the same.
 	m.stopping = false
 	_, cmd = m.updateKey(testKey(tea.KeyEscape))
-	if isQuit(cmd) || len(m.queued) != 1 {
+	if isQuit(cmd) || fmt.Sprintf("%v", m.queued) != "[later]" {
 		// The queue is not esc's to clear.
 		t.Fatalf("esc with a queue should interrupt, queued = %#v", m.queued)
+	}
+	_, _ = m.Update(responseMsg{err: context.Canceled})
+	last = m.chatLog.Last()
+	if fmt.Sprintf("%v", m.queued) != "[later]" || len(session.calls) != 0 || last == nil || last.text != "\u23f9 stopped" {
+		t.Fatalf("esc turn end: queued = %#v, calls = %#v, last = %#v", m.queued, session.calls, last)
 	}
 }

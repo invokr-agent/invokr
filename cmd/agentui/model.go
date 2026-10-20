@@ -689,8 +689,9 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.cancelSend()
 		m.cancelSend = nil
 	}
+	interrupted := m.stopping || errors.Is(msg.err, context.Canceled)
 	switch {
-	case m.stopping || errors.Is(msg.err, context.Canceled):
+	case interrupted:
 		m.stopping = false
 		m.chatLog.Append(message{role: "tool", text: "⏹ stopped"})
 		m.recordedWarning = fmt.Sprintf("Interrupted · %d recorded · Alt+R", len(msg.evidence))
@@ -715,8 +716,9 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.recorded = "Interrupted — incomplete\n" + m.recorded
 	}
 	m.syncChatViewport(true)
-	// The turn ended, so the next queued message (if any) goes out now.
-	return m, tea.Batch(m.notify.turnDone(), m.notifyPendingCmd(), m.flushQueued())
+	// Only a clean turn end hands the queue its next message: a stop or an
+	// error leaves those messages queued until the user sends again.
+	return m, tea.Batch(m.notify.turnDone(), m.notifyPendingCmd(), m.flushQueued(interrupted, msg.err))
 }
 
 // responseMeta assembles the provenance line for an answer that just landed.
@@ -852,7 +854,7 @@ func (m *model) queuedArea() string {
 	// Fold newlines so a multi-line draft still reads as one entry.
 	folded := make([]string, len(m.queued))
 	for i, text := range m.queued {
-		folded[i] = fmt.Sprintf("%d \u2981 %s", i+1, strings.Join(strings.Split(text, "\n"), " "))
+		folded[i] = fmt.Sprintf("%d \u2981 %s", i+1, strings.ReplaceAll(text, "\n", " "))
 	}
 	// The whole block is muted: it is pending, not part of the transcript.
 	return ui.Invokr.Muted.Render(fmt.Sprintf("%d queued \u00b7 sent when this turn ends\n%s", len(m.queued), strings.Join(folded, "\n")))
@@ -1067,17 +1069,20 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if cmd, handled := m.runCommand(text); handled {
 		return m, cmd
 	}
-	// A turn is in flight: Enter keeps typing instead of losing the message.
-	if m.sending {
-		return m.queuePrompt(text)
-	}
-	// A message that actually gets sent hands the input back: a sent line left on the box keeps an open approval's decision keys off (they wait for an empty input) and glues the next typed slash command onto the stale prompt. Enter that queues still clears the box in queuePrompt.
 	m.input.Reset()
 	m.browsing, m.historyPos, m.draft = false, -1, ""
-
+	// Enter hands the input back whether the message queues or sends: a stale
+	// line keeps an open approval's decision keys off and glues the next typed
+	// slash command onto the old prompt.
 	if text == "" {
 		return m, nil
 	}
+	// A turn is in flight: hold the message for the flush instead of sending.
+	if m.sending {
+		m.queued = append(m.queued, text)
+		return m, nil
+	}
+
 	if text == "exit" || text == "quit" {
 		return m, m.quitCmd()
 	}
@@ -1088,18 +1093,6 @@ func (m *model) submit() (*model, tea.Cmd) {
 	}
 
 	return m, m.sendPrompt(text)
-}
-
-// queuePrompt holds a message Enter submitted while a turn was in flight. An
-// empty submit has nothing to hold, but the input is handed back either way,
-// so the count that queuedArea draws above the box stays the queue's truth.
-func (m *model) queuePrompt(text string) (*model, tea.Cmd) {
-	if text != "" {
-		m.queued = append(m.queued, text)
-	}
-	m.input.Reset()
-	m.browsing, m.historyPos, m.draft = false, -1, ""
-	return m, nil
 }
 
 // sendPrompt starts the turn for text the caller has already accepted. submit
@@ -1126,12 +1119,14 @@ func (m *model) sendPrompt(text string) tea.Cmd {
 	}, m.persistHistoryCmd(text), m.spinner.Tick)
 }
 
-// flushQueued sends one queued message when a turn ends, oldest first, so a
-// burst typed while the model worked goes out one turn at a time and each
+// flushQueued sends one queued message when a turn ends clean, oldest first, so
+// a burst typed while the model worked goes out one turn at a time and each
 // response can react to the message before it. The rest stay queued, and the
-// flush chains through the turn this send ends.
-func (m *model) flushQueued() tea.Cmd {
-	if len(m.queued) == 0 {
+// flush chains through the turn this send ends. A stopped or failed turn leaves
+// the queue alone: those messages wait for the next Enter, so an interrupt
+// cannot spend a message the user did not re-confirm.
+func (m *model) flushQueued(turnInterrupted bool, err error) tea.Cmd {
+	if turnInterrupted || err != nil || len(m.queued) == 0 {
 		return nil
 	}
 	text := m.queued[0]
