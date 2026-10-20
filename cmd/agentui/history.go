@@ -55,6 +55,16 @@ func (m *model) appendHistory(text string) {
 }
 
 func (m *model) historyUp() {
+	// While a turn is in flight and nothing is typed, up pulls the newest
+	// queued message back into the input so a mistake can be fixed before it is
+	// sent. It leaves the queue, so Enter re-queues it in place instead of a
+	// second copy being sent when the turn ends.
+	if m.input.Value() == "" && len(m.queued) > 0 {
+		m.input.SetValue(m.queued[len(m.queued)-1])
+		m.input.CursorEnd()
+		m.queued = m.queued[:len(m.queued)-1]
+		return
+	}
 	if len(m.history) == 0 || m.sending {
 		return
 	}

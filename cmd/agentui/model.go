@@ -69,6 +69,10 @@ type model struct {
 	// history walk displaced, and browsing says the walk is in progress.
 	lastPrompt, draft               string
 	browsing, sending, userScrolled bool
+	// queued holds messages Enter submitted while a turn was in flight: they
+	// render dimmed above the input with a count, go out in order when the turn
+	// ends, and up-arrow on an empty input pulls the newest back for editing.
+	queued []string
 	// cancelSend stops the turn in flight; stopping marks that the cancel was
 	// deliberate, so the response path renders a stop notice, not an error.
 	cancelSend      context.CancelFunc
@@ -711,7 +715,8 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.recorded = "Interrupted — incomplete\n" + m.recorded
 	}
 	m.syncChatViewport(true)
-	return m, tea.Batch(m.notify.turnDone(), m.notifyPendingCmd())
+	// The turn ended, so the next queued message (if any) goes out now.
+	return m, tea.Batch(m.notify.turnDone(), m.notifyPendingCmd(), m.flushQueued())
 }
 
 // responseMeta assembles the provenance line for an answer that just landed.
@@ -827,7 +832,30 @@ func (m *model) inputArea() string {
 		locked := inputBox(m.mainWidth()).BorderForeground(ui.Invokr.Palette.Muted)
 		return locked.Render(ui.Invokr.Muted.Render("answer the approval above"))
 	}
-	return inputBox(m.mainWidth()).Render(m.input.View())
+	// The queue rides above the box: it is input that already got a verdict
+	// (queued, not typed), so it belongs with the input it precedes. chatVisible
+	// Lines counts these rows through inputArea, so the transcript gives the
+	// space up instead of the queue drawing over it.
+	queued := m.queuedArea()
+	if queued == "" {
+		return inputBox(m.mainWidth()).Render(m.input.View())
+	}
+	return queued + "\n" + inputBox(m.mainWidth()).Render(m.input.View())
+}
+
+// queuedArea is the pending-message block: the count, then one dimmed line per
+// queued message in send order, numbered from the one Enter sends next.
+func (m *model) queuedArea() string {
+	if len(m.queued) == 0 {
+		return ""
+	}
+	// Fold newlines so a multi-line draft still reads as one entry.
+	folded := make([]string, len(m.queued))
+	for i, text := range m.queued {
+		folded[i] = fmt.Sprintf("%d \u2981 %s", i+1, strings.Join(strings.Split(text, "\n"), " "))
+	}
+	// The whole block is muted: it is pending, not part of the transcript.
+	return ui.Invokr.Muted.Render(fmt.Sprintf("%d queued \u00b7 sent when this turn ends\n%s", len(m.queued), strings.Join(folded, "\n")))
 }
 
 // inputBox frames the prompt in a rounded border. It replaces the filled
@@ -1039,11 +1067,10 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if cmd, handled := m.runCommand(text); handled {
 		return m, cmd
 	}
+	// A turn is in flight: Enter keeps typing instead of losing the message.
 	if m.sending {
-		return m, nil
+		return m.queuePrompt(text)
 	}
-	m.input.Reset()
-	m.browsing, m.historyPos, m.draft = false, -1, ""
 
 	if text == "" {
 		return m, nil
@@ -1057,6 +1084,25 @@ func (m *model) submit() (*model, tea.Cmd) {
 		return m.showHelp()
 	}
 
+	return m, m.sendPrompt(text)
+}
+
+// queuePrompt holds a message Enter submitted while a turn was in flight. An
+// empty submit has nothing to hold, but the input is handed back either way,
+// so the count that queuedArea draws above the box stays the queue's truth.
+func (m *model) queuePrompt(text string) (*model, tea.Cmd) {
+	if text != "" {
+		m.queued = append(m.queued, text)
+	}
+	m.input.Reset()
+	m.browsing, m.historyPos, m.draft = false, -1, ""
+	return m, nil
+}
+
+// sendPrompt starts the turn for text the caller has already accepted. submit
+// owns the input it clears; the queue flush does not, so a draft the user
+// pulled back with up-arrow survives the sends that follow.
+func (m *model) sendPrompt(text string) tea.Cmd {
 	m.appendHistory(text)
 	m.lastPrompt = text
 	m.recorded, m.recordedWarning, m.turnStart = "", "", m.chatLog.nextID
@@ -1071,10 +1117,23 @@ func (m *model) submit() (*model, tea.Cmd) {
 	m.cancelSend = cancel
 	images := m.images
 	m.images = nil
-	return m, tea.Batch(func() tea.Msg {
+	return tea.Batch(func() tea.Msg {
 		resp, err := m.send(sendCtx, text, images)
 		return responseMsg{text: resp.Message, usage: resp.Usage, failures: resp.ToolFailures, evidence: resp.ExecutionEvidence, err: err}
 	}, m.persistHistoryCmd(text), m.spinner.Tick)
+}
+
+// flushQueued sends one queued message when a turn ends, oldest first, so a
+// burst typed while the model worked goes out one turn at a time and each
+// response can react to the message before it. The rest stay queued, and the
+// flush chains through the turn this send ends.
+func (m *model) flushQueued() tea.Cmd {
+	if len(m.queued) == 0 {
+		return nil
+	}
+	text := m.queued[0]
+	m.queued = m.queued[1:]
+	return m.sendPrompt(text)
 }
 
 type contextCompactor interface{ RequestCompaction() }
