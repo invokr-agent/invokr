@@ -107,6 +107,9 @@ invokr exec --last "now write the fix"    # continue the last session
   Find them with `invokr skills search <term>`, then `invokr skills install <name>`.
 - **Chat transports.** Run the agent as a Telegram or Signal bot with
   `invokr bot serve`.
+- **Update detection.** The banner notes when a newer release exists; the check
+  never blocks startup or the UI, and it stays off for unstamped builds. Set
+  `INVOKR_NO_UPDATE_CHECK` to any non-empty value to skip the lookup.
 
 ### Platforms
 
