@@ -32,35 +32,19 @@ linters:
         type: "module"
         description: "Enforces the implementation Go LOC budget using gocloc."
         settings:
-          # Repo-wide ceiling. Raised 30330→35000 on 2026-08-25 on the evidence in
-          # docs/private/reviews/2026-08-25-loc-vs-peer-harnesses.md: measured against seven
-          # comparable harnesses, invokr is the second-smallest in its class with the
-          # broadest feature set, and crush — same language, same TUI framework — runs
-          # 2.2x larger with fewer features. The cap exists to catch runaway growth,
-          # not to hold the project below its own class.
+          # Repo-wide ceiling: the hard aggregate limit, enforced by gocloc. The per-area
+          # budgets in budget_test.go bind underneath this number.
           #
-          # Per-area budgets live in budget_test.go and bind underneath this number;
-          # this one stays the hard aggregate limit. Before raising it, lower it: trim
-          # implementation lines and set the cap to the exact measured count. Raise only
-          # when the count forces it, and only to that count — never above it.
-          # 35000→35100 on 2026-09-06: the /reasoning enable_thinking path landed
-          # with the repo sitting exactly on the cap; smallest bump that fits it.
-          # 35222→35226 2026-09-07: exec --json ledger ts/model stamping
-          # 35226→35232 2026-09-07: repeat-exhaustion summary wrap-up
-          # 2026-09-18: user approved +100 for #577; prune again on dev.
-          # 2026-10-08: baseline 35892 after runtime trim; cap has no spare lines.
-          # 2026-10-11 +73: custom lint counts 35965 with pinned Git binds and
-          # descriptor closure (#577 F1); the per-area reporter uses a different count.
-          # 2026-10-12 +81: #665 on-demand overlay and retained event details;
-          # exact fresh-cache count, no per-area cap change.
-          # 2026-10-12 +209: interactive /tools dialog on rebased dev;
-          # exact custom-lint count, no per-area cap change.
-          # 2026-10-12 +32: /tools status colors and Native/Custom tools tabs.
-          # 2026-10-12 +19: put /tools tabs on the outer panel border.
-          # 2026-10-16: reconcile merged per-model options and JSON profiles (#709, #708).
-          max-go-code-lines: 37583  # 37683→37583 2026-10-20: lowered to the measured count per the rule below (update.go shrunk 146→108). Rule: lower the ceiling to the measured count — trim lines, then set the cap to that count; raise only when the count forces it, and only to the count. Prior ledger: git log -p .golangci.yml
-          # 35690→35800 2026-09-07: round-8 harness fixes (shared /tmp out of the workspace, step-limit stop reason + banner, build-tool env prefixes) plus the peer's context budget/retention/compaction pass
-          # 35460→35540 2026-09-07: resumable interrupted exec sessions (interrupt persistence, --last preference + reporting, shared transcript attach)
+          # The cap exists to catch runaway growth, not to hold the project below its own
+          # class: measured against seven comparable harnesses, invokr is the second-smallest
+          # in its class with the broadest feature set, and crush — same language, same TUI
+          # framework — runs 2.2x larger with fewer features. See
+          # docs/private/reviews/2026-08-25-loc-vs-peer-harnesses.md.
+          #
+          # Before raising it, lower it: trim implementation lines and set the cap to the
+          # exact measured count. Raise only when the count forces it, and only to that
+          # count — never above it. Change history: git log -p .golangci.yml
+          max-go-code-lines: 37583  # set to the measured count; no spare lines
           include-tests: false
           exclude-generated: true
           exclude-dirs:
