@@ -30,6 +30,10 @@ func modeShellApproval(cfg config.ShellConfig, p preparedShellCommand) core.Appr
 		// with "Host key verification failed" and read like a broken host.
 		return core.Deny("git push cannot authenticate inside the shell sandbox; use git_write with op=push, which pushes the current branch with the user's git credentials after approval")
 	}
+	if req.Confined && callsGH(p.line) {
+		// The sandbox mounts no ~/.config/gh, so gh reports "not logged in".
+		return core.Deny(GHSandboxDenial)
+	}
 	req.Network, req.Publishes = p.networkAllowed(), p.publishes
 	req.RequiresScopedApproval = p.sandboxExec
 	if !req.Confined {
@@ -55,6 +59,32 @@ func Publishes(line string) bool {
 		return true
 	})
 	return result
+}
+
+// GHToolboxTool is the toolbox tool that does gh's GitHub API work outside the sandbox.
+const GHToolboxTool = "github_pr"
+
+// GHSandboxDenial is the shell denial for gh; the TUI keys its install suggestion off it.
+const GHSandboxDenial = "gh cannot authenticate inside the shell sandbox; to open a pull request use the " + GHToolboxTool + " toolbox tool (install it from /tools → Install if it is not available)"
+
+var ghWrappers = []string{"env", "timeout", "xargs", "command", "nice", "nohup"}
+
+// callsGH reports any gh call, including behind env/timeout/xargs wrappers.
+func callsGH(line string) bool {
+	file, err := syntax.NewParser().Parse(strings.NewReader(line), "")
+	if err != nil {
+		return false
+	}
+	found := false
+	syntax.Walk(file, func(n syntax.Node) bool {
+		if call, ok := n.(*syntax.CallExpr); ok {
+			words := core.MapSlice(call.Args, func(arg *syntax.Word) string { word, _ := literalWord(arg); return filepath.Base(word) })
+			// gh as the command, or anywhere behind a wrapper; `echo gh` is not a call.
+			found = found || len(words) > 0 && (words[0] == "gh" || slices.Contains(ghWrappers, words[0]) && slices.Contains(words, "gh"))
+		}
+		return true
+	})
+	return found
 }
 
 // gitPushes reports a `git … push` call: the first git subcommand, after

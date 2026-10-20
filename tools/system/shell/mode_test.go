@@ -234,3 +234,14 @@ func TestGitPushShapesAreRedirected(t *testing.T) {
 		}
 	}
 }
+
+func TestGHCallsAreRedirected(t *testing.T) {
+	for line, want := range map[string]bool{
+		"gh pr create": true, "/usr/bin/gh auth status": true, "env GH_DEBUG=1 gh pr view": true, "git push && gh pr create --fill": true,
+		"git status": false, "echo gh": false, "ghq list": false,
+	} {
+		if got := callsGH(line); got != want {
+			t.Errorf("callsGH(%q) = %v, want %v", line, got, want)
+		}
+	}
+}

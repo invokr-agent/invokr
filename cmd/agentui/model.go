@@ -55,10 +55,14 @@ type model struct {
 	// overlay is the modal popup drawn over the finished frame.
 	overlay    tuikit.Overlay
 	toolDialog toolDialog
-	settings   settingsPanel
-	chat       tuikit.MemoList
-	help       help.Model
-	input      textarea.Model
+	// pendingToolSuggestion names a toolbox tool to offer after this drain;
+	// toolSuggested keeps each offer to once per session.
+	pendingToolSuggestion string
+	toolSuggested         map[string]bool
+	settings              settingsPanel
+	chat                  tuikit.MemoList
+	help                  help.Model
+	input                 textarea.Model
 	// images are attached to the next submitted prompt.
 	images     []inference.ContentBlock
 	spinner    spinner.Model
@@ -744,7 +748,7 @@ func (m *model) updateToolEvents() (tea.Model, tea.Cmd) {
 	if m.logPanel.enabled() {
 		m.syncLogViewport()
 	}
-	return m, m.notifyPendingCmd()
+	return m, tea.Batch(m.notifyPendingCmd(), m.openToolSuggestion())
 }
 
 func (m *model) drainToolEvents() {
@@ -752,6 +756,7 @@ func (m *model) drainToolEvents() {
 		for _, ev := range m.toolEvents.Drain() {
 			m.chatLog.ApplyEvent(ev)
 			m.trackCompaction(ev)
+			m.noteToolSuggestion(ev)
 		}
 	}
 	m.clampQueueCursor()
