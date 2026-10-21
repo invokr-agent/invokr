@@ -12,8 +12,8 @@ import (
 // when the checker reports none.
 func TestVersionBadgeUpdateHint(t *testing.T) {
 	hinted := versionBadge("v0.2.0", "v0.3.0")
-	if !strings.Contains(hinted, "run invokr upgrade v0.3.0") {
-		t.Fatalf("badge = %q, want the upgrade hint for v0.3.0", hinted)
+	if !strings.Contains(hinted, "run invokr update v0.3.0") {
+		t.Fatalf("badge = %q, want the update hint for v0.3.0", hinted)
 	}
 	if got := versionBadge("v0.2.0", ""); got != "v0.2.0" {
 		t.Fatalf("badge = %q, want the bare stamp when the checker reports none", got)

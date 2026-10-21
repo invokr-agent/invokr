@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/invokr-ai/invokr/internal/installer"
 	"github.com/invokr-ai/invokr/platform/version"
@@ -14,23 +15,22 @@ import (
 // release over the one they are running.
 var runInstaller = installer.Run
 
-// UpgradeCommand replaces the running binary with a release build.
+// NewUpdateCmd replaces the running binary with a release build.
 //
 // The install goes through the same script the README pipes to sh, fetched at
-// runtime from that URL, so an upgrade cannot drift from a fresh install: same
+// runtime from that URL, so an update cannot drift from a fresh install: same
 // download, same checksum verification, same placement. Invokr keeps nothing
 // running in the background, so unlike a daemon there is no service to stop
 // before the binary is replaced or to start after it; the next invocation is
 // already the new build.
-func NewUpgradeCmd() *cobra.Command {
+func NewUpdateCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:     "upgrade [version]",
-		Aliases: []string{"update"},
-		Short:   "Install the latest release over this binary",
+		Use:   "update [version]",
+		Short: "Install the latest release over this binary",
 		Long: "Downloads a release, verifies its checksum, and replaces the binary this\n" +
-			"command came from. Pass a version (e.g. v0.2.1) to install that release\n" +
+			"command came from. Pass a version (e.g. 0.2.1 or v0.2.1) to install that release\n" +
 			"instead of the newest.",
-		Example: "  invokr upgrade\n  invokr upgrade v0.2.1",
+		Example: "  invokr update\n  invokr update 0.2.1",
 		Args:    cobra.MaximumNArgs(1),
 		GroupID: groupConfigure,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -41,13 +41,14 @@ func NewUpgradeCmd() *cobra.Command {
 			}
 			wanted := ""
 			if len(args) == 1 {
-				wanted = args[0]
+				// Release tags carry a leading v; accept the bare number too.
+				wanted = "v" + strings.TrimPrefix(args[0], "v")
 			}
-			return runUpgrade(cmd, wanted)
+			return runUpdate(cmd, wanted)
 		},
 	}
 }
 
-func runUpgrade(cmd *cobra.Command, wanted string) error {
+func runUpdate(cmd *cobra.Command, wanted string) error {
 	return runInstaller(cmd.Context(), wanted, cmd.OutOrStdout())
 }

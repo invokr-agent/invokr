@@ -5,8 +5,8 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh | sh
 #
-# `invokr upgrade` fetches this same file at runtime and feeds it to sh, so a
-# fresh install and an upgrade never drift apart.
+# `invokr update` fetches this same file at runtime and feeds it to sh, so a
+# fresh install and an update never drift apart.
 #
 # Env overrides:
 #   INVOKR_INSTALL_REPO      owner/repo to pull releases from (required if

@@ -177,7 +177,7 @@ func registerCommands(rootCmd *cobra.Command, appConfig *config.AppConfig, activ
 	// which would otherwise merge root's persistent flags into agentCmd.Flags().
 	rootCmd.Flags().AddFlagSet(agentCmd.Flags())
 	rootCmd.AddCommand(agentCmd, execCmd, NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewChatCmd(services),
-		NewConfigCmd(appConfig), NewDoctorCmd(appConfig), NewSkillsCmd(appConfig), NewToolboxCmd(appConfig), NewProviderCmd(), NewUpgradeCmd(), &cobra.Command{
+		NewConfigCmd(appConfig), NewDoctorCmd(appConfig), NewSkillsCmd(appConfig), NewToolboxCmd(appConfig), NewProviderCmd(), NewUpdateCmd(), &cobra.Command{
 			Use: "version", Short: "Print the version (same as --version)", GroupID: groupConfigure, Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {
 				_, err := fmt.Fprintf(cmd.OutOrStdout(), "invokr %s\n", cmd.Root().Version)
@@ -218,10 +218,10 @@ func skipsRuntimeBootstrap(cmd *cobra.Command) bool {
 	// must never bootstrap; provider commands only touch the install cache and
 	// the config file. Jobs commands manage the store directly; `jobs run`
 	// bootstraps its own runtime inside jobs.RunJob, so the root bootstrap
-	// would create a second one. `upgrade` only fetches a release and replaces
+	// would create a second one. `update` only fetches a release and replaces
 	// this binary, so it needs no model either.
 	return hasAncestorNamed(cmd, "jobs", "config", "skills", "provider") ||
-		slices.Contains([]string{"setup", "doctor", "version", "upgrade"}, cmd.Name())
+		slices.Contains([]string{"setup", "doctor", "version", "update"}, cmd.Name())
 }
 
 func hasAncestorNamed(cmd *cobra.Command, names ...string) bool {

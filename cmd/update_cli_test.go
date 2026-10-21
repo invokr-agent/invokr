@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"slices"
 	"testing"
 
 	"github.com/invokr-ai/invokr/platform/version"
@@ -26,7 +25,7 @@ func stub(failure error) func(context.Context, string, io.Writer) error {
 	}
 }
 
-func upgradeFor(t *testing.T, failure error) (*cobra.Command, *bytes.Buffer) {
+func updateFor(t *testing.T, failure error) (*cobra.Command, *bytes.Buffer) {
 	t.Helper()
 	original, stamped := runInstaller, version.Version
 	seen = []string{}
@@ -34,36 +33,36 @@ func upgradeFor(t *testing.T, failure error) (*cobra.Command, *bytes.Buffer) {
 	version.Version = "v0.0.1"
 	runInstaller = stub(failure)
 	out := &bytes.Buffer{}
-	command := NewUpgradeCmd()
+	command := NewUpdateCmd()
 	command.SetOut(out)
 	command.SetErr(out)
 	return command, out
 }
 
-func TestUpgradePassesTheRequestedVersion(t *testing.T) {
-	command, out := upgradeFor(t, nil)
+func TestUpdatePassesTheRequestedVersion(t *testing.T) {
+	command, out := updateFor(t, nil)
 	command.SetArgs([]string{"v0.2.1"})
 	if err := command.Execute(); err != nil {
-		t.Fatalf("upgrade v0.2.1: %v (out = %q)", err, out.String())
+		t.Fatalf("update v0.2.1: %v (out = %q)", err, out.String())
 	}
 	if len(seen) != 1 || seen[0] != "v0.2.1" {
 		t.Fatalf("installer got %v, want [v0.2.1]", seen)
 	}
 }
 
-func TestUpgradeOmittedVersionMeansNewest(t *testing.T) {
-	command, out := upgradeFor(t, nil)
+func TestUpdateOmittedVersionMeansNewest(t *testing.T) {
+	command, out := updateFor(t, nil)
 	command.SetArgs([]string{})
 	if err := command.Execute(); err != nil {
-		t.Fatalf("upgrade: %v (out = %q)", err, out.String())
+		t.Fatalf("update: %v (out = %q)", err, out.String())
 	}
 	if len(seen) != 1 || seen[0] != "" {
 		t.Fatalf("installer got %v, want one empty version", seen)
 	}
 }
 
-func TestUpgradeRefusesDevBuild(t *testing.T) {
-	command, _ := upgradeFor(t, nil)
+func TestUpdateRefusesDevBuild(t *testing.T) {
+	command, _ := updateFor(t, nil)
 	version.Version = "dev"
 	command.SetArgs([]string{})
 	if err := command.Execute(); err == nil {
@@ -74,8 +73,13 @@ func TestUpgradeRefusesDevBuild(t *testing.T) {
 	}
 }
 
-func TestUpgradeAcceptsUpdateAlias(t *testing.T) {
-	if !slices.Contains(NewUpgradeCmd().Aliases, "update") {
-		t.Fatal("aliases = [], want update")
+func TestUpdateAddsTheVPrefix(t *testing.T) {
+	command, out := updateFor(t, nil)
+	command.SetArgs([]string{"0.2.1"})
+	if err := command.Execute(); err != nil {
+		t.Fatalf("update 0.2.1: %v (out = %q)", err, out.String())
+	}
+	if len(seen) != 1 || seen[0] != "v0.2.1" {
+		t.Fatalf("installer got %v, want [v0.2.1]", seen)
 	}
 }

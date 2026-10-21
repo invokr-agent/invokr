@@ -68,7 +68,7 @@ func versionBadge(stamp, update string) string {
 	if update == "" {
 		return stamp
 	}
-	return stamp + " · " + ui.Invokr.Muted.Render("run invokr upgrade "+update)
+	return stamp + " · " + ui.Invokr.Muted.Render("run invokr update "+update)
 }
 
 // buildVersion is the badge text, including the update hint when the checker

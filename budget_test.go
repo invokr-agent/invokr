@@ -43,7 +43,7 @@ var budgets = []area{
 	// the cap should not be what stops the TUI catching up.
 	{"cmd/agentui", 6000},
 	{"cmd", 2500},
-	// 2026-10-21 set to the measured count when the upgrade command landed; +20
+	// 2026-10-21 set to the measured count when the update command landed; +20
 	// later the same day once the installer fetches its script at runtime.
 	{"internal", 76},
 
