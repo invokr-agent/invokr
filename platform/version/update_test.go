@@ -95,6 +95,10 @@ func TestTagOrdering(t *testing.T) {
 		{"v0.2.0", "v0.2.0", ""},
 		{"v0.1.0", "v0.2.0", ""},
 		{"v0.10.0", "v0.9.0", "v0.10.0"},
+		// The stamp goreleaser writes: {{.Version}} drops the leading v, so the
+		// build identity needs the prefix back before semver compares it.
+		{"v0.3.0", "0.3.0", ""},
+		{"v0.4.0", "0.3.0", "v0.4.0"},
 	}
 	for _, c := range cases {
 		resetCache()

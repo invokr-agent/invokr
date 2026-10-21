@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -129,7 +130,11 @@ func LatestVersion() string {
 
 	fetchMu.Lock()
 	defer fetchMu.Unlock()
-	if semver.Compare(newestTag, Version) > 0 {
+	// goreleaser stamps Version as {{.Version}}, the tag with its leading v dropped,
+	// and x/mod/semver reads an unprefixed number as invalid, sorting it below
+	// every release: without the prefix restored, an up-to-date build claims an
+	// update for the release it already runs.
+	if semver.Compare(newestTag, "v"+strings.TrimPrefix(Version, "v")) > 0 {
 		return newestTag
 	}
 	return ""

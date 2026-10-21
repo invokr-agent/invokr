@@ -1,7 +1,6 @@
 package agentui
 
 import (
-	"os"
 	"strings"
 	"testing"
 
@@ -33,8 +32,7 @@ func TestUpdateHintOffForDevAndOptOut(t *testing.T) {
 	if got := buildVersion(); strings.Contains(got, "update") {
 		t.Fatalf("unstamped badge = %q, want no update hint", got)
 	}
-	_ = os.Setenv("INVOKR_NO_UPDATE_CHECK", "1")
-	defer func() { _ = os.Unsetenv("INVOKR_NO_UPDATE_CHECK") }()
+	t.Setenv("INVOKR_NO_UPDATE_CHECK", "1")
 	version.Version = "v0.2.0"
 	version.Commit = "abc1234"
 	version.Date = "2026-10-20T00:00:00Z"
