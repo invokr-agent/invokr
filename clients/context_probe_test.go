@@ -58,3 +58,52 @@ func TestClient_MetadataReadsNestedModelMeta(t *testing.T) {
 		t.Fatalf("expected context window 204800, got %d", metadata.ContextWindowTokens)
 	}
 }
+
+// TestClient_MetadataFallsBackToSoleListModel: a configured id missing from the
+// listing still gets a window when exactly one listed model carries one, because
+// that model is the only one the configured id could mean.
+func TestClient_MetadataFallsBackToSoleListModel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/props" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"other","object":"model"},{"id":"ornith","n_ctx":4096}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	metadata, err := client.Metadata(context.Background(), "requested")
+	if err != nil {
+		t.Fatalf("Metadata() returned error: %v", err)
+	}
+	if metadata.Source != "models list" {
+		t.Fatalf("expected metadata source, got %q", metadata.Source)
+	}
+	if metadata.ContextWindowTokens != 4096 {
+		t.Fatalf("expected context window 4096, got %d", metadata.ContextWindowTokens)
+	}
+}
+
+// TestClient_MetadataSkipsAmbiguousModelList: two windowed models say nothing
+// about a configured id the listing does not name, so the ctx limit stays blank
+// rather than quoting the widest one.
+func TestClient_MetadataSkipsAmbiguousModelList(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/props" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"other","n_ctx":4096},{"id":"second","context":262144}]}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	metadata, err := client.Metadata(context.Background(), "requested")
+	if err != nil {
+		t.Fatalf("Metadata() returned error: %v", err)
+	}
+	if metadata.ContextWindowTokens != 0 || metadata.Source != "" {
+		t.Fatalf("ambiguous listing quoted a window: %d from %q", metadata.ContextWindowTokens, metadata.Source)
+	}
+}

@@ -166,7 +166,11 @@ func (g *OpenAIModelGateway) RetryCounts() map[string]int {
 // and drops the name the last response reported serving: it describes the model
 // that answered before the switch, so a caller showing the model falls back to
 // the new configured name until the next response reports what answered.
-func (g *OpenAIModelGateway) SetModel(name string) { g.mu.Lock(); g.model, g.servedModel = name, ""; g.mu.Unlock() }
+func (g *OpenAIModelGateway) SetModel(name string) {
+	g.mu.Lock()
+	g.model, g.servedModel = name, ""
+	g.mu.Unlock()
+}
 
 // Model returns the currently configured model name.
 func (g *OpenAIModelGateway) Model() string { g.mu.RLock(); defer g.mu.RUnlock(); return g.model }
