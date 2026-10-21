@@ -157,6 +157,7 @@ func newModelWithCommands(ctx context.Context, session turn.Session, commands Co
 		logPanel:      newLogPanel(logs),
 		logView:       logView,
 		toolEvents:    toolEvents,
+		toolSuggested: map[string]bool{},
 		approvalQueue: approvalQueue,
 		commands:      commands,
 		policy:        approval.NewPolicy(approval.Manual, false),

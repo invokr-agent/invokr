@@ -308,11 +308,9 @@ func (m *model) updateToolToggle(msg toolToggleMsg) {
 	d.saving = false
 	switch {
 	case msg.hubLoaded && msg.err == nil:
-		d.hub = append([]toolbox.HubTool{}, msg.hub...)
+		d.hub, d.feedback = append([]toolbox.HubTool{}, msg.hub...), ""
 		if i := slices.IndexFunc(d.hub, func(t toolbox.HubTool) bool { return t.Name == d.suggest }); i > 0 {
 			d.hub = slices.Insert(slices.Delete(d.hub, i, i+1), 0, msg.hub[i])
-		} else if i < 0 {
-			d.feedback = ""
 		}
 	case msg.installed && msg.err == nil:
 		for i := range d.hub {

@@ -30,9 +30,6 @@ func (m *model) openToolSuggestion() tea.Cmd {
 	if name == "" || m.overlay.IsOpen() {
 		return nil
 	}
-	if m.toolSuggested == nil {
-		m.toolSuggested = map[string]bool{}
-	}
 	m.toolSuggested[name] = true
 	if source, ok := m.session.(toolSpecSource); ok && slices.ContainsFunc(source.ToolSpecs(), func(s toolcore.ToolSpec) bool { return s.Name == name }) {
 		return nil
