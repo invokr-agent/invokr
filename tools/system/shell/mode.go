@@ -69,7 +69,7 @@ const GHSandboxDenial = "gh cannot authenticate inside the shell sandbox; to ope
 
 var ghWrappers = []string{"env", "timeout", "xargs", "command", "nice", "nohup"}
 
-// callsGH reports any gh call, including behind env/timeout/xargs wrappers.
+// callsGH reports gh as a command, including the command a wrapper runs.
 func callsGH(line string) bool {
 	file, err := syntax.NewParser().Parse(strings.NewReader(line), "")
 	if err != nil {
@@ -78,13 +78,38 @@ func callsGH(line string) bool {
 	found := false
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok {
-			words := core.MapSlice(call.Args, func(arg *syntax.Word) string { word, _ := literalWord(arg); return filepath.Base(word) })
-			// gh as the command, or anywhere behind a wrapper; `echo gh` is not a call.
-			found = found || len(words) > 0 && (words[0] == "gh" || slices.Contains(ghWrappers, words[0]) && slices.Contains(words, "gh"))
+			words := callWords(call)
+			// gh as the command, or as the command a wrapper runs; `echo gh` is not one.
+			// Words keep their path so a wrapper's VAR=val survives; compare by basename.
+			found = found || len(words) > 0 && (isGH(words[0]) || slices.Contains(ghWrappers, filepath.Base(words[0])) && wrappedGH(words))
 		}
 		return true
 	})
 	return found
+}
+
+// wrappedGH is true when a wrapper runs gh as its command: the first word left
+// is the command, so a wrapper's flags, a VAR=val assignment and a numeric
+// argument (timeout's duration, nice's offset) are stepped over. A flag that
+// names its argument in the next word (env -u NAME) leaves that name looking
+// like the command, and the line reads as that command rather than gh.
+func wrappedGH(words []string) bool {
+	for i := 1; i < len(words); i++ {
+		w, digit := words[i], words[i] != "" && '0' <= words[i][0] && words[i][0] <= '9'
+		if strings.HasPrefix(w, "-") || strings.Contains(w, "=") || digit {
+			continue
+		}
+		return isGH(w)
+	}
+	return false
+}
+
+// isGH matches gh by basename, so /usr/bin/gh counts.
+func isGH(word string) bool { return filepath.Base(word) == "gh" }
+
+// callWords is the literal words of a call, paths left alone.
+func callWords(call *syntax.CallExpr) []string {
+	return core.MapSlice(call.Args, func(arg *syntax.Word) string { word, _ := literalWord(arg); return word })
 }
 
 // gitPushes reports a `git … push` call: the first git subcommand, after
@@ -97,7 +122,7 @@ func gitPushes(line string) bool {
 	found := false
 	syntax.Walk(file, func(n syntax.Node) bool {
 		if call, ok := n.(*syntax.CallExpr); ok {
-			words := core.MapSlice(call.Args, func(arg *syntax.Word) string { word, _ := literalWord(arg); return word })
+			words := callWords(call)
 			// Any git word, so env/timeout/xargs wrappers are caught too.
 			i := slices.IndexFunc(words, func(w string) bool { return filepath.Base(w) == "git" })
 			found = found || i >= 0 && gitSubcommand(words[i+1:]) == "push"
@@ -120,10 +145,7 @@ func gitSubcommand(args []string) string {
 }
 
 func publishesCall(call *syntax.CallExpr) bool {
-	return publishesWords(core.MapSlice(call.Args, func(arg *syntax.Word) string {
-		word, _ := literalWord(arg)
-		return word
-	}))
+	return publishesWords(callWords(call))
 }
 
 func publishesWords(words []string) bool {

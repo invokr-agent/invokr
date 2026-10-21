@@ -237,8 +237,8 @@ func TestGitPushShapesAreRedirected(t *testing.T) {
 
 func TestGHCallsAreRedirected(t *testing.T) {
 	for line, want := range map[string]bool{
-		"gh pr create": true, "/usr/bin/gh auth status": true, "env GH_DEBUG=1 gh pr view": true, "git push && gh pr create --fill": true,
-		"git status": false, "echo gh": false, "ghq list": false,
+		"gh pr create": true, "/usr/bin/gh auth status": true, "env GH_DEBUG=1 gh pr view": true, "git push && gh pr create --fill": true, "timeout 60 gh pr create": true, "nice -n 10 gh issue list": true, "xargs -n1 gh pr merge": true, "env PATH=/usr/bin gh pr view": true,
+		"git status": false, "echo gh": false, "ghq list": false, "timeout 60 rg gh .": false, "xargs grep gh": false, "env ghq list": false,
 	} {
 		if got := callsGH(line); got != want {
 			t.Errorf("callsGH(%q) = %v, want %v", line, got, want)
