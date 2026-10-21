@@ -44,7 +44,7 @@ This document defines where responsibilities belong. New logic should extend the
 | Agent-facing scheduled-job tool (list/add/modify/remove) | `tools/system/schedule/` |
 | Agent-facing session todo list (state + tool) | `tools/system/todo/` |
 | Logging buffer and logger setup | `platform/logging/` |
-| Build-time version/commit/date (ldflags) | `platform/version/` |
+| Build-time version/commit/date (ldflags), and the non-blocking check for a newer release | `platform/version/` |
 | First-run/setup flow | `platform/setup/` |
 | Shared UI styles/helpers | `surface/ui/` |
 | Test helpers | `support/testutil/` |

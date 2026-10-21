@@ -26,8 +26,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-var buildVersionString = buildVersion()
-
 // rule is the accent bar that marks a turn or a banner as belonging to the
 // agent, standing in for the design's left border. It is empty in the current
 // style, so nothing paints it.
@@ -53,7 +51,7 @@ func renderIntro(width, height int) string {
 	if width >= logoMinWidth && height >= logoMinHeight {
 		brand = ui.Invokr.Logo()
 	}
-	meta := ui.Invokr.Muted.Render("agent started") + "  " + ui.Invokr.Pill(ui.Invokr.Info, buildVersionString)
+	meta := ui.Invokr.Muted.Render("agent started") + "  " + ui.Invokr.Pill(ui.Invokr.Info, buildVersion())
 	// Two columns joined at their vertical centers: the logo can grow as tall as it
 	// likes without pushing the badges onto a line of their own.
 	head := lipgloss.JoinHorizontal(lipgloss.Center, brand, "  ", wrapText(meta, max(0, width-lipgloss.Width(brand)-2)))
@@ -61,7 +59,25 @@ func renderIntro(width, height int) string {
 	return head + "\n" + ui.BlendText(strings.Repeat("─", max(1, width)), ui.Invokr.Palette.Brand, ui.Invokr.Palette.Blue)
 }
 
+// versionBadge is the header badge: the build stamp, plus a muted hint when the
+// update checker reports a newer release. The checker never blocks, so the hint
+// appears on a later render, once its background fetch has landed.
+func versionBadge(stamp, update string) string {
+	if update == "" {
+		return stamp
+	}
+	return stamp + " · " + ui.Invokr.Muted.Render("update "+update+" available")
+}
+
+// buildVersion is the badge text, including the update hint when the checker
+// reports a newer release than this build.
 func buildVersion() string {
+	return versionBadge(versionStamp(), version.LatestVersion())
+}
+
+// versionStamp is the build identity: a stamped build shows its tag, commit and
+// date; an unstamped one shows "dev".
+func versionStamp() string {
 	// A dev/release build stamped through -ldflags (see the Makefile's install
 	// and dev targets) knows its commit and build date; that beats anything
 	// debug.ReadBuildInfo can tell us, so show it verbatim.
