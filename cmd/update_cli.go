@@ -17,9 +17,8 @@ var runInstaller = installer.Run
 
 // NewUpdateCmd replaces the running binary with a release build.
 //
-// The install goes through the same script the README pipes to sh, embedded
-// here at build time, so an update cannot drift from a fresh install: same
-// download, same checksum verification, same placement. Invokr keeps nothing
+// The download and checksum check run in Go, so nothing fetched at update time
+// is executed before it is verified. Invokr keeps nothing
 // running in the background, so unlike a daemon there is no service to stop
 // before the binary is replaced or to start after it; the next invocation is
 // already the new build.
