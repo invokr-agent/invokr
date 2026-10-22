@@ -8,11 +8,11 @@ import (
 )
 
 // TestVersionBadgeUpdateHint checks the header badge composition: the hint
-// renders when the checker reports a newer release, and nothing renders when it
-// reports none.
+// renders as the command that fetches the newer release, and nothing renders
+// when the checker reports none.
 func TestVersionBadgeUpdateHint(t *testing.T) {
 	hinted := versionBadge("v0.2.0", "v0.3.0")
-	if !strings.Contains(hinted, "update v0.3.0 available") {
+	if !strings.Contains(hinted, "run invokr update v0.3.0") {
 		t.Fatalf("badge = %q, want the update hint for v0.3.0", hinted)
 	}
 	if got := versionBadge("v0.2.0", ""); got != "v0.2.0" {

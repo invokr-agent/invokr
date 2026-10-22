@@ -3,7 +3,7 @@
 # matching release asset from GitHub Releases, verifies its checksum, and
 # installs the binary to ~/.local/bin.
 #
-#   curl -fsSL https://raw.githubusercontent.com/<owner>/<repo>/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh | sh
 #
 # Env overrides:
 #   INVOKR_INSTALL_REPO      owner/repo to pull releases from (required if

@@ -60,13 +60,15 @@ func renderIntro(width, height int) string {
 }
 
 // versionBadge is the header badge: the build stamp, plus a muted hint when the
-// update checker reports a newer release. The checker never blocks, so the hint
-// appears on a later render, once its background fetch has landed.
+// update checker reports a newer release. The hint is the literal command that
+// fetches it, so the user does not have to look up how to act on it. The
+// checker never blocks, so the hint appears on a later render, once its
+// background fetch has landed.
 func versionBadge(stamp, update string) string {
 	if update == "" {
 		return stamp
 	}
-	return stamp + " · " + ui.Invokr.Muted.Render("update "+update+" available")
+	return stamp + " · " + ui.Invokr.Muted.Render("run invokr update "+update)
 }
 
 // buildVersion is the badge text, including the update hint when the checker
