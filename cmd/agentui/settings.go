@@ -60,7 +60,7 @@ type settingsPanel struct {
 func runSettingsCommand(m *model, _ string, _ []string) tea.Cmd { return m.openSettings() }
 
 func settingsPlainText(turn.Session, []string) string {
-	return "the settings panel is TUI-only; use /mode, /model, /reasoning, /profile, /progress (Mouse, Notify and Syntax theme are TUI-only settings edits)"
+	return "the settings panel is TUI-only; use /usage, /mode, /model, /reasoning, /profile, /progress (Mouse, Notify and Syntax theme are TUI-only settings edits)"
 }
 
 func (m *model) openSettings() tea.Cmd {

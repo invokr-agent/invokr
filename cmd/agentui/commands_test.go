@@ -185,7 +185,7 @@ func TestPlainLiveCommands(t *testing.T) {
 	}
 	tests := map[string]string{
 		"/tools":   "NATIVE TOOLS",
-		"/usage": "context: 250 / 1,000 tokens (25%)",
+		"/usage":   "context: 250 / 1,000 tokens (25%)",
 		"/compact": "context before compaction: context: 250 / 1,000 tokens (25%)",
 	}
 	for command, want := range tests {
@@ -213,7 +213,7 @@ func TestCommandRegistryIsComplete(t *testing.T) {
 // there, and /usage's first line ("context: N / M tokens") already names the
 // section. /grants lists as its command and arguments, not the "usage: " line an
 // error returns. The /tools listing keeps its group rules (NATIVE TOOLS, TOOLBOX
-//) because those separate groups rather than restate the title, and the recorded
+// ) because those separate groups rather than restate the title, and the recorded
 // overlay's title is lowercase like every other overlay title and the hint.
 func TestOverlayBodiesSitUnderTheirOwnTitle(t *testing.T) {
 	session := &liveCommandSession{
@@ -250,6 +250,7 @@ func TestOverlayBodiesSitUnderTheirOwnTitle(t *testing.T) {
 	m.showRecorded()
 	if got := m.overlay.Title(); got != "recorded calls" {
 		t.Fatalf("recorded overlay title = %q, want %q", got, "recorded calls")
+	}
 }
 
 // Mouse, Notify and Syntax theme are permanent preferences the /settings View

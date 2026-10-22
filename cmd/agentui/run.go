@@ -35,9 +35,10 @@ type Params struct {
 	// persistence, which is what the plain and test paths want.
 	PrefsDir string
 	// SyntaxTheme is config's ui.syntax_theme. Empty matches the terminal
-	// background; a stylesheet picked with /syntax shadows it.
+	// background; a stylesheet picked in the settings View tab shadows it.
 	SyntaxTheme string
-	// NotifyMode is config's ui.notify. A mode picked with /notify shadows it.
+	// NotifyMode is config's ui.notify. A mode picked in the settings View tab
+	// shadows it.
 	NotifyMode  string
 	Transcript  []turn.TranscriptMessage
 	In          io.Reader

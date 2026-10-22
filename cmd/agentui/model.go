@@ -51,7 +51,7 @@ type model struct {
 	completion completion
 	// The four list overlays that take the input area's place; at most one is
 	// open at a time (see inputArea).
-	modelPicker, syntaxPicker, skillPicker, palette listPicker
+	modelPicker, skillPicker, palette listPicker
 	// overlay is the modal popup drawn over the finished frame.
 	overlay    tuikit.Overlay
 	toolDialog toolDialog
@@ -443,7 +443,7 @@ func (m *model) updateOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if cmd, handled := m.updateSkillPickerKey(msg); handled {
 		return cmd, true
 	}
-	handled := m.updateModelPickerKey(msg) || m.updateSyntaxPickerKey(msg) || m.updateCompletionKey(msg) || m.updateViewSwitchKey(msg) || m.updateChatViewportKey(msg)
+	handled := m.updateModelPickerKey(msg) || m.updateCompletionKey(msg) || m.updateViewSwitchKey(msg) || m.updateChatViewportKey(msg)
 	return nil, handled
 }
 
@@ -783,7 +783,8 @@ func (m *model) View() tea.View {
 	v := tea.NewView(content)
 	v.AltScreen = true
 	// Mouse tracking costs the terminal its own selection, so the drag is
-	// handled here instead (see mouse.go) and /mouse off hands it back.
+	// handled here instead (see mouse.go) and the View tab's Mouse: off hands it
+	// back.
 	v.MouseMode = m.mouseMode.teaMode()
 	return v
 }
@@ -809,11 +810,12 @@ func (m *model) mainView() string {
 	return content
 }
 
-// inputArea is the bottom block: normally the prompt, or the /model or /syntax
-// overlay while one is open. Both the view and the viewport height math go through here
-// so the transcript never overlaps whichever one is showing.
+// inputArea is the bottom block: normally the prompt, or an open picker (/model,
+// /skills, the palette) while one is showing. Both the view and the viewport
+// height math go through here so the transcript never overlaps whichever one is
+// showing.
 func (m *model) inputArea() string {
-	for _, picker := range []*listPicker{&m.modelPicker, &m.syntaxPicker, &m.skillPicker, &m.palette} {
+	for _, picker := range []*listPicker{&m.modelPicker, &m.skillPicker, &m.palette} {
 		if picker.open {
 			return picker.view(m.mainWidth())
 		}
@@ -900,7 +902,7 @@ func (m *model) helpHint() string {
 	// takes the selection down takes the message with it, so it never goes
 	// stale and needs no timer.
 	if m.copiedChars > 0 && !m.selection.Empty() && time.Since(m.copiedAt) < copyNoticeWindow {
-		return ui.Invokr.GradientText(fmt.Sprintf("copy requested: %d chars · terminal must allow clipboard access · /mouse off for native selection", m.copiedChars))
+		return ui.Invokr.GradientText(fmt.Sprintf("copy requested: %d chars · terminal must allow clipboard access · Mouse: off in the settings View tab for native selection", m.copiedChars))
 	}
 	if m.hideHints && !m.help.ShowAll {
 		return hintAffordance(m.keys.ToggleHints, "show hints")

@@ -15,15 +15,15 @@ const prefsFile = "ui-prefs.json"
 
 type prefs struct {
 	HideHints bool `json:"hide_hints"`
-	// SyntaxTheme is the stylesheet picked with /syntax. It shadows the
+	// SyntaxTheme is the stylesheet picked in the settings View tab. It shadows the
 	// config's ui.syntax_theme, on the same principle as HideHints: what the
 	// user changed with a keystroke should still be true tomorrow.
 	SyntaxTheme string `json:"syntax_theme,omitempty"`
-	// MouseMode is the tracking preset picked with /mouse. Empty means the
-	// default ("on"), which is what every prefs file written before it holds.
+	// MouseMode is the tracking preset picked in the settings View tab. Empty means
+	// the default ("on"), which is what every prefs file written before it holds.
 	MouseMode string `json:"mouse_mode,omitempty"`
-	// NotifyMode is the attention-signal mode picked with /notify. Empty means
-	// "no explicit choice": the config's ui.notify (or off) applies.
+	// NotifyMode is the attention-signal mode picked in the settings View tab. Empty
+	// means "no explicit choice": the config's ui.notify (or off) applies.
 	NotifyMode string `json:"notify_mode,omitempty"`
 }
 

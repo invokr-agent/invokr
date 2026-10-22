@@ -28,8 +28,8 @@ var (
 
 // syntaxTheme is the chroma stylesheet fenced code is highlighted with. Empty
 // means "match the terminal background", which is the default and what an
-// unanswered setup question leaves behind. Set from config at startup and by
-// the /syntax picker.
+// unanswered setup question leaves behind. Set from config at startup and by the
+// settings View tab's Syntax theme row.
 var syntaxTheme string
 
 func init() { resetMarkdown() }

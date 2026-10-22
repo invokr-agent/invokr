@@ -84,20 +84,6 @@ func (m *model) updateModelPickerKey(msg tea.KeyPressMsg) bool {
 // stylesheet follow the terminal background instead of pinning one.
 const autoSyntaxTheme = "auto"
 
-func (m *model) updateSyntaxPickerKey(msg tea.KeyPressMsg) bool {
-	return m.syntaxPicker.updateKey(msg, func(name string) {
-		if name == "" {
-			return
-		}
-		if name == autoSyntaxTheme {
-			name = ""
-		}
-		if name != m.syntaxPicker.current {
-			m.applySyntaxTheme(name)
-		}
-	})
-}
-
 // applySyntaxTheme repaints the transcript in the chosen stylesheet and
 // remembers it. The renderers are rebuilt rather than told about the change:
 // the renderer captures its stylesheet, and the streamer caches what it has
