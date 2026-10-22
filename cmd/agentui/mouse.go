@@ -26,8 +26,8 @@ const (
 	mouseAll
 )
 
-// mouseModeNames is the presets in value order: the /mouse argument, the
-// stored preference, and what the command echoes back are all this list.
+// mouseModeNames is the presets in value order: the stored preference, what the
+// settings View tab offers, and what the setter echoes back are all this list.
 var mouseModeNames = []string{"on", "off", "all"}
 
 func (m mouseMode) String() string { return mouseModeNames[m] }
@@ -100,10 +100,10 @@ func (m *model) updateMouse(msg tea.Msg) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// setMouseMode is the /mouse command: no argument reports, a preset switches
-// and is remembered.
+// setMouseMode is the settings View tab's Mouse edit: no argument reports, a
+// preset switches and is remembered.
 func (m *model) setMouseMode(args []string) {
-	const usage = "usage: /mouse [on|off|all]"
+	const usage = "mouse takes one of: on, off, all (settings View tab)"
 	if len(args) == 0 {
 		m.commandMessage("mouse: " + m.mouseMode.String())
 		return

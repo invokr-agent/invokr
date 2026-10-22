@@ -10,7 +10,6 @@ import (
 
 	"github.com/invokr-ai/invokr/capability/approval"
 
-	"github.com/antonikliment/tuikit/markdown"
 	humanize "github.com/dustin/go-humanize"
 
 	"github.com/antonikliment/tuikit"
@@ -82,8 +81,6 @@ func init() {
 		{name: "jobs", usage: "/jobs [run <name>]", summary: "list or run scheduled jobs", handler: runJobsCommand, plain: runPlainBackend, needsBackend: true},
 		{name: "logs", usage: "/logs", summary: "open runtime logs", handler: runLogsCommand},
 		{name: "memory", usage: "/memory", summary: "show memory status and recent records", handler: runBackendCommand, plain: runPlainBackend, needsBackend: true},
-		{name: "notify", usage: "/notify [off|bell|desktop]", summary: "attention signals: bell or desktop notification when input is needed", handler: voidCmd((*model).setNotifyMode)},
-		{name: "mouse", usage: "/mouse [on|off|all]", summary: "mouse tracking: off hands selection back to the terminal", handler: voidCmd((*model).setMouseMode)},
 		{name: "model", usage: "/model [name]", summary: "list or switch models", handler: runModelCommand, plain: sessionText(plainModelText)},
 		{name: "reasoning", usage: "/reasoning [none|minimal|low|medium|high|xhigh|max|default]", summary: "show or set llama.cpp reasoning effort", handler: sessionCmd(reasoningFeedback), plain: sessionText(reasoningFeedback)},
 		{name: "profile", usage: "/profile [name]", summary: "list profiles or switch model+prompt", handler: sessionCmd(profileCommandText), plain: sessionText(profileCommandText)},
@@ -94,7 +91,6 @@ func init() {
 		{name: "settings", usage: "/settings", summary: "open the settings panel (ctrl+o)", handler: runSettingsCommand, plain: sessionText(settingsPlainText)},
 		{name: "retry", usage: "/retry", summary: "retry the last prompt", handler: runRetryCommand},
 		{name: "skills", usage: "/skills [install [<name>]]", summary: "list skills, or install from the skill hubs", handler: runSkillsCommand, plain: runPlainBackend, needsBackend: true},
-		{name: "syntax", usage: "/syntax [name|auto]", summary: "pick the syntax theme for code blocks", handler: runSyntaxCommand},
 		{name: "tools", usage: "/tools", summary: "list and toggle available tools", handler: runToolsCommand, plain: sessionText(plainToolsText)},
 	}
 	findCommand("help").plain = sessionText(func(turn.Session, []string) string { return plainCommandHelp() })
@@ -670,24 +666,4 @@ func shortDescription(value string) string {
 		sentence += "."
 	}
 	return sentence
-}
-
-// runSyntaxCommand opens the stylesheet picker, or applies a name given
-// outright. An unknown name is reported rather than silently ignored: tuikit
-// would correct it to its default, which looks like the command did nothing.
-func runSyntaxCommand(m *model, _ string, args []string) tea.Cmd {
-	if len(args) == 0 {
-		m.syntaxPicker.showSyntax(syntaxTheme)
-		return nil
-	}
-	name := args[0]
-	switch {
-	case strings.EqualFold(name, autoSyntaxTheme):
-		m.applySyntaxTheme("")
-	case !slices.Contains(markdown.SyntaxThemes(), name):
-		m.commandMessage("unknown syntax theme " + name + " — /syntax lists them")
-	default:
-		m.applySyntaxTheme(name)
-	}
-	return nil
 }
