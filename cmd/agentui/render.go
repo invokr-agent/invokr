@@ -545,7 +545,7 @@ func wrapText(text string, width int) string {
 	return ansi.Hardwrap(ansi.Wrap(text, width, ""), width, false)
 }
 
-const maxContextBarWidth = 48
+const maxContextBarWidth = 40
 
 // contextMeterWidth is the footer meter's full width, matching the design's
 // sixteen cells. It shrinks on a narrow pane and is dropped before the numbers.

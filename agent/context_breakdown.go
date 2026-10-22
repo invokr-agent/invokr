@@ -61,7 +61,7 @@ func buildContextBreakdown(sections []agentprompt.PromptSection, schemaChars int
 	// proportionally so the legend sums to the reported truth instead of
 	// going over 100%. A positive residual the provider cannot attribute keeps
 	// its own "unattributed" row.
-	if estimated > prompt {
+	if prompt > 0 && estimated > prompt {
 		categories = scaleCategories(categories, estimated, prompt)
 		estimated = prompt
 	}

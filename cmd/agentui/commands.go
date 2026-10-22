@@ -369,7 +369,9 @@ func plainContextText(session turn.Session, _ []string) string {
 	if !ok || !usage.Available {
 		return "usage unavailable"
 	}
-	return renderContextUsage(usage, contextBreakdown(session), compactionEstimate(session), compactionThreshold(session, usage.ContextWindowTokens))
+	breakdown := usageBreakdownOf(usage, contextBreakdown(session))
+	return usagePlainText(usage, breakdown, usageGroups(breakdown), compactionEstimate(session),
+		compactionThreshold(session, usage.ContextWindowTokens))
 }
 
 func plainToolsText(session turn.Session, _ []string) string {
@@ -412,7 +414,7 @@ func runContextCommand(m *model, _ string, _ []string) tea.Cmd {
 	if !ok || !usage.Available {
 		m.commandMessage("usage unavailable")
 	} else {
-		m.overlay.Open("usage", renderContextUsage(usage, contextBreakdown(m.session), compactionEstimate(m.session), compactionThreshold(m.session, usage.ContextWindowTokens)))
+		m.openUsagePanel(usage, usageBreakdownOf(usage, contextBreakdown(m.session)), compactionThreshold(m.session, usage.ContextWindowTokens))
 	}
 	return nil
 }

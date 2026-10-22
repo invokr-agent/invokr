@@ -97,7 +97,7 @@ func TestLiveSessionCommands(t *testing.T) {
 	}
 
 	_, _ = m.runCommand("/usage")
-	if got := m.overlay.Content(); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") || !strings.Contains(got, "session totals: 700 prompt · 200 completion") {
+	if got := m.overlay.Content(); !strings.Contains(got, "150 / 1,000 (15%)") || !strings.Contains(got, "compacts at") {
 		t.Fatalf("context = %q", got)
 	}
 	if len(m.chatLog.messages) != 0 {
@@ -185,7 +185,7 @@ func TestPlainLiveCommands(t *testing.T) {
 	}
 	tests := map[string]string{
 		"/tools":   "NATIVE TOOLS",
-		"/usage":   "context: 250 / 1,000 tokens (25%)",
+		"/usage":   "250 / 1,000 (25%)",
 		"/compact": "context before compaction: context: 250 / 1,000 tokens (25%)",
 	}
 	for command, want := range tests {
@@ -224,11 +224,11 @@ func TestOverlayBodiesSitUnderTheirOwnTitle(t *testing.T) {
 	m.width = 100
 
 	_, _ = m.runCommand("/usage")
-	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") || strings.Contains(got, "CONTEXT") {
+	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "150 / 1,000 (15%)") || strings.Contains(got, "CONTEXT") {
 		t.Fatalf("context overlay = %q, want its lines with no CONTEXT rule", got)
 	}
 	plainText, _ := plainCommand(context.Background(), nil, session, "/usage")
-	if got := ansi.Strip(plainText); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") {
+	if got := ansi.Strip(plainText); !strings.Contains(got, "150 / 1,000 (15%)") {
 		t.Fatalf("plain /usage = %q, want its lines", got)
 	}
 
