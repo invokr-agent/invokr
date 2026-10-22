@@ -25,93 +25,48 @@ func DecodeOptionalToolArgs[T any](call *ToolCall) (T, error) {
 // produces: the whole argument object carried as a JSON string, and one field
 // carried as a JSON string holding the array, object, bool, number or null that
 // field declares. Only the field the decode error names is unwrapped, so a
-// genuine string field keeps its text even in a call that needs unwrapping
-// somewhere else. The retry reports the next offending field, so several
-// stringified fields untangle one per pass, and a field is never re-read: the
-// pass count is bounded by the number of fields. A field whose text is not a
-// JSON value, and a retry that still misses, report the original error rather
-// than one the retry invented.
+// genuine string field keeps its text; each pass fixes one field, bounded by
+// the field count. Anything still failing reports the original error.
 func unwrapStringifiedArgs[T any](args *T, call *ToolCall, err error) error {
-	inner := stringifiedToolArgs(call.Arguments)
-	if len(inner) > 0 && json.Unmarshal(inner, args) == nil {
+	if inner := unwrapString(call.Arguments, "{"); inner != nil && json.Unmarshal(inner, args) == nil {
 		return nil
 	}
 	var fields map[string]json.RawMessage
 	if json.Unmarshal(call.Arguments, &fields) != nil {
 		return err
 	}
-	tried := map[string]bool{}
-	first, latest := err, err
-	for round := len(fields); round > 0; round = round - 1 {
+	latest := err
+	for range fields {
 		typeErr, typed := latest.(*json.UnmarshalTypeError)
 		if !typed || typeErr.Value != "string" {
-			break
+			return err
 		}
-		if typeErr.Field == "" || tried[typeErr.Field] {
-			break
+		value := unwrapString(fields[typeErr.Field], "[{tfn-0123456789")
+		if value == nil {
+			return err
 		}
-		tried[typeErr.Field] = true
-		value := unwrappedValue(fields[typeErr.Field])
-		if value == "" {
-			break
-		}
-		fields[typeErr.Field] = json.RawMessage(value)
-		latest = retryFields(args, fields)
-		if latest == nil {
+		fields[typeErr.Field] = value
+		loose, _ := json.Marshal(fields) // every value is valid JSON, so this cannot fail
+		if latest = json.Unmarshal(loose, args); latest == nil {
 			return nil
 		}
 	}
-	return first
+	return err
 }
 
-// retryFields marshals the argument fields as given and decodes them into the
-// tool's struct, returning the error that decode produced, marshalling included
-// — a marshal failure is a real fault in the arguments, not something to
-// report as the plain decode error the caller already saw.
-func retryFields[T any](args *T, fields map[string]json.RawMessage) error {
-	loose, marshalErr := json.Marshal(fields)
-	if marshalErr != nil {
-		return marshalErr
-	}
-	return json.Unmarshal(loose, args)
-}
-
-// stringifiedToolArgs returns the argument object carried inside a JSON string
-// (a double-encoded call), or nothing when the bytes are not that shape. Only
-// an object is unwrapped: a bare string or a number is a value the schema
-// would reject anyway, and guessing at it would invent an argument.
-func stringifiedToolArgs(raw json.RawMessage) []byte {
+// unwrapString returns the JSON value a string carries when its text starts
+// with one of starts and is valid JSON, or nil. Text that is itself a JSON
+// string is left alone: those quotes are part of the value the model meant.
+func unwrapString(raw json.RawMessage, starts string) json.RawMessage {
 	var text string
 	if json.Unmarshal(raw, &text) != nil {
 		return nil
 	}
 	trimmed := strings.TrimSpace(text)
-	if !strings.HasPrefix(trimmed, "{") || !json.Valid([]byte(trimmed)) {
+	if trimmed == "" || !strings.ContainsRune(starts, rune(trimmed[0])) || !json.Valid([]byte(trimmed)) {
 		return nil
 	}
-	return []byte(trimmed)
-}
-
-// unwrappedValue returns the JSON value a string argument carries, or nothing
-// when the argument is not that shape. Only an array, object, bool, number or
-// null is taken: text that is itself a JSON string is left alone, because the
-// quotes are part of the value the model meant, not an encoding layer.
-func unwrappedValue(value json.RawMessage) string {
-	var text string
-	if json.Unmarshal(value, &text) != nil {
-		return ""
-	}
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return ""
-	}
-	switch trimmed[0] {
-	case '[', '{', 't', 'f', 'n', '-', '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		if json.Valid([]byte(trimmed)) {
-			return trimmed
-		}
-	}
-	return ""
+	return json.RawMessage(trimmed)
 }
 
 // templateMarkup matches the chat-template and tool-call delimiters a model
