@@ -33,7 +33,16 @@ func ConfigureProcessGroup(cmd *exec.Cmd) {
 		}
 		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		if errors.Is(err, syscall.ESRCH) {
-			return os.ErrProcessDone
+			// The group is already gone: every member exited on its own (a shell
+			// whose wait returned once its children were killed), so there is
+			// nothing left to signal. That is a completed cancel, not a reason to
+			// call the process done: os/exec treats ErrProcessDone from Cancel as
+			// "the child was already reaped", and a Cancel that reports done while
+			// the child exits 0 makes Wait return nil, which turns a cancelled run
+			// into a successful one. Returning nil lets Wait report the context
+			// error, which is what the caller needs to see that the run was cut
+			// short rather than finished.
+			return nil
 		}
 		return err
 	}

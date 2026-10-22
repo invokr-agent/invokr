@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 func DecodeOptionalToolArgs[T any](call *ToolCall) (T, error) {
@@ -15,9 +16,57 @@ func DecodeOptionalToolArgs[T any](call *ToolCall) (T, error) {
 		return args, nil
 	}
 	if err := json.Unmarshal(call.Arguments, &args); err != nil {
-		return args, err
+		return args, unwrapStringifiedArgs(&args, call, err)
 	}
 	return args, nil
+}
+
+// unwrapStringifiedArgs retries a failed decode against the two shapes a server
+// produces: the whole argument object carried as a JSON string, and one field
+// carried as a JSON string holding the array, object, bool, number or null that
+// field declares. Only the field the decode error names is unwrapped, so a
+// genuine string field keeps its text; each pass fixes one field, bounded by
+// the field count. Anything still failing reports the original error.
+func unwrapStringifiedArgs[T any](args *T, call *ToolCall, err error) error {
+	if inner := unwrapString(call.Arguments, "{"); inner != nil && json.Unmarshal(inner, args) == nil {
+		return nil
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(call.Arguments, &fields) != nil {
+		return err
+	}
+	latest := err
+	for range fields {
+		typeErr, typed := latest.(*json.UnmarshalTypeError)
+		if !typed || typeErr.Value != "string" {
+			return err
+		}
+		value := unwrapString(fields[typeErr.Field], "[{tfn-0123456789")
+		if value == nil {
+			return err
+		}
+		fields[typeErr.Field] = value
+		loose, _ := json.Marshal(fields) // every value is valid JSON, so this cannot fail
+		if latest = json.Unmarshal(loose, args); latest == nil {
+			return nil
+		}
+	}
+	return err
+}
+
+// unwrapString returns the JSON value a string carries when its text starts
+// with one of starts and is valid JSON, or nil. Text that is itself a JSON
+// string is left alone: those quotes are part of the value the model meant.
+func unwrapString(raw json.RawMessage, starts string) json.RawMessage {
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || !strings.ContainsRune(starts, rune(trimmed[0])) || !json.Valid([]byte(trimmed)) {
+		return nil
+	}
+	return json.RawMessage(trimmed)
 }
 
 // templateMarkup matches the chat-template and tool-call delimiters a model
