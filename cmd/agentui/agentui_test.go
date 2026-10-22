@@ -1699,9 +1699,10 @@ func TestModel_LogsAutoFollowRespectsScroll(t *testing.T) {
 	}
 }
 
-// A pending approval must not turn ordinary typing into decisions: only the
-// dedicated decision keys act, everything printable else goes to the input.
-func TestModel_PendingApprovalLeavesTypingToTheInput(t *testing.T) {
+// While an approval dialog is open it owns every key but ctrl+c: the input box
+// is locked and rendered dim, so typing mid-turn can neither decide a request
+// nor land in a prompt nobody is listening to. Closing the dialog restores it.
+func TestModel_ApprovalOpenLocksTheInput(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	broker := approval.NewBroker()
@@ -1717,33 +1718,69 @@ func TestModel_PendingApprovalLeavesTypingToTheInput(t *testing.T) {
 	}()
 	waitForQueueLen(t, queue, 1)
 
-	// Once the input line holds text, every printable key belongs to it: the
-	// decision letters inside "abc" and "/clear" must decide nothing.
-	m.input.SetValue("note ")
-	for _, ch := range []string{"a", "b", "c", " ", "/", "c", "l", "e", "a", "r"} {
+	// A word with a decision letter in it must decide nothing and type nothing:
+	// the box stays empty and says where the keys go.
+	for _, ch := range []string{"a", "b", "c", " ", "x"} {
 		m.updateKey(testTextKey(ch)) //nolint:errcheck
 	}
 	if queue.Len() != 1 {
 		t.Fatal("typing must not decide a pending approval")
 	}
-	if got := m.input.Value(); got != "note abc /clear" {
-		t.Fatalf("input = %q, want %q", got, "note abc /clear")
-	}
-
-	// With text on the line, editing keys must reach the input too: a user
-	// who typed "x" can still backspace it rather than have the queue eat
-	// the keypress.
-	m.input.SetValue("x")
-	m.updateKey(tea.KeyPressMsg{Code: tea.KeyBackspace}) //nolint:errcheck
-	if queue.Len() != 1 {
-		t.Fatal("backspace must not decide a pending approval")
-	}
 	if got := m.input.Value(); got != "" {
-		t.Fatalf("input = %q, want backspace to clear it", got)
+		t.Fatalf("input = %q, want empty while an approval is open", got)
+	}
+	view := ansi.Strip(m.View().Content)
+	if !strings.Contains(view, "answer the approval above") {
+		t.Fatalf("locked input placeholder missing from %q", view)
 	}
 
-	// On an empty input line the dedicated decision keys still act.
-	m.input.SetValue("")
+	// The dialog's own keys still work, including the one whose letter also
+	// appears in the word the user tried to type.
+	m.updateKey(testTextKey("v")) //nolint:errcheck
+	if !m.approvals.expanded {
+		t.Fatal("v must still expand the selected approval")
+	}
+	m.updateKey(testTextKey("n")) //nolint:errcheck
+	if err := <-done; err == nil {
+		t.Fatal("n should still deny the selected request")
+	}
+	// The dialog closed: the prompt is a prompt again, not a locked note.
+	if view = ansi.Strip(m.View().Content); strings.Contains(view, "answer the approval above") {
+		t.Fatal("closed approval dialog must restore the input box")
+	}
+}
+
+// A paste is no exception to the lock: it is not a key, so the key routing alone
+// would leave it typing into the box the dialog owns. While an approval is open
+// the pasted text must stay out of the draft, and it must not decide the request.
+func TestModel_ApprovalOpenIgnoresPaste(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	broker := approval.NewBroker()
+	queue := approval.NewApprovalQueue(ctx, broker)
+	defer queue.Close()
+	m := newModel(ctx, &fakeSession{}, nil, queue, nil, false, nil, nil)
+	m.width, m.height = 80, 24
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := broker.RequestApproval(ctx, approval.Request{Tool: "shell"})
+		done <- err
+	}()
+	waitForQueueLen(t, queue, 1)
+
+	// A paste that reads like a decision letter must neither type nor decide: the
+	// box stays empty and the request is still pending.
+	_, _ = m.Update(tea.PasteMsg{Content: "y\n"})
+	if got := m.input.Value(); got != "" || len(m.images) != 0 || queue.Len() != 1 {
+		t.Fatalf("paste while an approval is open: input = %q, images = %d, pending = %d", got, len(m.images), queue.Len())
+	}
+	// A plain paste is held back the same way, so the locked note still shows.
+	_, _ = m.Update(tea.PasteMsg{Content: "ls -l"})
+	if got := m.input.Value(); got != "" || !strings.Contains(ansi.Strip(m.View().Content), "answer the approval above") {
+		t.Fatalf("paste while an approval is open: input = %q, want the locked note", got)
+	}
+	// The dialog still answers its own key once the pasted text is gone.
 	m.updateKey(testTextKey("n")) //nolint:errcheck
 	if err := <-done; err == nil {
 		t.Fatal("n should still deny the selected request")

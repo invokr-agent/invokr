@@ -231,6 +231,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateToolToggle(toggle)
 		return m, nil
 	}
+	// An open approval dialog owns the keys, and a paste is no exception: left
+	// alone it lands on the parked draft the box only re-draws, and an image
+	// path would attach to a turn that cannot run yet.
+	if _, isPaste := msg.(tea.PasteMsg); isPaste && m.pendingApprovals() > 0 {
+		return m, nil
+	}
 	if updated, cmd, ok := m.updateImageMsg(msg); ok {
 		return updated, cmd
 	}
@@ -476,15 +482,14 @@ func (m *model) handleInterrupt() (tea.Model, tea.Cmd) {
 }
 
 // updatePendingQueueKey routes a key to the approval queue while one is
-// pending. The bare decision letters act only on an empty input line: once the
-// user has typed anything every printable key belongs to the input, because a
-// queue that claimed them turned typing a word containing "a" into an approval.
-// The same holds for the line-editing keys (backspace, ctrl+u, ctrl+w, delete,
-// left/right) so a typed line stays editable. Enter, esc and up/down/j/k reach
-// the queue either way.
+// pending: the open dialog owns every key, printable text included, because
+// inputArea locks the prompt for as long as it does, and half-owned input would
+// let the user type into a box that is not
+// listening. A line typed before the queue opened stays parked until the
+// dialog closes; ctrl+c is taken ahead of this in updateKey, so interrupting
+// a pending queue is unchanged.
 func (m *model) updatePendingQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
-	typing := (msg.Text != "" || isLineEditingKey(msg)) && m.input.Value() != ""
-	if m.pendingApprovals() == 0 || typing {
+	if m.pendingApprovals() == 0 {
 		return m, nil, false
 	}
 	// Enter would otherwise be swallowed here along with every other command
@@ -496,16 +501,6 @@ func (m *model) updatePendingQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, 
 		return m, nil, true
 	}
 	return m.updateQueueKey(msg)
-}
-
-// isLineEditingKey reports whether msg is one of the non-printable keys the
-// textarea uses to edit an existing line, as opposed to a queue decision key.
-func isLineEditingKey(msg tea.KeyPressMsg) bool {
-	switch msg.Code {
-	case tea.KeyBackspace, tea.KeyDelete, tea.KeyLeft, tea.KeyRight:
-		return true
-	}
-	return (msg.Code == 'u' || msg.Code == 'w') && msg.Mod.Contains(tea.ModCtrl)
 }
 
 // updateQueueKey handles the approval queue's own keys, reporting whether it
@@ -536,10 +531,10 @@ func (m *model) updateQueueKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 		updated, cmd := m.decideAll(key.Matches(msg, m.keys.ApproveAll))
 		return updated, cmd, true
 	default:
-		// Printable text belongs to the input; everything else (tab, arrows,
-		// modified keys) stays owned by the queue so a pending approval keeps
-		// the view locked to the chat.
-		return m, nil, msg.Text == ""
+		// The locked input box owns nothing, so the queue claims the rest of
+		// the keyspace: a stray letter is neither a decision nor text the user
+		// never meant to type.
+		return m, nil, true
 	}
 	m.syncChatViewport(true)
 	return m, nil, true
@@ -822,6 +817,13 @@ func (m *model) inputArea() string {
 		if picker.open {
 			return picker.view(m.mainWidth())
 		}
+	}
+	// An open approval dialog dims the box and shows where the keys go instead
+	// of a draft: the prompt is not listening (see updatePendingQueueKey), so
+	// repainting the parked text would invite typing that goes nowhere.
+	if m.pendingApprovals() > 0 {
+		locked := inputBox(m.mainWidth()).BorderForeground(ui.Invokr.Palette.Muted)
+		return locked.Render(ui.Invokr.Muted.Render("answer the approval above"))
 	}
 	return inputBox(m.mainWidth()).Render(m.input.View())
 }
