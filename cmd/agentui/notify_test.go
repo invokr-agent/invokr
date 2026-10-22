@@ -85,7 +85,7 @@ func TestNotifierTurnDone(t *testing.T) {
 	}
 }
 
-func TestNotifyCommandCyclesAndSets(t *testing.T) {
+func TestNotifyModeCyclesAndSets(t *testing.T) {
 	m := newTestModelWithHiddenLogs()
 	m.setNotifyMode(nil)
 	if m.notify.mode != notifyBell {

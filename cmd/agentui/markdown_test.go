@@ -113,31 +113,6 @@ func TestResetMarkdownFollowsThePalette(t *testing.T) {
 	}
 }
 
-// The picker's list is what the user chooses from, so "auto" has to be in it
-// and the active entry has to be marked — including when the setting is empty,
-// which means auto rather than nothing.
-func TestSyntaxItemsMarkTheActiveChoice(t *testing.T) {
-	for name, tc := range map[string]struct{ current, marked string }{
-		"empty means auto": {"", autoSyntaxTheme},
-		"a named theme":    {"catppuccin-mocha", "catppuccin-mocha"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			var got []string
-			for _, item := range syntaxItems(tc.current) {
-				if item.Marked {
-					got = append(got, item.Label)
-				}
-			}
-			if len(got) != 1 || got[0] != tc.marked {
-				t.Fatalf("marked %v, want exactly [%s]", got, tc.marked)
-			}
-		})
-	}
-	if first := syntaxItems("")[0].Label; first != autoSyntaxTheme {
-		t.Fatalf("first entry = %q, want %q", first, autoSyntaxTheme)
-	}
-}
-
 // Applying a theme has to reach the rendered code, and "auto" has to go back to
 // following the terminal rather than pinning the literal string.
 func TestSetSyntaxThemeChangesRenderedCode(t *testing.T) {

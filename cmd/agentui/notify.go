@@ -121,7 +121,7 @@ func (m *model) quitCmd() tea.Cmd {
 }
 
 func (m *model) setNotifyMode(args []string) {
-	const usage = "usage: /notify [off|bell|desktop]"
+	const usage = "notify takes one of: off, bell, desktop (settings View tab)"
 	if len(args) > 1 {
 		m.commandMessage(usage)
 		return

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/antonikliment/tuikit/markdown"
 	"github.com/invokr-ai/invokr/capability/skills/hub"
 	"github.com/invokr-ai/invokr/surface/ui"
 	toolcore "github.com/invokr-ai/invokr/tools/core"
@@ -84,24 +83,6 @@ func (m *model) updateModelPickerKey(msg tea.KeyPressMsg) bool {
 // autoSyntaxTheme is the first entry, and what an empty setting means: let the
 // stylesheet follow the terminal background instead of pinning one.
 const autoSyntaxTheme = "auto"
-
-func (p *listPicker) showSyntax(current string) {
-	p.show(syntaxItems(current), current, "enter apply · esc cancel")
-}
-
-func syntaxItems(current string) []tuikit.SelectItem {
-	names := append([]string{autoSyntaxTheme}, markdown.SyntaxThemes()...)
-	return toolcore.MapSlice(names, func(name string) tuikit.SelectItem {
-		item := tuikit.SelectItem{Label: name}
-		if name == autoSyntaxTheme {
-			item.Trailing = "match the terminal"
-		}
-		if name == current || (current == "" && name == autoSyntaxTheme) {
-			item.Trailing, item.Marked = "active", true
-		}
-		return item
-	})
-}
 
 func (m *model) updateSyntaxPickerKey(msg tea.KeyPressMsg) bool {
 	return m.syntaxPicker.updateKey(msg, func(name string) {

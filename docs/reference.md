@@ -111,10 +111,11 @@ At startup Invokr checks the configured model against the provider's
 
 ## Syntax highlighting
 
-Fenced code in an answer is highlighted by chroma. `/syntax` lists the 64
-stylesheets it ships and applies one immediately; `/syntax <name>` picks one
-outright and `/syntax auto` goes back to following the terminal background. The
-choice is remembered.
+Fenced code in an answer is highlighted by chroma. The TUI's settings View tab
+lists the 64 stylesheets it ships under "Syntax theme" and applies the choice
+immediately; picking `auto` goes back to following the terminal background. The
+choice is remembered. There is no `/syntax` slash command: the theme is a
+permanent preference, so it is edited where the other permanent preferences are.
 
 Set the default with `ui.syntax_theme` in config, `INVOKR_SYNTAX_THEME`, or the
 optional question in `invokr setup`. Leave it empty for `auto`. A name chosen in

@@ -78,11 +78,11 @@ func TestPaletteEnterRunsArgumentlessCommand(t *testing.T) {
 func TestPaletteEnterPrefillsArgumentTakingCommand(t *testing.T) {
 	m := newTestModelWithHiddenLogs()
 	m.updatePaletteKey(testModifiedKey('p', tea.ModCtrl))
-	for _, r := range "mouse" {
+	for _, r := range "progress" {
 		m.updatePaletteKey(testTextKey(string(r)))
 	}
 	m.updatePaletteKey(testKey(tea.KeyEnter))
-	if got := m.input.Value(); got != "/mouse " {
-		t.Fatalf("input = %q, want %q", got, "/mouse ")
+	if got := m.input.Value(); got != "/progress " {
+		t.Fatalf("input = %q, want %q", got, "/progress ")
 	}
 }

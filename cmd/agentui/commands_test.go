@@ -250,6 +250,22 @@ func TestOverlayBodiesSitUnderTheirOwnTitle(t *testing.T) {
 	m.showRecorded()
 	if got := m.overlay.Title(); got != "recorded calls" {
 		t.Fatalf("recorded overlay title = %q, want %q", got, "recorded calls")
+}
+
+// Mouse, Notify and Syntax theme are permanent preferences the /settings View
+// tab already edits, so their slash-command entry points are gone: each now
+// parses as an unknown command. The setters stay, since the View tab calls them.
+func TestPreferenceCommandsAreGone(t *testing.T) {
+	for _, name := range []string{"mouse", "notify", "syntax"} {
+		if findCommand(name) != nil {
+			t.Fatalf("/%s is still registered", name)
+		}
+	}
+	m := newTestModelWithHiddenLogs()
+	m.runCommand("/syntax auto")
+	if last := m.chatLog.messages[len(m.chatLog.messages)-1].text; !strings.Contains(last, "unknown command") {
+		t.Fatalf("/syntax reply = %q, want unknown command", last)
+
 	}
 }
 
