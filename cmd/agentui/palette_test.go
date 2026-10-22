@@ -31,7 +31,7 @@ func TestPaletteOpensFiltersAndCloses(t *testing.T) {
 	if !handled || !m.palette.open {
 		t.Fatal("ctrl+p did not open the palette")
 	}
-	// Type-to-filter matches descriptions too ("token usage" -> /context).
+	// Type-to-filter matches descriptions too ("token usage" -> /usage).
 	for _, r := range "token" {
 		if h, _ := m.updatePaletteKey(testTextKey(string(r))); !h {
 			t.Fatal("filter key not consumed")

@@ -165,7 +165,7 @@ type OpenAIModelGateway struct {
 	// session spend cap (issue #295); nil disables metering (tests).
 	recordSummarizerSpend func(prompt, completion int64)
 	// lastPromptSections is the previous turn's system-prompt attribution,
-	// kept for the /context breakdown; nil before the first turn.
+	// kept for the /usage breakdown; nil before the first turn.
 	lastPromptSections []agentprompt.PromptSection
 	// lengthRetriesUsed counts the no-thinking length retries spent on the
 	// current turn (reset by Begin and Continue). One per turn: a turn cut

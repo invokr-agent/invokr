@@ -76,7 +76,7 @@ func init() {
 		{name: "reads", usage: "/reads [workspace|ask]", summary: "reads outside the workspace: refuse, or ask each time (this session)", handler: voidCmd((*model).setReads)},
 		{name: "clear", usage: "/clear", summary: "start a new session (keep saved history and memory)", handler: runClearCommand},
 		{name: "compact", usage: "/compact", summary: "compact context before next turn", handler: sessionCmd(compactCommandText), plain: sessionText(compactCommandText)},
-		{name: "context", usage: "/context", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
+		{name: "usage", usage: "/usage", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
 		{name: "grants", usage: grantUsageLine, summary: "manage standing approval grants and denials", handler: textCmd((*model).grantsCommand)},
 		{name: "help", usage: "/help", summary: "show this help", handler: runHelpCommand},
 		{name: "jobs", usage: "/jobs [run <name>]", summary: "list or run scheduled jobs", handler: runJobsCommand, plain: runPlainBackend, needsBackend: true},
@@ -416,7 +416,7 @@ func runContextCommand(m *model, _ string, _ []string) tea.Cmd {
 	if !ok || !usage.Available {
 		m.commandMessage("usage unavailable")
 	} else {
-		m.overlay.Open("context", renderContextUsage(usage, contextBreakdown(m.session), compactionEstimate(m.session), compactionThreshold(m.session, usage.ContextWindowTokens)))
+		m.overlay.Open("usage", renderContextUsage(usage, contextBreakdown(m.session), compactionEstimate(m.session), compactionThreshold(m.session, usage.ContextWindowTokens)))
 	}
 	return nil
 }
@@ -500,7 +500,7 @@ func compactionThreshold(session turn.Session, window int64) int {
 }
 
 // contextBreakdownSource is the optional session capability behind the
-// per-category /context bar; anything but the real agent.Session falls back to
+// per-category /usage bar; anything but the real agent.Session falls back to
 // the prompt/completion/free split.
 type contextBreakdownSource interface{ ContextBreakdown() turn.ContextBreakdown }
 
@@ -540,7 +540,7 @@ func compactionEstimate(session turn.Session) int64 {
 	return 0
 }
 
-// compactHint is the design's /context footer. It stays silent rather than
+// compactHint is the design's /usage footer. It stays silent rather than
 // advertising a reclaim of zero when there is nothing old enough to summarize.
 func compactHint(reclaimable int64) string {
 	if reclaimable <= 0 {
@@ -611,7 +611,7 @@ func renderContextTotals(usage turn.TokenUsage, compactPercent int) string {
 
 // sessionTotalsLine splits the session prompt total into the cache-served and
 // freshly-evaluated halves whenever the provider reported cached tokens, so
-// /context shows what the prompt cache actually saved.
+// /usage shows what the prompt cache actually saved.
 func sessionTotalsLine(usage turn.TokenUsage) string {
 	prompt := humanize.Comma(usage.SessionPromptTokens) + " prompt"
 	if cached := usage.SessionCachedPromptTokens; cached > 0 {

@@ -286,7 +286,7 @@ func (g *OpenAIModelGateway) PromptBreakdown(sessionID string) ([]agentprompt.Pr
 }
 
 // logSchemaSizes reports, at debug level, what each session tool's schema costs
-// per turn, so the /context "tool schemas" slice can be traced to the tools
+// per turn, so the /usage "tool schemas" slice can be traced to the tools
 // behind it (#480).
 func (g *OpenAIModelGateway) logSchemaSizes(sessionID string) {
 	if g.settings.NativeToolRequestsDisabled || !g.logger.Core().Enabled(zap.DebugLevel) {
@@ -299,7 +299,7 @@ func (g *OpenAIModelGateway) logSchemaSizes(sessionID string) {
 }
 
 // schemaDefsForMetrics reads the frozen array when available without freezing
-// it early; callers can inspect /context before the session's first request.
+// it early; callers can inspect /usage before the session's first request.
 func (g *OpenAIModelGateway) schemaDefsForMetrics(sessionID string) []inference.Tool {
 	g.mu.RLock()
 	raw := g.toolDefsJSON

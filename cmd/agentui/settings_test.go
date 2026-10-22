@@ -106,14 +106,19 @@ func TestSettingsProfileSelectSwitches(t *testing.T) {
 	}
 }
 
-func TestUsageCommandRemoved(t *testing.T) {
-	m := newTestModelWithHiddenLogs()
-	m.runCommand("/usage")
-	if last := m.chatLog.messages[len(m.chatLog.messages)-1].text; !strings.Contains(last, "unknown command") {
-		t.Fatalf("/usage reply = %q, want unknown command", last)
+// /context was too easy to mistype as /compact, so the command is /usage and no
+// /context alias is kept: the old name must read as an unknown command.
+func TestUsageCommandReplacesContext(t *testing.T) {
+	if findCommand("usage") == nil {
+		t.Fatal("/usage missing")
 	}
-	if findCommand("context") == nil {
-		t.Fatal("/context missing")
+	if findCommand("context") != nil {
+		t.Fatal("/context still registered; want it renamed to /usage")
+	}
+	m := newTestModelWithHiddenLogs()
+	m.runCommand("/context")
+	if last := m.chatLog.messages[len(m.chatLog.messages)-1].text; !strings.Contains(last, "unknown command") {
+		t.Fatalf("/context reply = %q, want unknown command", last)
 	}
 }
 
