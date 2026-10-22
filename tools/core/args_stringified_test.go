@@ -70,19 +70,20 @@ var fieldLevelCases = []fieldCase{
 	{name: "stringified number field", args: `{"depth":"7"}`, accepted: true, depth: 7},
 	{name: "stringified null field", args: `{"edits":"null"}`, accepted: true},
 	{name: "several fields at once", args: `{"network":"true","depth":"4","edits":"[{\"path\":\"c\"}]"}`, accepted: true, edits: 1, network: true, depth: 4},
-	// A genuine string field is decoded untouched: nothing clashed with the
-	// schema, so its JSON-looking text stays the string the model meant.
+	// A genuine string field is never rewritten: not only is a clean decode
+	// untouched, but a field the decode error does not name keeps its text even
+	// when another field in the same call needs the layer taken off.
 	{name: "genuine string field holding JSON-looking text", args: `{"note":"{\"path\":\"a\"} [1,2] null"}`, accepted: true, note: `{"path":"a"} [1,2] null`},
 	{name: "genuine string field quoting JSON", args: `{"network":"true","note":"\"[1,2]\""}`, accepted: true, network: true, note: `"[1,2]"`},
-	// Text that is not a JSON value, and JSON cut short, stay errors: the
-	// decoder does not invent an array or a bool out of prose or a fragment.
+	{name: "genuine string field holding a JSON array next to a stringified field", args: `{"note":"[1,2]","network":"true"}`, accepted: true, network: true, note: `[1,2]`},
+	{name: "genuine string field holding a JSON object next to a stringified field", args: `{"note":"{\"path\":\"a\"}","network":"true"}`, accepted: true, network: true, note: `{"path":"a"}`},
+	// Text that is not a JSON value, JSON cut short, and a value that unwraps to
+	// the wrong shape all stay errors: the decoder takes a layer off, it does
+	// not invent what the field should hold.
 	{name: "garbage bool field", args: `{"network":"yes, please"}`, accepted: false},
 	{name: "truncated array field", args: `{"edits":"[{\"path\":\"a\""}`, accepted: false},
 	{name: "array field holding prose", args: `{"edits":"[\"a\", not json]"}`, accepted: false},
-	// A string field carrying a bare JSON object in the same call as a
-	// stringified field is not untangled: the rewrite cannot tell it was meant
-	// as text, so the retry misses and the call stays refused.
-	{name: "string field carrying JSON next to a stringified field", args: `{"network":"true","note":"{\"path\":\"a\"}"}`, accepted: false},
+	{name: "array field unwraps to the wrong shape", args: `{"edits":"[1,2]"}`, accepted: false},
 }
 
 func TestDecodeOptionalToolArgsUnwrapsStringifiedFields(t *testing.T) {

@@ -24,28 +24,56 @@ func DecodeOptionalToolArgs[T any](call *ToolCall) (T, error) {
 // unwrapStringifiedArgs retries a failed decode against the two shapes a server
 // produces: the whole argument object carried as a JSON string, and one field
 // carried as a JSON string holding the array, object, bool, number or null that
-// field declares. Only a type error naming a string as the offending value gets
-// that field-level rewrite, so a call that decoded cleanly is never re-read and
-// a string field holding JSON-looking text keeps its contents. A retry that
-// still cannot satisfy the struct reports the original error, the one the
-// caller can act on, rather than one the retry invented.
+// field declares. Only the field the decode error names is unwrapped, so a
+// genuine string field keeps its text even in a call that needs unwrapping
+// somewhere else. The retry reports the next offending field, so several
+// stringified fields untangle one per pass, and a field is never re-read: the
+// pass count is bounded by the number of fields. A field whose text is not a
+// JSON value, and a retry that still misses, report the original error rather
+// than one the retry invented.
 func unwrapStringifiedArgs[T any](args *T, call *ToolCall, err error) error {
 	inner := stringifiedToolArgs(call.Arguments)
 	if len(inner) > 0 && json.Unmarshal(inner, args) == nil {
 		return nil
 	}
-	typeErr, typed := err.(*json.UnmarshalTypeError)
-	if !typed || typeErr.Value != "string" {
+	var fields map[string]json.RawMessage
+	if json.Unmarshal(call.Arguments, &fields) != nil {
 		return err
 	}
-	loose, marshalErr := stringifiedFields(call.Arguments)
+	tried := map[string]bool{}
+	first, latest := err, err
+	for round := len(fields); round > 0; round = round - 1 {
+		typeErr, typed := latest.(*json.UnmarshalTypeError)
+		if !typed || typeErr.Value != "string" {
+			break
+		}
+		if typeErr.Field == "" || tried[typeErr.Field] {
+			break
+		}
+		tried[typeErr.Field] = true
+		value := unwrappedValue(fields[typeErr.Field])
+		if value == "" {
+			break
+		}
+		fields[typeErr.Field] = json.RawMessage(value)
+		latest = retryFields(args, fields)
+		if latest == nil {
+			return nil
+		}
+	}
+	return first
+}
+
+// retryFields marshals the argument fields as given and decodes them into the
+// tool's struct, returning the error that decode produced, marshalling included
+// — a marshal failure is a real fault in the arguments, not something to
+// report as the plain decode error the caller already saw.
+func retryFields[T any](args *T, fields map[string]json.RawMessage) error {
+	loose, marshalErr := json.Marshal(fields)
 	if marshalErr != nil {
 		return marshalErr
 	}
-	if len(loose) > 0 && json.Unmarshal(loose, args) == nil {
-		return nil
-	}
-	return err
+	return json.Unmarshal(loose, args)
 }
 
 // stringifiedToolArgs returns the argument object carried inside a JSON string
@@ -62,35 +90,6 @@ func stringifiedToolArgs(raw json.RawMessage) []byte {
 		return nil
 	}
 	return []byte(trimmed)
-}
-
-// stringifiedFields rewrites the top-level argument values a server wrapped in
-// a JSON string, and leaves every other value alone: prose and text that quotes
-// JSON keep their contents, so a genuine string field still holds the string the
-// model meant. Nothing is returned when no value needed rewriting, which keeps
-// the caller from retrying a payload it already rejected.
-func stringifiedFields(raw json.RawMessage) ([]byte, error) {
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil {
-		return nil, nil
-	}
-	changed := false
-	for key, value := range fields {
-		inner := unwrappedValue(value)
-		if inner == "" {
-			continue
-		}
-		fields[key] = json.RawMessage(inner)
-		changed = true
-	}
-	if !changed {
-		return nil, nil
-	}
-	loose, err := json.Marshal(fields)
-	if err != nil {
-		return nil, err
-	}
-	return loose, nil
 }
 
 // unwrappedValue returns the JSON value a string argument carries, or nothing
