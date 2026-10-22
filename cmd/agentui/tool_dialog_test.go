@@ -12,6 +12,7 @@ import (
 	"github.com/invokr-ai/invokr/surface/ui"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/tool_search"
+	"github.com/invokr-ai/invokr/tools/system/toolbox"
 )
 
 type dialogSession struct {
@@ -136,5 +137,27 @@ func TestToolDialogInstallReloadsCustomTools(t *testing.T) {
 	_, _ = m.updateToolDialogKey(tea.KeyPressMsg{Code: tea.KeyTab})
 	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "[off] units") {
 		t.Fatalf("custom tab after install = %q", got)
+	}
+}
+
+// The hub listing lands after openToolSuggestion wrote its hint, so the load
+// keeps that hint while a suggestion is pending; esc drops the suggestion.
+func TestToolDialogHubLoadKeepsSuggestionHint(t *testing.T) {
+	s := &dialogSession{
+		liveCommandSession: liveCommandSession{specs: []core.ToolSpec{{Name: "read", Description: "Read files."}}},
+		listings:           []tool_search.Listing{{Name: "read", Enabled: true, Protected: true}},
+	}
+	m := newModel(context.Background(), s, nil, nil, nil, false, nil, nil)
+	m.width, m.height = 100, 30
+	_, _ = m.runCommand("/tools")
+	m.toolDialog.tab, m.toolDialog.suggest = 2, "units"
+	m.toolDialog.feedback = "enter installs units"
+	m.updateToolToggle(toolToggleMsg{hub: []toolbox.HubTool{{Name: "other"}, {Name: "units"}}, hubLoaded: true})
+	if m.toolDialog.feedback != "enter installs units" || m.toolDialog.hub[0].Name != "units" {
+		t.Fatalf("hub load kept feedback %q, hub = %+v", m.toolDialog.feedback, m.toolDialog.hub)
+	}
+	_, _ = m.updateToolDialogKey(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.toolDialog.suggest != "" {
+		t.Fatalf("esc left suggest = %q", m.toolDialog.suggest)
 	}
 }

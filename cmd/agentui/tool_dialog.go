@@ -37,6 +37,8 @@ type toolDialog struct {
 	// Install tab: hub listing, fetched on first visit, and per-tool approval overrides.
 	hub       []toolbox.HubTool
 	approvals map[string]string
+	// suggest is a hub tool the dialog was opened to offer; it is listed first.
+	suggest string
 }
 
 type toolToggleMsg struct {
@@ -198,7 +200,7 @@ func (m *model) updateToolDialogKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "esc":
 		m.overlay.Close()
-		d.open = false
+		d.open, d.suggest = false, ""
 	case "up", "down":
 		d.list.Update(msg)
 		d.feedback = ""
@@ -306,7 +308,14 @@ func (m *model) updateToolToggle(msg toolToggleMsg) {
 	d.saving = false
 	switch {
 	case msg.hubLoaded && msg.err == nil:
-		d.hub, d.feedback = append([]toolbox.HubTool{}, msg.hub...), ""
+		// A dialog opened to offer a tool keeps its hint until the user leaves the tab.
+		if d.suggest == "" {
+			d.feedback = ""
+		}
+		d.hub = append([]toolbox.HubTool{}, msg.hub...)
+		if i := slices.IndexFunc(d.hub, func(t toolbox.HubTool) bool { return t.Name == d.suggest }); i > 0 {
+			d.hub = slices.Insert(slices.Delete(d.hub, i, i+1), 0, msg.hub[i])
+		}
 	case msg.installed && msg.err == nil:
 		for i := range d.hub {
 			d.hub[i].Installed = d.hub[i].Installed || d.hub[i].Name == msg.name
