@@ -174,6 +174,11 @@ func (c *Client) Metadata(ctx context.Context, model string) (ProviderMetadata, 
 	if err != nil {
 		return ProviderMetadata{}, err
 	}
+	if out.ContextWindowTokens == 0 {
+		if window, listed := c.probeModels(ctx, root, model); listed && window > 0 {
+			out.ContextWindowTokens, out.Source = window, "models list"
+		}
+	}
 	switch {
 	case out.Reasoning != "":
 	case isOpenRouter(root):
@@ -220,6 +225,55 @@ func (c *Client) probeProps(ctx context.Context, root, model string) (ProviderMe
 		out.Source = "llama.cpp " + metadataPath
 	}
 	return out, found, nil
+}
+
+// probeModels reads a context limit from GET /v1/models for the servers that
+// answer no /props: routers and some llama forks report the window per model as
+// context, n_ctx, max_context or max_model_len. The listed entry matching model
+// wins; otherwise only a listing with a single windowed model answers, because
+// that model is the only one the configured id could mean. Several windows are
+// ambiguous — none is known to belong to the configured id — so the probe
+// reports not-found and the footer leaves the ctx limit blank rather than
+// quoting another model's. A listed model with no window is not-found too.
+func (c *Client) probeModels(ctx context.Context, root, model string) (int64, bool) {
+	var listed modelsListing
+	found, err := c.getJSON(ctx, root+"/v1/models", &listed)
+	if err != nil || !found {
+		return 0, false
+	}
+	sole, windows := int64(0), int64(0)
+	for _, entry := range listed.Data {
+		window := max(max(entry.Context, entry.NCtx), max(max(entry.MaxContext, entry.MaxModelLen), entry.Meta.NCtx))
+		if entry.ID == model {
+			// Listed without a window: no other entry's window describes it.
+			return window, window > 0
+		}
+		if window == 0 {
+			continue
+		}
+		sole, windows = window, windows+1
+	}
+	// One windowed model is the configured one; several could be any of them.
+	return sole, windows == 1
+}
+
+type modelsListing struct {
+	Data []modelListing
+}
+
+type modelListing struct {
+	ID          string `json:"id"`
+	Context     int64  `json:"context"`
+	NCtx        int64  `json:"n_ctx"`
+	MaxContext  int64  `json:"max_context"`
+	MaxModelLen int64  `json:"max_model_len"`
+	// Meta is llama.cpp's nested block, which carries the window there. A
+	// listing without one leaves it zero.
+	Meta modelMeta `json:"meta"`
+}
+
+type modelMeta struct {
+	NCtx int64 `json:"n_ctx"`
 }
 
 func isOpenRouter(root string) bool {
