@@ -318,3 +318,13 @@ func toolStateReminder(caller core.ToolCaller, id string) string {
 	}
 	return ""
 }
+
+// ServedModel is the model the provider echoed on its last completion, "" until
+// one does. A router profile's pin can serve a model that the configured name
+// never mentions, so callers that show the model to a user should prefer this.
+func (s *Session) ServedModel() string {
+	if gw, ok := s.runner.modelGateway.(servedModelGateway); ok {
+		return gw.ServedModel()
+	}
+	return ""
+}

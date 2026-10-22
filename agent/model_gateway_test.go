@@ -474,3 +474,18 @@ func (noMemory) PromptBlocks(context.Context, memcore.PromptRequest) (memcore.Pr
 type noSkills struct{}
 
 func (noSkills) Specs(context.Context) ([]skills.Spec, error) { return nil, nil }
+
+// A /model switch drops the served name the last response reported: it names the
+// model that answered before the switch, so the model cell falls back to the new
+// configured name until the next response reports what answered.
+func TestSetModelDropsStaleServedName(t *testing.T) {
+	gateway := testModelGateway(&scriptedProvider{})
+	gateway.servedModel = "qwen3.8-flash-next-coder-iq1_m"
+	gateway.SetModel("cyber-tiel/ornith")
+	if got := gateway.ServedModel(); got != "" {
+		t.Fatalf("served model after a switch = %q, want empty", got)
+	}
+	if got := gateway.Model(); got != "cyber-tiel/ornith" {
+		t.Fatalf("configured model after a switch = %q, want the new name", got)
+	}
+}
