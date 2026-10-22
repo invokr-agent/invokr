@@ -2,6 +2,7 @@ package agent
 
 import (
 	"cmp"
+	"slices"
 
 	"github.com/invokr-ai/invokr/capability/agentprompt"
 	"github.com/invokr-ai/invokr/platform/turn"
@@ -55,12 +56,29 @@ func buildContextBreakdown(sections []agentprompt.PromptSection, schemaChars int
 		estimated += category.Tokens
 	}
 	prompt := usage.LatestPromptTokens
+	// The estimates are calibrated, not measured, so they can overshoot the
+	// provider's prompt total; scale every estimated category down
+	// proportionally so the legend sums to the reported truth instead of
+	// going over 100%. A positive residual the provider cannot attribute keeps
+	// its own "unattributed" row.
+	if estimated > prompt {
+		categories = scaleCategories(categories, estimated, prompt)
+		estimated = prompt
+	}
 	if prompt > 0 {
 		categories = addCategory(categories, "unattributed", prompt-estimated)
 	} else {
 		breakdown.Estimated, prompt = true, estimated
 	}
 	breakdown.Categories = addCategory(categories, "completion", usage.LatestCompletionTokens)
+	// Reasoning is completion-side: it is not carried into later prompts, so it
+	// stays off the bar and out of the groups. The provider's own count wins; a
+	// provider that reports none is estimated from the thinking text the session
+	// already records, and the panel marks that estimate with a "~".
+	sessionGuess, latestGuess := reasoningSizes(messages, scale)
+	breakdown.SessionReasoningTokens = cmp.Or(usage.SessionReasoningTokens, sessionGuess)
+	breakdown.ReasoningTokens = cmp.Or(usage.LatestReasoningTokens, latestGuess)
+	breakdown.ReasoningEstimated = usage.SessionReasoningTokens == 0 && usage.LatestReasoningTokens == 0
 	breakdown.FreeTokens = max(0, usage.ContextWindowTokens-prompt-usage.LatestCompletionTokens)
 	return breakdown
 }
@@ -89,6 +107,52 @@ func appendMessageKinds(categories []turn.ContextCategory, messages []inference.
 	categories = addCategory(categories, "assistant messages", scaledTokens(assistant, scale))
 	categories = addCategory(categories, "tool calls", scaledTokens(toolCalls, scale))
 	return addCategory(categories, "tool results", scaledTokens(toolResults, scale))
+}
+
+// scaleCategories shrinks the estimated categories proportionally onto the
+// provider's prompt total: each takes its exact share's floor, then the tokens
+// the flooring left over go to the largest fractional remainders, so the scaled
+// categories sum to the reported prompt exactly. Zero-token rows drop out.
+func scaleCategories(categories []turn.ContextCategory, estimated, prompt int64) []turn.ContextCategory {
+	if estimated <= 0 || prompt <= 0 {
+		return categories
+	}
+	out := make([]turn.ContextCategory, len(categories))
+	remainders := make([]int64, len(categories))
+	order := make([]int, len(categories))
+	var scaled int64
+	for index, category := range categories {
+		numerator := category.Tokens * prompt
+		out[index] = turn.ContextCategory{Name: category.Name, Tokens: numerator / estimated}
+		remainders[index] = numerator % estimated
+		scaled += out[index].Tokens
+		order[index] = index
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(remainders[b], remainders[a]) })
+	for _, index := range order {
+		if scaled >= prompt {
+			break
+		}
+		out[index].Tokens += 1
+		scaled++
+	}
+	return slices.DeleteFunc(out, func(category turn.ContextCategory) bool { return category.Tokens <= 0 })
+}
+
+// reasoningSizes the thinking text the transcript carries on its assistant
+// messages: reasoning is completion-side, so it never occupies the window and
+// stays out of the categories. The session total and the newest turn are
+// returned sized with the same scale the categories use.
+func reasoningSizes(messages []inference.Message, scale float64) (session, latest int64) {
+	var sessionChars, latestChars int64
+	for _, message := range messages {
+		if message.Reasoning == "" {
+			continue
+		}
+		sessionChars += int64(len(message.Reasoning))
+		latestChars = int64(len(message.Reasoning))
+	}
+	return scaledTokens(sessionChars, scale), scaledTokens(latestChars, scale)
 }
 
 // addCategory appends a category, dropping empty ones so the legend stays short.
