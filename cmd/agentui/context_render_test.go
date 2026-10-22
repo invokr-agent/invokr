@@ -67,7 +67,7 @@ func TestContextTriggerUsesEffectiveWindow(t *testing.T) {
 	}
 }
 
-// TestSessionTotalsLineSplitsCachedPrompt covers the /context
+// TestSessionTotalsLineSplitsCachedPrompt covers the /usage
 // requirement from issue #359: cached prompt tokens are shown separately from
 // the uncached ones, and a provider that reports none renders as before.
 func TestSessionTotalsLineSplitsCachedPrompt(t *testing.T) {

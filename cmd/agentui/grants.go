@@ -9,7 +9,15 @@ import (
 	"github.com/invokr-ai/invokr/capability/approval"
 )
 
-const grantsUsage = "usage: /grants [list | add <tool> <hours> <pattern…> | deny <tool> <hours> <pattern…> | revoke <id>]"
+// grantUsageLine is the row /help prints for the command; grantsUsage is the
+// same line carrying the "usage: " prefix a usage error reads with. The row
+// cannot take that prefix: /help paints the text before the first space as the
+// command name, so it would read "usage:" as the command and list /grants
+// under a row that is not a command.
+const (
+	grantUsageLine = "/grants [list | add <tool> <hours> <pattern…> | deny <tool> <hours> <pattern…> | revoke <id>]"
+	grantsUsage    = "usage: " + grantUsageLine
+)
 
 // maxGrantHours caps a standing grant at 30 days: a grant that never expires is
 // indistinguishable from --allow-all.

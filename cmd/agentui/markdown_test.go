@@ -15,11 +15,11 @@ func TestContextUsageCompactHint(t *testing.T) {
 	usage := turn.TokenUsage{Available: true, ContextWindowTokens: 128000, LatestPromptTokens: 12400}
 	withHint := ansi.Strip(renderContextUsage(usage, turn.ContextBreakdown{}, 9400, 95))
 	if !strings.Contains(withHint, "/compact reclaims an estimated 9.4k") {
-		t.Fatalf("/context missing the compact hint:\n%s", withHint)
+		t.Fatalf("/usage missing the compact hint:\n%s", withHint)
 	}
 	// Nothing old enough to summarize: say nothing rather than "reclaims 0".
 	if got := ansi.Strip(renderContextUsage(usage, turn.ContextBreakdown{}, 0, 95)); strings.Contains(got, "/compact reclaims") {
-		t.Fatalf("/context advertised a zero reclaim:\n%s", got)
+		t.Fatalf("/usage advertised a zero reclaim:\n%s", got)
 	}
 }
 

@@ -9,7 +9,7 @@ import (
 	inference "github.com/rivt-ai/go-inference-router"
 )
 
-// promptBreakdownGateway is the optional gateway capability behind the /context
+// promptBreakdownGateway is the optional gateway capability behind the /usage
 // per-category breakdown, mirroring modelSwitcherGateway.
 type promptBreakdownGateway interface {
 	PromptBreakdown(sessionID string) ([]agentprompt.PromptSection, int64)

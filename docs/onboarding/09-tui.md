@@ -51,7 +51,7 @@ A single `commandRegistry` drives the TUI, the `/help` text, and plain-mode
 parity (each spec optionally has a `plain` handler). Backend-needing commands
 (`/agents /skills /jobs /memory`) call `CommandBackend.Execute` — the
 runtime `CommandService` — asynchronously via a `tea.Cmd`. Others act on the
-session directly (`/model`, `/compact`, `/context`, `/approvals`,
+session directly (`/model`, `/compact`, `/usage`, `/approvals`,
 `/progress`, `/retry`, `/clear`, `/logs`, `/tools`).
 
 Interactive `/clear` starts a fresh session and TUI, resetting conversation,

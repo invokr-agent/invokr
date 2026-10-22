@@ -85,7 +85,7 @@ func TestLiveSessionCommands(t *testing.T) {
 	}
 	m := newModel(context.Background(), session, nil, nil, nil, false, nil, nil)
 
-	// /tools and /context render into the popup overlay, not the transcript.
+	// /tools and /usage render into the popup overlay, not the transcript.
 	_, _ = m.runCommand("/tools")
 	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "NATIVE TOOLS") || !strings.Contains(got, "Run a command.") {
 		t.Fatalf("tools = %q", got)
@@ -96,7 +96,7 @@ func TestLiveSessionCommands(t *testing.T) {
 		t.Fatalf("tools did not read live session state: %q", got)
 	}
 
-	_, _ = m.runCommand("/context")
+	_, _ = m.runCommand("/usage")
 	if got := m.overlay.Content(); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") || !strings.Contains(got, "session totals: 700 prompt · 200 completion") {
 		t.Fatalf("context = %q", got)
 	}
@@ -185,7 +185,7 @@ func TestPlainLiveCommands(t *testing.T) {
 	}
 	tests := map[string]string{
 		"/tools":   "NATIVE TOOLS",
-		"/context": "context: 250 / 1,000 tokens (25%)",
+		"/usage": "context: 250 / 1,000 tokens (25%)",
 		"/compact": "context before compaction: context: 250 / 1,000 tokens (25%)",
 	}
 	for command, want := range tests {
@@ -203,6 +203,53 @@ func TestCommandRegistryIsComplete(t *testing.T) {
 		if command.handler == nil {
 			t.Errorf("/%s has no handler", command.name)
 		}
+	}
+}
+
+// An overlay's title row is the heading it belongs to, so a body heading that
+// repeats it reads as the same line twice: /usage printed a CONTEXT rule under
+// its "context" title and /help a COMMANDS rule under "help". Neither body
+// carries one now. The plain renderers have no title, so /help keeps its rule
+// there, and /usage's first line ("context: N / M tokens") already names the
+// section. /grants lists as its command and arguments, not the "usage: " line an
+// error returns. The /tools listing keeps its group rules (NATIVE TOOLS, TOOLBOX
+//) because those separate groups rather than restate the title, and the recorded
+// overlay's title is lowercase like every other overlay title and the hint.
+func TestOverlayBodiesSitUnderTheirOwnTitle(t *testing.T) {
+	session := &liveCommandSession{
+		specs: []toolcore.ToolSpec{{Name: "shell", Description: "Run commands.", Metadata: toolcore.ToolMetadata{AlwaysVisible: true}}},
+		usage: turn.TokenUsage{Available: true, ContextWindowTokens: 1000, LatestPromptTokens: 100, LatestCompletionTokens: 50},
+	}
+	m := newModel(context.Background(), session, nil, nil, nil, false, nil, nil)
+	m.width = 100
+
+	_, _ = m.runCommand("/usage")
+	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") || strings.Contains(got, "CONTEXT") {
+		t.Fatalf("context overlay = %q, want its lines with no CONTEXT rule", got)
+	}
+	plainText, _ := plainCommand(context.Background(), nil, session, "/usage")
+	if got := ansi.Strip(plainText); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") {
+		t.Fatalf("plain /usage = %q, want its lines", got)
+	}
+
+	_, _ = m.runCommand("/help")
+	help := ansi.Strip(m.overlay.Content())
+	if strings.Contains(help, "COMMANDS") || strings.Contains(help, "usage: /grants") || !strings.Contains(help, "/grants [") {
+		t.Fatalf("help overlay = %q, want rows with no COMMANDS rule and a bare /grants row", help)
+	}
+	helpPlain, _ := plainCommand(context.Background(), nil, session, "/help")
+	if got := ansi.Strip(helpPlain); !strings.Contains(got, "COMMANDS") {
+		t.Fatalf("plain /help lost its heading: %q", got)
+	}
+
+	_, _ = m.runCommand("/tools")
+	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "NATIVE TOOLS") {
+		t.Fatalf("tools overlay dropped its group rule: %q", got)
+	}
+
+	m.showRecorded()
+	if got := m.overlay.Title(); got != "recorded calls" {
+		t.Fatalf("recorded overlay title = %q, want %q", got, "recorded calls")
 	}
 }
 

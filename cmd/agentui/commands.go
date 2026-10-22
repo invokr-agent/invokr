@@ -76,8 +76,8 @@ func init() {
 		{name: "reads", usage: "/reads [workspace|ask]", summary: "reads outside the workspace: refuse, or ask each time (this session)", handler: voidCmd((*model).setReads)},
 		{name: "clear", usage: "/clear", summary: "start a new session (keep saved history and memory)", handler: runClearCommand},
 		{name: "compact", usage: "/compact", summary: "compact context before next turn", handler: sessionCmd(compactCommandText), plain: sessionText(compactCommandText)},
-		{name: "context", usage: "/context", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
-		{name: "grants", usage: grantsUsage, summary: "manage standing approval grants and denials", handler: textCmd((*model).grantsCommand)},
+		{name: "usage", usage: "/usage", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
+		{name: "grants", usage: grantUsageLine, summary: "manage standing approval grants and denials", handler: textCmd((*model).grantsCommand)},
 		{name: "help", usage: "/help", summary: "show this help", handler: runHelpCommand},
 		{name: "jobs", usage: "/jobs [run <name>]", summary: "list or run scheduled jobs", handler: runJobsCommand, plain: runPlainBackend, needsBackend: true},
 		{name: "logs", usage: "/logs", summary: "open runtime logs", handler: runLogsCommand},
@@ -97,7 +97,7 @@ func init() {
 		{name: "syntax", usage: "/syntax [name|auto]", summary: "pick the syntax theme for code blocks", handler: runSyntaxCommand},
 		{name: "tools", usage: "/tools", summary: "list and toggle available tools", handler: runToolsCommand, plain: sessionText(plainToolsText)},
 	}
-	findCommand("help").plain = sessionText(func(turn.Session, []string) string { return renderCommandHelp(0) })
+	findCommand("help").plain = sessionText(func(turn.Session, []string) string { return plainCommandHelp() })
 }
 
 type commandResultMsg struct {
@@ -123,8 +123,14 @@ func commandSuggestions() []string {
 func renderCommandHelp(width int) string {
 	labels := toolcore.MapSlice(commandRegistry, func(c commandSpec) string { return renderCommandUsage(c.usage) })
 	summaries := toolcore.MapSlice(commandRegistry, func(c commandSpec) string { return c.summary })
-	return sectionRule("COMMANDS", 0) + "\n" + strings.TrimRight(twoColumnRows(labels, summaries, width), "\n")
+	// The overlay's title row is the heading, so the rows stand on their own; a
+	// COMMANDS rule under a "help" title reads as two headings in a row.
+	return strings.TrimRight(twoColumnRows(labels, summaries, width), "\n")
 }
+
+// plainCommandHelp is the plain (non-TUI) /help, which has no overlay title to
+// carry the heading the rows sit under, so it keeps the rule the overlay drops.
+func plainCommandHelp() string { return sectionRule("COMMANDS", 0) + "\n" + renderCommandHelp(0) }
 
 // renderUsage paints a command's usage string the way /tools paints a tool:
 // the name itself in the brand gradient, its arguments in the primary accent.
@@ -410,7 +416,7 @@ func runContextCommand(m *model, _ string, _ []string) tea.Cmd {
 	if !ok || !usage.Available {
 		m.commandMessage("usage unavailable")
 	} else {
-		m.overlay.Open("context", renderContextUsage(usage, contextBreakdown(m.session), compactionEstimate(m.session), compactionThreshold(m.session, usage.ContextWindowTokens)))
+		m.overlay.Open("usage", renderContextUsage(usage, contextBreakdown(m.session), compactionEstimate(m.session), compactionThreshold(m.session, usage.ContextWindowTokens)))
 	}
 	return nil
 }
@@ -475,11 +481,15 @@ func compactFeedback(session turn.Session) string {
 }
 
 func renderContextUsage(usage turn.TokenUsage, breakdown turn.ContextBreakdown, reclaimable int64, compactPercent int) string {
-	head := sectionRule("CONTEXT", 0) + "\n"
+	// The overlay's title row is the heading, so the body opens at the bar; a
+	// CONTEXT rule under a "context" title reads as the same line twice. The
+	// plain renderer has no title, and its first line already reads
+	// "context: N / M tokens", which names the section.
+	var body string
 	if bar := renderContextSegments(usage, breakdown); bar != "" {
-		head += bar + "\n"
+		body = bar + "\n"
 	}
-	return head + renderContextTotals(usage, compactPercent) + lastTurnLine(usage) + costLine(usage) + compactHint(reclaimable)
+	return body + renderContextTotals(usage, compactPercent) + lastTurnLine(usage) + costLine(usage) + compactHint(reclaimable)
 }
 
 func compactionThreshold(session turn.Session, window int64) int {
@@ -490,7 +500,7 @@ func compactionThreshold(session turn.Session, window int64) int {
 }
 
 // contextBreakdownSource is the optional session capability behind the
-// per-category /context bar; anything but the real agent.Session falls back to
+// per-category /usage bar; anything but the real agent.Session falls back to
 // the prompt/completion/free split.
 type contextBreakdownSource interface{ ContextBreakdown() turn.ContextBreakdown }
 
@@ -530,7 +540,7 @@ func compactionEstimate(session turn.Session) int64 {
 	return 0
 }
 
-// compactHint is the design's /context footer. It stays silent rather than
+// compactHint is the design's /usage footer. It stays silent rather than
 // advertising a reclaim of zero when there is nothing old enough to summarize.
 func compactHint(reclaimable int64) string {
 	if reclaimable <= 0 {
@@ -601,7 +611,7 @@ func renderContextTotals(usage turn.TokenUsage, compactPercent int) string {
 
 // sessionTotalsLine splits the session prompt total into the cache-served and
 // freshly-evaluated halves whenever the provider reported cached tokens, so
-// /context shows what the prompt cache actually saved.
+// /usage shows what the prompt cache actually saved.
 func sessionTotalsLine(usage turn.TokenUsage) string {
 	prompt := humanize.Comma(usage.SessionPromptTokens) + " prompt"
 	if cached := usage.SessionCachedPromptTokens; cached > 0 {
