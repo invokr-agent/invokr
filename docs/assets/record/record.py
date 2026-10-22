@@ -86,7 +86,7 @@ def expand(script):
 
 SCRIPTS = {
     # The README demo: a prompt, the tiered shell approval it raises, the
-    # answer after it is approved, and /context on the turn it just spent.
+    # answer after it is approved, and /usage on the turn it just spent.
     # Delays are generous because a local model's latency, not the UI, sets
     # the pace.
     "demo": ([
@@ -100,7 +100,7 @@ SCRIPTS = {
         # open, pyte keeps the transcript text under it instead of repainting
         # those rows (a real terminal does not), so the demo skips past the
         # popup rather than pausing on a frame that misrenders here.
-        (1.4, "/context\r", True),         # run it
+        (1.4, "/usage\r", True),         # run it
         (5.0, None, True),                 # the per-category token breakdown, open
     ], 20.0),                              # still: the approval panel, open
 }
@@ -315,7 +315,7 @@ def main():
         sys.exit("no frames captured")
 
     # Skip long unchanged waits without accelerating typed characters.
-    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [10000]  # hold the /context overlay long enough to read
+    durations = [min(2000, int(1000 * (b - a))) for a, b in zip(times, times[1:])] + [10000]  # hold the /usage overlay long enough to read
     paletted = quantize(images)
     paletted[0].save(gif_path, save_all=True, append_images=paletted[1:],
                      duration=durations, loop=0, optimize=True, disposal=1)
