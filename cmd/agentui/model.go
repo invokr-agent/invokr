@@ -912,7 +912,9 @@ func (m *model) helpHint() string {
 }
 
 func (m *model) showRecorded() {
-	m.overlay.Open("Recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
+	// Titles are lowercase throughout, matching the overlay's own title row and
+	// the "Alt+R for recorded calls" hint that points at it.
+	m.overlay.Open("recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
 }
 
 func executionWarning(failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {

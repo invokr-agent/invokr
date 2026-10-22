@@ -206,6 +206,53 @@ func TestCommandRegistryIsComplete(t *testing.T) {
 	}
 }
 
+// An overlay's title row is the heading it belongs to, so a body heading that
+// repeats it reads as the same line twice: /context printed a CONTEXT rule under
+// its "context" title and /help a COMMANDS rule under "help". Neither body
+// carries one now. The plain renderers have no title, so /help keeps its rule
+// there, and /context's first line ("context: N / M tokens") already names the
+// section. /grants lists as its command and arguments, not the "usage: " line an
+// error returns. The /tools listing keeps its group rules (NATIVE TOOLS, TOOLBOX
+//) because those separate groups rather than restate the title, and the recorded
+// overlay's title is lowercase like every other overlay title and the hint.
+func TestOverlayBodiesSitUnderTheirOwnTitle(t *testing.T) {
+	session := &liveCommandSession{
+		specs: []toolcore.ToolSpec{{Name: "shell", Description: "Run commands.", Metadata: toolcore.ToolMetadata{AlwaysVisible: true}}},
+		usage: turn.TokenUsage{Available: true, ContextWindowTokens: 1000, LatestPromptTokens: 100, LatestCompletionTokens: 50},
+	}
+	m := newModel(context.Background(), session, nil, nil, nil, false, nil, nil)
+	m.width = 100
+
+	_, _ = m.runCommand("/context")
+	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") || strings.Contains(got, "CONTEXT") {
+		t.Fatalf("context overlay = %q, want its lines with no CONTEXT rule", got)
+	}
+	plainText, _ := plainCommand(context.Background(), nil, session, "/context")
+	if got := ansi.Strip(plainText); !strings.Contains(got, "context: 150 / 1,000 tokens (15%)") {
+		t.Fatalf("plain /context = %q, want its lines", got)
+	}
+
+	_, _ = m.runCommand("/help")
+	help := ansi.Strip(m.overlay.Content())
+	if strings.Contains(help, "COMMANDS") || strings.Contains(help, "usage: /grants") || !strings.Contains(help, "/grants [") {
+		t.Fatalf("help overlay = %q, want rows with no COMMANDS rule and a bare /grants row", help)
+	}
+	helpPlain, _ := plainCommand(context.Background(), nil, session, "/help")
+	if got := ansi.Strip(helpPlain); !strings.Contains(got, "COMMANDS") {
+		t.Fatalf("plain /help lost its heading: %q", got)
+	}
+
+	_, _ = m.runCommand("/tools")
+	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "NATIVE TOOLS") {
+		t.Fatalf("tools overlay dropped its group rule: %q", got)
+	}
+
+	m.showRecorded()
+	if got := m.overlay.Title(); got != "recorded calls" {
+		t.Fatalf("recorded overlay title = %q, want %q", got, "recorded calls")
+	}
+}
+
 func contains(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {

@@ -126,7 +126,7 @@ func handlePlainLocalCommandWithBackend(ctx context.Context, out io.Writer, sess
 	case "exit", "quit":
 		return true, true
 	case "help":
-		writePlain(out, renderCommandHelp(0), "\n\n", renderPrompt())
+		writePlain(out, plainCommandHelp(), "\n\n", renderPrompt())
 		return true, false
 	default:
 		if result, handled := plainCommand(ctx, commands, session, text); handled {
