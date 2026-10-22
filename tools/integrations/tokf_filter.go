@@ -75,6 +75,14 @@ func (f *TokfResultFilter) FilterToolResult(ctx context.Context, meta core.ToolR
 		}
 		return input, nil
 	}
+	if ctx.Err() != nil {
+		// A cancelled run can still exit cleanly: the helper's own wait returns
+		// once its children are killed, so the process reports success and stdout
+		// holds whatever partial output it printed, not the filtered result. The
+		// context says the run was cut short, so hand back the unfiltered input
+		// rather than a truncated answer that looks filtered.
+		return input, nil
+	}
 
 	return stdout.String(), nil
 }
