@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 )
 
 func DecodeOptionalToolArgs[T any](call *ToolCall) (T, error) {
@@ -15,9 +16,34 @@ func DecodeOptionalToolArgs[T any](call *ToolCall) (T, error) {
 		return args, nil
 	}
 	if err := json.Unmarshal(call.Arguments, &args); err != nil {
+		// Some servers hand the whole argument object back as a JSON string rather
+		// than an object, so the outer value is a string whose text is itself the
+		// arguments. Unwrap that one layer instead of refusing the call: the tool's
+		// own schema still validates what comes out, so a payload that is wrong in
+		// substance stays an error. The original error is what the caller sees when
+		// the inner text does not decode either.
+		if inner := stringifiedToolArgs(call.Arguments); len(inner) > 0 && json.Unmarshal(inner, &args) == nil {
+			return args, nil
+		}
 		return args, err
 	}
 	return args, nil
+}
+
+// stringifiedToolArgs returns the argument object carried inside a JSON string
+// (a double-encoded call), or nothing when the bytes are not that shape. Only
+// an object is unwrapped: a bare string or a number is a value the schema
+// would reject anyway, and guessing at it would invent an argument.
+func stringifiedToolArgs(raw json.RawMessage) []byte {
+	var text string
+	if json.Unmarshal(raw, &text) != nil {
+		return nil
+	}
+	trimmed := strings.TrimSpace(text)
+	if !strings.HasPrefix(trimmed, "{") || !json.Valid([]byte(trimmed)) {
+		return nil
+	}
+	return []byte(trimmed)
 }
 
 // templateMarkup matches the chat-template and tool-call delimiters a model
