@@ -63,14 +63,6 @@ archives:
 checksum:
   name_template: checksums.txt
 
-changelog:
-  sort: asc
-  filters:
-    exclude:
-      - "^docs:"
-      - "^test:"
-      - "^chore:"
-
 release:
   # Owner/repo intentionally left unset: goreleaser infers it from the git
   # remote, and the final public-repo location is undecided (see #178).
