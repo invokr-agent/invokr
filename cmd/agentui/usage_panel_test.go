@@ -277,6 +277,66 @@ func TestUsageInstructionsRowHoldsItsSections(t *testing.T) {
 	}
 }
 
+// TestUsageFoldKeepsASmallGroupWhole covers the short-session case: when every
+// row in a group falls under the 3% cut, merging them left other as the group's
+// only line, hiding the labels the panel meant to show. Those rows keep their
+// own lines, while a group that still holds a row at or over the cut folds its
+// small rows into other as before.
+func TestUsageFoldKeepsASmallGroupWhole(t *testing.T) {
+	// a short session: setup's 14,900 tokens set the 3% cut at 447 over the
+	// 14,924 used, so the whole 24-token history sits under it.
+	used := int64(14_924)
+	whole := []usageRow{{Label: "last reply", Tokens: 10}, {Label: "you", Tokens: 8},
+		{Label: "assistant", Tokens: 6}}
+	if got := foldRows(whole, used); len(got) != len(whole) {
+		t.Fatalf("a group of all-small rows folded to %d rows, want its 3 kept:\n%s",
+			len(got), strings.Join(labels(got), " "))
+	}
+	// one row at or over the cut still folds the rest into other
+	mixed := append(whole, usageRow{Label: "tool results", Tokens: 20_000})
+	got := foldRows(mixed, used)
+	last := got[len(got)-1]
+	if len(got) != 2 || got[0].Label != "tool results" || last.Label != "other" || !last.Folded {
+		t.Fatalf("a group over the cut folded to %d rows, want tool results then other:\n%s",
+			len(got), strings.Join(labels(got), " "))
+	}
+	if last.Tokens != 24 || len(last.Members) != 3 {
+		t.Fatalf("other holds %d tokens over %d members, want 24 over 3",
+			last.Tokens, len(last.Members))
+	}
+	// the same rule through usageGroups: the short session's history draws its
+	// three rows, no other, and keeps its 24-token total
+	groups := usageGroups(turn.ContextBreakdown{Available: true, Categories: []turn.ContextCategory{
+		{Name: "tool schemas", Tokens: 5000}, {Name: "tool specs", Tokens: 900},
+		{Name: "persona", Tokens: 9000},
+		{Name: "completion", Tokens: 10}, {Name: "user messages", Tokens: 8},
+		{Name: "assistant messages", Tokens: 6},
+	}})
+	for _, group := range groups {
+		if group.Name != "history" {
+			continue
+		}
+		if group.Tokens != 24 || len(group.Rows) != 3 {
+			t.Fatalf("short-session history holds %d tokens over %d rows, want 24 over 3:\n%s",
+				group.Tokens, len(group.Rows), strings.Join(labels(group.Rows), " "))
+		}
+		for _, row := range group.Rows {
+			if row.Folded || row.Label == "other" {
+				t.Fatalf("short-session history row %q is the merged other", row.Label)
+			}
+		}
+	}
+}
+
+// labels lists the rows a fold left behind, for the failures above.
+func labels(rows []usageRow) []string {
+	out := make([]string, len(rows))
+	for index, row := range rows {
+		out[index] = row.Label
+	}
+	return out
+}
+
 // TestUsageHintTracksTheSelectedRow: enter is offered only on a row that holds
 // others, so a row that is one category says select alone, and an expanded row
 // collapses rather than expands again.

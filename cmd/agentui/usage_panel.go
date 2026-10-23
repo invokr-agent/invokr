@@ -97,7 +97,9 @@ func usageRowName(category string) (group, label string) {
 }
 
 // foldRows merges the rows under 3% of usage into one other row, but only when
-// two or more qualify: a single small row says more as itself.
+// two or more qualify and at least one row of the group stays unfolded: when
+// every row is small the fold leaves other as the group's only line, hiding
+// every label the panel meant to show, so those rows keep their own lines.
 func foldRows(rows []usageRow, used int64) []usageRow {
 	cut := used * 3 / 100
 	keep, small := []usageRow{}, []usageMember{}
@@ -109,7 +111,9 @@ func foldRows(rows []usageRow, used int64) []usageRow {
 		}
 		small = append(small, usageMember{Label: row.Label, Tokens: row.Tokens})
 	}
-	if len(small) < 2 {
+	if len(small) < 2 || len(keep) == 0 {
+		// a lone small row says more as itself, and folding every row leaves other
+		// alone with nothing to compare it against
 		return rows
 	}
 	merged := usageRow{Label: "other", Members: small, Folded: true}
