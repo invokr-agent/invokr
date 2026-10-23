@@ -35,6 +35,7 @@ type commandRule struct {
 	Network    []string // subcommands that reach the network
 	ReadFlags  []string // flag-only utilities: flags that stay read-only (nil = binary has no write flag)
 	WriteFlags []string // flags that demote a subcommand invocation to write
+	MaxInputs  int      // flag-only utilities: operands past this many name an output file (0 = no limit)
 
 	// AlwaysNetwork marks a binary whose every invocation reaches the network,
 	// whatever its argv (curl, wget). It is its own shape: no subcommands and
@@ -48,20 +49,24 @@ type commandRule struct {
 // the correct answer.
 var commandRules = map[string]commandRule{
 	// Flag-only utilities with no write mode reachable from argv.
-	"ls": {}, "pwd": {}, "cat": {}, "head": {}, "tail": {}, "wc": {}, "grep": {}, "which": {}, "file": {},
-	"cut": {}, "sha256sum": {}, "awk": {}, "tee": {Readonly: []string{"--help"}},
+	"ls": {}, "pwd": {}, "cat": {}, "head": {}, "tail": {}, "wc": {}, "grep": {}, "which": {},
+	// file -C compiles a magic file to disk, so its flags are an allowlist.
+	"file": {ReadFlags: []string{"-b", "-i", "-L", "-h", "-z", "-k", "-s", "-E", "--brief", "--mime", "--mime-type", "--mime-encoding"}},
+	"cut":  {}, "sha256sum": {}, "tee": {Readonly: []string{"--help"}},
 	// echo writes only to stdout; od dumps bytes; sort has -o (write to file),
 	// so its read-only flags are an allowlist.
 	"echo": {}, "od": {},
-	// base64/tr/uniq/diff/sleep have no argv path to a file they write.
-	"base64": {}, "tr": {}, "uniq": {}, "diff": {}, "sleep": {},
+	// base64/tr/diff/sleep have no argv path to a file they write; uniq's
+	// second operand is its output file.
+	"base64": {}, "tr": {}, "uniq": {MaxInputs: 1}, "diff": {}, "sleep": {},
 	// xargs never reaches this rule in practice: the policy resolves the
 	// command it runs and tiers that instead. The row keeps the doctor check
 	// from reading an allowlisted xargs as untiered.
 	"xargs": {},
-	// sed's only write mode is -i (also spelled -i.bak, --in-place), so the
-	// read-only flags are an allowlist and every -i spelling falls closed.
-	"sed": {ReadFlags: []string{"-n", "-e", "-E", "-r", "-s", "-z", "-f", "--quiet", "--silent", "--expression", "--regexp-extended"}},
+	// awk and sed programs write files and run commands (awk system() and
+	// print >, sed w/W/e), so no argv shape proves a read: every real call is
+	// write tier. `sed -n N,Mp FILE` still reroutes to read_file first.
+	"awk": {Readonly: []string{"--help"}}, "sed": {Readonly: []string{"--help"}},
 	// Identity and clock: no argv reaches a file at all. date -s needs root and
 	// is not a write to the workspace, so the flag-only shape still holds.
 	"whoami": {}, "id": {}, "date": {},
@@ -116,7 +121,7 @@ func classifyByRule(command string, args []string, rule commandRule) shellTier {
 		return shellTierWrite
 	}
 	if len(rule.Readonly) == 0 && len(rule.Network) == 0 {
-		return classifyFlagsOnly(args, rule.ReadFlags)
+		return classifyFlagsOnly(args, rule.ReadFlags, rule.MaxInputs)
 	}
 	sub, tier, done := classifySubcommand(command, args)
 	if done {
@@ -138,10 +143,11 @@ func classifySubcommandTier(rule commandRule, sub string) shellTier {
 // classifyFlagsOnly keeps a utility read-only when its flags are known-safe.
 // A nil allowlist means the binary has no write flag at all (ls, cat, grep);
 // a non-nil one fails closed on anything unlisted (find, gofmt).
-func classifyFlagsOnly(args, readFlags []string) shellTier {
+func classifyFlagsOnly(args, readFlags []string, maxInputs int) shellTier {
+	inputs := 0
 	for _, arg := range args {
 		if !strings.HasPrefix(arg, "-") {
-			if argEscapesWorkspace(arg) {
+			if inputs++; argEscapesWorkspace(arg) || (maxInputs > 0 && inputs > maxInputs) {
 				return shellTierWrite
 			}
 			continue

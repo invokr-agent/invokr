@@ -203,7 +203,8 @@ ever advises — workspace content can never widen what the agent executes
 Defaults:
 
 - **Allowlist** (`constants/shell.go`): inspection tools (`ls`, `cat`,
-  `grep`, `rg`, `find`, `sed`, `awk`, `diff`, …), `git`, `go`, `gofmt`, the
+  `grep`, `rg`, `find`, `diff`, …), `sed` and `awk` (write tier, since their
+  programs can write files and run commands), `git`, `go`, `gofmt`, the
   wrappers `xargs` and `timeout` (classified by the command they run), and
   workspace-shaping writes (`chmod`, `mkdir`, `cp`, `rm`, `rmdir`, `mv`,
   `touch`), which are write tier and ask. Ecosystem drivers (`make`, `npm`, `cargo`, `node`,
