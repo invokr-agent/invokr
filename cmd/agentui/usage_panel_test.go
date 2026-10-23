@@ -364,3 +364,70 @@ func TestUsageHintTracksTheSelectedRow(t *testing.T) {
 		}
 	}
 }
+
+// TestUsagePromptSplitSitsInTheSessionBlock covers the audit's reading of the
+// prompt line: "prompt 13.4k · cached 4.4k (33%) · uncached 9k" is the session
+// total, but it sat between the last-turn and session lines so it read as the
+// current prompt. It now rides as line two under the session label, held to the
+// column the values start, in the panel and in plain mode alike.
+func TestUsagePromptSplitSitsInTheSessionBlock(t *testing.T) {
+	usage := turn.TokenUsage{Available: true, ContextWindowTokens: 200_000,
+		LatestPromptTokens: 13_000, LatestCompletionTokens: 400, LatestCachedPromptTokens: 4_000,
+		SessionPromptTokens: 13_400, SessionCachedPromptTokens: 4_400, SessionCompletionTokens: 900}
+	breakdown := turn.ContextBreakdown{Available: true, ReasoningEstimated: true,
+		ReasoningTokens: 300, SessionReasoningTokens: 600}
+	lines := usagePanelReasoningLines(usage, breakdown)
+	if len(lines) != 3 {
+		t.Fatalf("reasoning block drew %d lines, want last turn, session and its prompt line", len(lines))
+	}
+	const valueIndent = 11
+	// the block's labels all hold that width, so the value lines share one column
+	for _, label := range []string{"last turn  ", "session    "} {
+		if lipgloss.Width(label) != valueIndent {
+			t.Fatalf("label %q is %d wide, want %d", label, lipgloss.Width(label), valueIndent)
+		}
+	}
+	promptLine := ansi.Strip(lines[2])
+	if !strings.HasPrefix(promptLine, strings.Repeat(" ", valueIndent)+"prompt ") {
+		t.Fatalf("prompt line = %q, want it indented to the values under the session label", promptLine)
+	}
+	if !strings.Contains(promptLine, "13.4k · cached 4.4k (33%) · uncached 9k") {
+		t.Fatalf("prompt line = %q, want the session's prompt split", promptLine)
+	}
+	// the session line still leads its own prompt line, and the prompt split
+	// stays out of the last-turn line
+	if !strings.Contains(ansi.Strip(lines[1]), "session") || strings.Contains(ansi.Strip(lines[0]), "prompt") {
+		t.Fatalf("reasoning block order wrong:\n%s", strings.Join(lines, "\n"))
+	}
+	// plain mode keeps the same lines, stripped of colour
+	group := usageGroup{Name: "history", Style: lipgloss.Style{}, Rows: []usageRow{
+		{Label: "tool results", Tokens: 83_790}}}
+	plain := strings.Split(usagePlainText(usage, breakdown, []usageGroup{group}, 0, 89), "\n")
+	if tail := plain[len(plain)-1]; !strings.HasPrefix(tail, strings.Repeat(" ", valueIndent)+"prompt ") {
+		t.Fatalf("plain /usage prompt line = %q, want the same indent as the panel", tail)
+	}
+	// a session with no reasoning to say keeps the prompt split on its own label
+	// rather than leaving it under a label that never opened
+	silent := usagePanelReasoningLines(usage, turn.ContextBreakdown{Available: true})
+	if len(silent) != 2 || !strings.HasPrefix(ansi.Strip(silent[1]), "prompt") {
+		t.Fatalf("a session with no reasoning drew %d lines: %q", len(silent), strings.Join(silent, "\n"))
+	}
+}
+
+// TestUsageAnswerSurvivesAnEstimatedThinkingTurn covers the audit's vanished
+// answer: strata counts the thinking text inside completion_tokens, so the
+// reasoning estimate is sized off that total and leaves the answer its own part
+// rather than meeting the total and printing a 100% share.
+func TestUsageAnswerSurvivesAnEstimatedThinkingTurn(t *testing.T) {
+	usage := turn.TokenUsage{Available: true, LatestPromptTokens: 13_000, LatestCompletionTokens: 400,
+		LatestCachedPromptTokens: 4_000, SessionCompletionTokens: 900}
+	breakdown := turn.ContextBreakdown{Available: true, ReasoningEstimated: true,
+		ReasoningTokens: 240, SessionReasoningTokens: 600}
+	last, session := usageReasoningParts(usage, breakdown)
+	if !strings.Contains(last, "reasoning ~240 · answer 160") {
+		t.Fatalf("last-turn line over an estimated thinking turn = %q, want the answer part kept", last)
+	}
+	if !strings.Contains(session, "reasoning ~600 of 900 (67%)") || strings.Contains(session, "100%") {
+		t.Fatalf("session line over an estimated thinking turn = %q", session)
+	}
+}

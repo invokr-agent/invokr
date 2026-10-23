@@ -353,9 +353,10 @@ func usageReasoningParts(usage turn.TokenUsage, breakdown turn.ContextBreakdown)
 	if breakdown.ReasoningEstimated {
 		mark = "~"
 	}
-	// A char estimate of the thinking text can overshoot the completion the
-	// provider measured, which would print a share over 100% and an answer of
-	// nothing, so an estimate never outruns the provider's own counts.
+	// completion_tokens counts the thinking text, so the estimate is sized off
+	// that total and stays under it; the min is a backstop for a breakdown handed
+	// over with an estimate that still outruns the provider's counts, which would
+	// print a share over 100% and an answer of nothing.
 	latest := breakdown.ReasoningTokens
 	total := breakdown.SessionReasoningTokens
 	if breakdown.ReasoningEstimated {
@@ -575,24 +576,40 @@ func usageGroupLines(groups []usageGroup, window, largest int64, selected int, e
 // usagePanelReasoningLines restyles the reasoning parts in violet: the last
 // turn's thinking and answer sit apart from the session total, which is the
 // only part /compact cannot reclaim because it never enters later prompts.
+// labelWidth is every block label's width, so a value's second line starts where
+// the value does: the session's prompt total sits as line two under the session
+// label rather than between the blocks, where it read as the current prompt.
 func usagePanelReasoningLines(usage turn.TokenUsage, breakdown turn.ContextBreakdown) []string {
+	// every block label is the same width, so a value's second line lines up on
+	// the column the values start
+	const labelWidth = 11
 	last, session := usageReasoningParts(usage, breakdown)
+	// the prompt total is the session's, so it rides as line two under the
+	// session label; with no session line it keeps its own label instead of
+	// sitting under nothing
+	prompt := usagePromptSplit(usage)
 	var lines []string
 	if last != "" {
+		// violet: the last turn's thinking and answer sit apart from the session total
 		lines = append(lines, ui.Invokr.Muted.Render("last turn  ")+ui.Invokr.Info.Render(last))
 	}
-	if prompt := usagePromptSplit(usage); prompt != "" {
-		lines = append(lines, ui.Invokr.Muted.Render("prompt     ")+prompt)
-	}
 	if session == "" {
+		if prompt != "" {
+			lines = append(lines, ui.Invokr.Muted.Render("prompt     ")+prompt)
+		}
 		return lines
 	}
 	head, rest, found := strings.Cut(session, " · ")
 	if !found {
 		rest = ""
 	}
-	return append(lines, ui.Invokr.Muted.Render("session    ")+ui.Invokr.Info.Render(head)+
+	// violet: the last turn's thinking and answer sit apart from the session total
+	lines = append(lines, ui.Invokr.Muted.Render("session    ")+ui.Invokr.Info.Render(head)+
 		ui.Invokr.Muted.Render(" · "+rest))
+	if prompt != "" {
+		lines = append(lines, ui.Invokr.Muted.Render(strings.Repeat(" ", labelWidth)+"prompt ")+prompt)
+	}
+	return lines
 }
 
 // usagePromptSplit splits the session's prompt total into what the prompt cache
