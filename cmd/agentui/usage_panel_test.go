@@ -1,6 +1,7 @@
 package agentui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -47,10 +48,17 @@ func TestUsageReasoningPartsClampsEstimated(t *testing.T) {
 }
 
 // TestUsagePanelHintOmitsEscClose: the overlay already paints its own esc close
-// footer, so the panel must not say it twice.
+// footer, so no per-row hint may say it a second time.
 func TestUsagePanelHintOmitsEscClose(t *testing.T) {
-	if strings.Contains(usagePanelHint, "esc close") {
-		t.Fatalf("panel hint = %q, want it without a second esc close", usagePanelHint)
+	groups := []usageGroup{{Name: "history", Style: lipgloss.Style{}, Rows: []usageRow{
+		{Label: "tool results", Tokens: 83790},
+		{Label: "other", Tokens: 443, Members: []usageMember{{Label: "you", Tokens: 300},
+			{Label: "last reply", Tokens: 143}}, Folded: true},
+		}}}
+	for _, expanded := range []bool{false, true} {
+		if got := usageHint(groups, 1, expanded); strings.Contains(got, "esc close") {
+			t.Fatalf("panel hint = %q, want it without a second esc close", got)
+		}
 	}
 }
 
@@ -97,7 +105,7 @@ func TestUsagePanelMatchesSpecColumns(t *testing.T) {
 	}}
 	history := usageGroup{Name: "history", Tokens: 106099, Rows: []usageRow{
 		{Label: "tool results", Tokens: 83790}, {Label: "tool calls", Tokens: 16159}, {Label: "assistant", Tokens: 9002},
-		{Label: "other", Tokens: 2443, Members: []usageMember{{Label: "you"}, {Label: "last reply"}}},
+		{Label: "other", Tokens: 2443, Members: []usageMember{{Label: "you"}, {Label: "last reply"}}, Folded: true},
 	}}
 	groups := []usageGroup{setup, history}
 	const window = 204800
@@ -160,6 +168,77 @@ func TestUsageUnsplitPromptStaysOutOfHistory(t *testing.T) {
 	for _, group := range usageGroups(usageBreakdownOf(usage, turn.ContextBreakdown{})) {
 		if want := map[string]int64{"setup": 0, "history": 50, "unsplit": 400}[group.Name]; group.Tokens != want {
 			t.Fatalf("%s holds %d tokens, want %d", group.Name, group.Tokens, want)
+		}
+	}
+}
+
+// TestUsageInstructionsRowHoldsItsSections covers the merged instructions row:
+// every unnamed prompt section becomes one of its members, listed largest first,
+// so enter expands the sections in place. The row itself prints no trailing
+// names, which only a folded other row does.
+func TestUsageInstructionsRowHoldsItsSections(t *testing.T) {
+	breakdown := turn.ContextBreakdown{Categories: []turn.ContextCategory{
+		{Name: "tool schemas", Tokens: 4948}, {Name: "tool specs", Tokens: 906},
+		{Name: "persona", Tokens: 2100}, {Name: "working rules", Tokens: 1400},
+		{Name: "tool results", Tokens: 83790},
+	}}
+	// persona and working rules sit over the 3% fold cut together, so their row
+	// survives as instructions rather than joining an other row.
+	groups := usageGroups(breakdown)
+	rows := groups[0].Rows
+	if rows[1].Label != "instructions" || rows[1].Folded {
+		t.Fatalf("setup row 1 = %q, want the merged instructions row", rows[1].Label)
+	}
+	members := rows[1].Members
+	if len(members) != 2 || members[0].Label != "persona" || members[0].Tokens != 2100 ||
+		members[1].Label != "working rules" || members[1].Tokens != 1400 {
+		t.Fatalf("instructions merged %d members, want persona 2100 then working rules 1400", len(members))
+	}
+	const window = 204800
+	largest, _ := usageLargest(groups)
+	collapsed := usageGroupLines(groups, window, largest, 1, false)
+	expanded := usageGroupLines(groups, window, largest, 1, true)
+	// the folded row keeps its sections off the line, so the hint is the only
+	// sign enter does anything here.
+	for _, line := range collapsed {
+		if strings.Contains(line, "persona") || strings.Contains(line, "working rules") {
+			t.Fatalf("folded instructions spilled its sections:\n%s", strings.Join(collapsed, "\n"))
+		}
+	}
+	if len(expanded) != len(collapsed)+2 {
+		t.Fatalf("enter on instructions added %d lines, want 2:\n%s", len(expanded)-len(collapsed),
+			strings.Join(expanded, "\n"))
+	}
+	joined := strings.Join(expanded, "\n")
+	if !strings.Contains(joined, "persona") || !strings.Contains(joined, "working rules") {
+		t.Fatalf("expanded instructions lists neither section:\n%s", joined)
+	}
+}
+
+// TestUsageHintTracksTheSelectedRow: enter is offered only on a row that holds
+// others, so a row that is one category says select alone, and an expanded row
+// collapses rather than expands again.
+func TestUsageHintTracksTheSelectedRow(t *testing.T) {
+	groups := []usageGroup{{Name: "setup", Style: lipgloss.Style{}, Rows: []usageRow{
+		{Label: "tool schemas", Tokens: 4948},
+		{Label: "instructions", Tokens: 3500, Members: []usageMember{{Label: "persona", Tokens: 2100},
+			{Label: "working rules", Tokens: 1400}}},
+		{Label: "tool specs", Tokens: 906},
+	}}}
+	want := map[int][]string{0: {"↑↓ select"}, 1: {"↑↓ select · enter expand", "↑↓ select · enter collapse"},
+		2: {"↑↓ select"}}
+	for _, selected := range []int{0, 1, 2} {
+		for _, expanded := range []bool{false, true} {
+			if selected != 1 && expanded {
+				continue
+			}
+			got := usageHint(groups, selected, expanded)
+			if !slices.Contains(want[selected], got) {
+				t.Fatalf("hint over row %d expanded %v = %q", selected, expanded, got)
+			}
+			if selected != 1 && strings.Contains(got, "enter") {
+				t.Fatalf("row %d offers enter, want select alone: %q", selected, got)
+			}
 		}
 	}
 }

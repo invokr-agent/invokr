@@ -18,8 +18,24 @@ import (
 
 const usageRowBarScale = 16
 
-// usagePanelHint names the panel's own keys; the overlay paints esc close.
-const usagePanelHint = "↑↓ select · enter expand other"
+// usageHint names the panel's own keys for the row the cursor sits on: enter
+// only means anything on a row that holds others, so every other row says select
+// alone, and an expanded row collapses rather than expands. The overlay paints
+// esc close itself, so the hint never repeats it.
+func usageHint(groups []usageGroup, selected int, expanded bool) string {
+	gi, ri, ok := usageRowAt(groups, selected)
+	if !ok {
+		return "↑↓ select"
+	}
+	if len(groups[gi].Rows[ri].Members) == 0 {
+		return "↑↓ select"
+	}
+	verb := "expand"
+	if expanded {
+		verb = "collapse"
+	}
+	return "↑↓ select · enter " + verb
+}
 
 // usageRow is one row of the /usage panel: a labelled token count, plus the
 // rows it stands for when it is a folded "other" row.
@@ -27,6 +43,9 @@ type usageRow struct {
 	Label   string
 	Tokens  int64
 	Members []usageMember
+	// folded marks the row as one that swallowed other rows, whose member names
+	// the row itself prints; a merged row keeps its members for enter alone.
+	Folded bool
 }
 
 type usageMember struct {
@@ -93,7 +112,7 @@ func foldRows(rows []usageRow, used int64) []usageRow {
 	if len(small) < 2 {
 		return rows
 	}
-	merged := usageRow{Label: "other", Members: small}
+	merged := usageRow{Label: "other", Members: small, Folded: true}
 	for _, member := range small {
 		merged.Tokens += member.Tokens
 	}
@@ -115,12 +134,25 @@ func usageGroups(breakdown turn.ContextBreakdown) []usageGroup {
 		group.Tokens += category.Tokens
 		used += category.Tokens
 		if at := slices.IndexFunc(group.Rows, func(row usageRow) bool { return row.Label == label }); at >= 0 {
+			// a row that takes a second category keeps both as members, so enter
+			// can list what it merged: the prompt sections share instructions.
 			group.Rows[at].Tokens += category.Tokens
+			group.Rows[at].Members = append(group.Rows[at].Members, usageMember{Label: category.Name, Tokens: category.Tokens})
 		} else {
-			group.Rows = append(group.Rows, usageRow{Label: label, Tokens: category.Tokens})
+			group.Rows = append(group.Rows, usageRow{Label: label, Tokens: category.Tokens,
+				Members: []usageMember{{Label: category.Name, Tokens: category.Tokens}}})
 		}
 	}
 	for index := range groups {
+		for ri := range groups[index].Rows {
+			row := &groups[index].Rows[ri]
+			if len(row.Members) < 2 {
+				// one category is the row itself, and there is nothing to expand
+				row.Members = []usageMember{}
+				continue
+			}
+			slices.SortStableFunc(row.Members, func(a, b usageMember) int { return cmp.Compare(b.Tokens, a.Tokens) })
+		}
 		slices.SortStableFunc(groups[index].Rows, func(a, b usageRow) int { return cmp.Compare(b.Tokens, a.Tokens) })
 		groups[index].Rows = foldRows(groups[index].Rows, used)
 	}
@@ -228,8 +260,9 @@ func usageBarLine(groups []usageGroup, cells []int, selectedGroup string) string
 }
 
 // usageRowLine draws one row: cursor, label, tokens, its bar, and for a folded
-// row the list of rows it stands for. Only the selected row keeps its label and
-// bar in full colour.
+// row the list of rows it stands for. A merged row such as instructions holds
+// its members for enter to expand in place, so it prints no trailing names. Only
+// the selected row keeps its label and bar in full colour.
 func usageRowLine(row usageRow, largest int64, style lipgloss.Style, selected bool) string {
 	bar := usageEighths(row.Tokens, largest)
 	painted := style
@@ -248,7 +281,7 @@ func usageRowLine(row usageRow, largest int64, style lipgloss.Style, selected bo
 	}
 	line := marker + label + padLeft(humanize.Comma(row.Tokens), 8) + "  " +
 		painted.Render(padRight(bar, usageRowBarScale))
-	if len(row.Members) > 0 {
+	if row.Folded && len(row.Members) > 0 {
 		names := make([]string, len(row.Members))
 		for index, member := range row.Members {
 			names[index] = member.Label
@@ -391,7 +424,8 @@ func (m *model) openUsagePanel(usage turn.TokenUsage, breakdown turn.ContextBrea
 func (m *model) renderUsagePanel() {
 	lines := usagePanelLines(m.usagePanel.Usage, m.usagePanel.Breakdown, m.usagePanel.Groups,
 		m.usagePanel.Selected, m.usagePanel.Expanded, m.usagePanel.CompactPercent)
-	lines = append(lines, "", ui.Invokr.Muted.Render(usagePanelHint))
+	lines = append(lines, "", ui.Invokr.Muted.Render(
+		usageHint(m.usagePanel.Groups, m.usagePanel.Selected, m.usagePanel.Expanded)))
 	m.overlay.Open("usage", strings.Join(lines, "\n"))
 }
 
@@ -409,8 +443,8 @@ func usageRowAt(groups []usageGroup, selected int) (group, row int, ok bool) {
 }
 
 // updateUsagePanelKey owns the panel's keys while it is open: the cursor moves
-// on up/down (and j/k), enter expands a folded row in place, and esc collapses
-// one or closes the panel.
+// on up/down (and j/k), enter expands or collapses a row that holds others, and
+// esc collapses one or closes the panel.
 func (m *model) updateUsagePanelKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	p := &m.usagePanel
 	if !p.Open || !m.overlay.IsOpen() || m.overlay.Title() != "usage" {
@@ -448,8 +482,10 @@ func (m *model) moveUsageCursor(step int) {
 	}
 }
 
-// toggleUsageRow opens or collapses a folded other row in place; on any other
-// row there is nothing to expand, so it says nothing.
+// toggleUsageRow opens or collapses a row that holds others in place: a merged
+// row such as instructions lists its prompt sections, a folded row lists the
+// rows it swallowed. On any other row there is nothing to expand, so it says
+// nothing.
 func (m *model) toggleUsageRow() {
 	p := &m.usagePanel
 	if gi, ri, ok := usageRowAt(p.Groups, p.Selected); ok && len(p.Groups[gi].Rows[ri].Members) > 0 {
