@@ -68,7 +68,7 @@ func usageRowName(category string) (group, label string) {
 		"tool calls":         {"history", "tool calls"},
 		"tool results":       {"history", "tool results"},
 		"completion":         {"history", "last reply"},
-		"prompt":             {"history", "prompt"},
+		"prompt":             {"unsplit", "prompt"},
 		"unattributed":       {"history", "unattributed"},
 	}
 	if pair, ok := named[category]; ok {
@@ -103,14 +103,15 @@ func foldRows(rows []usageRow, used int64) []usageRow {
 // usageGroups lays the breakdown's categories out into the panel's two groups,
 // each sorted by tokens and folded where the small rows qualify.
 func usageGroups(breakdown turn.ContextBreakdown) []usageGroup {
-	groups := []usageGroup{{Name: "setup", Style: ui.Invokr.Info}, {Name: "history", Style: ui.Invokr.Warn}}
+	// unsplit holds a prompt total no breakdown attributed: it is setup and
+	// history together, so neither group may claim it. It is empty, and so
+	// drawn not at all, whenever the session can attribute its usage.
+	groups := []usageGroup{{Name: "setup", Style: ui.Invokr.Info}, {Name: "history", Style: ui.Invokr.Warn},
+		{Name: "unsplit", Style: ui.Invokr.Muted}}
 	var used int64
 	for _, category := range breakdown.Categories {
 		name, label := usageRowName(category.Name)
-		group := &groups[0]
-		if name == "history" {
-			group = &groups[1]
-		}
+		group := &groups[slices.IndexFunc(groups, func(g usageGroup) bool { return g.Name == name })]
 		group.Tokens += category.Tokens
 		used += category.Tokens
 		if at := slices.IndexFunc(group.Rows, func(row usageRow) bool { return row.Label == label }); at >= 0 {
@@ -503,6 +504,9 @@ func usagePanelReasoningLines(usage turn.TokenUsage, breakdown turn.ContextBreak
 	if last != "" {
 		lines = append(lines, ui.Invokr.Muted.Render("last turn  ")+ui.Invokr.Info.Render(last))
 	}
+	if prompt := usagePromptSplit(usage); prompt != "" {
+		lines = append(lines, ui.Invokr.Muted.Render("prompt     ")+prompt)
+	}
 	if session == "" {
 		return lines
 	}
@@ -512,4 +516,17 @@ func usagePanelReasoningLines(usage turn.TokenUsage, breakdown turn.ContextBreak
 	}
 	return append(lines, ui.Invokr.Muted.Render("session    ")+ui.Invokr.Info.Render(head)+
 		ui.Invokr.Muted.Render(" · "+rest))
+}
+
+// usagePromptSplit splits the session's prompt total into what the prompt cache
+// served and what was evaluated fresh (issue #359), so /usage shows what the
+// cache saved. A provider that reports no cached tokens gets no line.
+func usagePromptSplit(usage turn.TokenUsage) string {
+	cached := usage.SessionCachedPromptTokens
+	if cached <= 0 || usage.SessionPromptTokens <= 0 {
+		return ""
+	}
+	return formatTokensCompact(usage.SessionPromptTokens) + " · cached " + formatTokensCompact(cached) +
+		fmt.Sprintf(" (%.0f%%)", float64(cached)/float64(usage.SessionPromptTokens)*100) +
+		" · uncached " + formatTokensCompact(usage.SessionPromptTokens-cached)
 }

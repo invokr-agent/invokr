@@ -63,7 +63,7 @@ func TestUsagePlainText(t *testing.T) {
 	breakdown := usageBreakdownOf(usage, turn.ContextBreakdown{})
 	percent := compactionThreshold(nil, usage.ContextWindowTokens)
 	got := usagePlainText(usage, breakdown, usageGroups(breakdown), 9400, percent)
-	for _, want := range []string{"■ history", "    prompt", "last reply", "□ free", "compacts at 89%", "cached 80%",
+	for _, want := range []string{"■ unsplit", "    prompt", "■ history", "last reply", "□ free", "compacts at 89%", "cached 80%",
 		"/compact reclaims an estimated 9.4k"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("plain /usage missing %q:\n%s", want, got)
@@ -137,5 +137,29 @@ func TestUsagePanelMatchesSpecColumns(t *testing.T) {
 	other := lines[8]
 	if got := strings.Index(other, "you, last reply"); lipgloss.Width(other[:got]) != barColumn+usageRowBarScale+2 {
 		t.Errorf("other's members start at column %d, want %d: %q", lipgloss.Width(other[:got]), barColumn+usageRowBarScale+2, other)
+	}
+}
+
+// TestUsagePromptSplit covers issue #359: cached prompt tokens are shown apart
+// from the uncached ones, and a provider that reports none gets no line.
+func TestUsagePromptSplit(t *testing.T) {
+	cached := turn.TokenUsage{SessionPromptTokens: 1_200_000, SessionCachedPromptTokens: 900_000}
+	if got := usagePromptSplit(cached); got != "1200k · cached 900k (75%) · uncached 300k" {
+		t.Fatalf("prompt split = %q", got)
+	}
+	if got := usagePromptSplit(turn.TokenUsage{SessionPromptTokens: 12000}); got != "" {
+		t.Fatalf("uncached session got a prompt split: %q", got)
+	}
+}
+
+// TestUsageUnsplitPromptStaysOutOfHistory: the fallback prompt total is setup
+// and history together, so it must not count toward the history /compact
+// reclaims.
+func TestUsageUnsplitPromptStaysOutOfHistory(t *testing.T) {
+	usage := turn.TokenUsage{Available: true, ContextWindowTokens: 1000, LatestPromptTokens: 400, LatestCompletionTokens: 50}
+	for _, group := range usageGroups(usageBreakdownOf(usage, turn.ContextBreakdown{})) {
+		if want := map[string]int64{"setup": 0, "history": 50, "unsplit": 400}[group.Name]; group.Tokens != want {
+			t.Fatalf("%s holds %d tokens, want %d", group.Name, group.Tokens, want)
+		}
 	}
 }
