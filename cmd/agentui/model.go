@@ -54,6 +54,7 @@ type model struct {
 	modelPicker, skillPicker, palette listPicker
 	// overlay is the modal popup drawn over the finished frame.
 	overlay    tuikit.Overlay
+	usagePanel usagePanel
 	toolDialog toolDialog
 	// pendingToolSuggestion names a toolbox tool to offer after this drain;
 	// toolSuggested keeps each offer to once per session.
@@ -426,6 +427,9 @@ func (m *model) updateKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // that would otherwise deny approvals or interrupt a turn.
 func (m *model) updateModalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if cmd, handled := m.updateToolDialogKey(msg); handled {
+		return cmd, true
+	}
+	if cmd, handled := m.updateUsagePanelKey(msg); handled {
 		return cmd, true
 	}
 	if m.overlay.Update(msg) {
