@@ -3,9 +3,9 @@ package agentui
 import (
 	"cmp"
 	"fmt"
+	humanize "github.com/dustin/go-humanize"
 	"slices"
 	"strings"
-	humanize "github.com/dustin/go-humanize"
 
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/turn"
@@ -146,12 +146,12 @@ func usageBarCells(groups []usageGroup, window int64) []int {
 	for index, group := range groups {
 		used += group.Tokens
 		numerator := group.Tokens * int64(maxContextBarWidth)
-		cells[index] = min(int(numerator / window), maxContextBarWidth)
+		cells[index] = min(int(numerator/window), maxContextBarWidth)
 		remainders[index] = numerator % window
 		order[index] = index
 		painted += cells[index]
 	}
-	target := int(float64(used) / float64(window) * float64(maxContextBarWidth) + 0.5)
+	target := int(float64(used)/float64(window)*float64(maxContextBarWidth) + 0.5)
 	slices.SortStableFunc(order, func(a, b int) int { return cmp.Compare(remainders[b], remainders[a]) })
 	for _, index := range order {
 		if painted >= target {
@@ -173,7 +173,7 @@ func usageEighths(tokens, largest int64) string {
 		return "▏"
 	}
 	scaled := float64(tokens) / float64(largest) * float64(usageRowBarScale)
-	full, part := int(scaled), int((scaled - float64(int(scaled))) * 8)
+	full, part := int(scaled), int((scaled-float64(int(scaled)))*8)
 	marks := []rune(" ▏▎▍▌▋▊▉█")
 	if full == 0 && part == 0 {
 		return "▏"
@@ -189,7 +189,7 @@ func usageEighths(tokens, largest int64) string {
 // of the window. Group headers are not selectable.
 func usageHeaderLine(group usageGroup, window int64) string {
 	swatch := group.Style.Render("■ ")
-	return swatch + padRight(group.Name, 22) + padLeft(humanize.Comma(group.Tokens), 8) +
+	return swatch + padRight(group.Name, 22) + padLeft(humanize.Comma(group.Tokens), 9) +
 		padLeft(usagePercent(group.Tokens, window), 7)
 }
 
@@ -201,9 +201,14 @@ func usagePercent(tokens, window int64) string {
 	return fmt.Sprintf("%.1f%%", float64(tokens)/float64(window)*100)
 }
 
-// padRight and padLeft line the panel's columns out on display text.
-func padRight(s string, width int) string { return s + strings.Repeat(" ", max(0, width-len(s))) }
-func padLeft(s string, width int) string { return strings.Repeat(" ", max(0, width-len(s))) + s }
+// padRight and padLeft line the panel's columns out on display width: the
+// bars and glyphs are multi-byte, so a byte count would skew every column.
+func padRight(s string, width int) string {
+	return s + strings.Repeat(" ", max(0, width-lipgloss.Width(s)))
+}
+func padLeft(s string, width int) string {
+	return strings.Repeat(" ", max(0, width-lipgloss.Width(s))) + s
+}
 
 // memberNames lists the rows a folded other row stands for, for its trailing
 // text.
@@ -262,23 +267,23 @@ func usageRowLine(row usageRow, largest int64, style lipgloss.Style, selected bo
 	if selected {
 		marker = style.Render("  ▸ ")
 	}
-	label := padLeft(row.Label, 14)
+	label := padRight(row.Label, 12)
 	if selected {
 		label = style.Bold(true).Render(label)
 	} else {
 		label = ui.Invokr.Muted.Render(label)
 	}
-	line := marker + label + " " + padLeft(humanize.Comma(row.Tokens), 8) + "  " +
-		painted.Render(padLeft(bar, usageRowBarScale+1))
+	line := marker + label + padLeft(humanize.Comma(row.Tokens), 8) + "  " +
+		painted.Render(padRight(bar, usageRowBarScale))
 	if len(row.Members) > 0 {
-		line += ui.Invokr.Muted.Render("  "+strings.Join(memberNames(row.Members), ", "))
+		line += ui.Invokr.Muted.Render("  " + strings.Join(memberNames(row.Members), ", "))
 	}
 	return line
 }
 
 // usageFreeLine closes the legend with the room the window still has.
 func usageFreeLine(free, window int64) string {
-	return ui.Invokr.Muted.Render("□ "+padRight("free", 22)+padLeft(humanize.Comma(free), 8)+
+	return ui.Invokr.Muted.Render("□ " + padRight("free", 22) + padLeft(humanize.Comma(free), 9) +
 		padLeft(usagePercent(free, window), 7))
 }
 
@@ -327,10 +332,10 @@ func usageReasoningParts(usage turn.TokenUsage, breakdown turn.ContextBreakdown)
 		last = strings.Join(lastParts, " · ")
 	}
 	if total > 0 {
-		session = "reasoning "+mark+formatTokensCompact(total)
+		session = "reasoning " + mark + formatTokensCompact(total)
 		if usage.SessionCompletionTokens > 0 {
-			share := float64(total)/float64(usage.SessionCompletionTokens)*100
-			session += " of "+formatTokensCompact(usage.SessionCompletionTokens)+" ("+fmt.Sprintf("%.0f%%", share)+")"
+			share := float64(total) / float64(usage.SessionCompletionTokens) * 100
+			session += " of " + formatTokensCompact(usage.SessionCompletionTokens) + " (" + fmt.Sprintf("%.0f%%", share) + ")"
 		}
 		session += " · only history shrinks on /compact"
 	}
@@ -438,18 +443,18 @@ func usagePlainText(usage turn.TokenUsage, breakdown turn.ContextBreakdown, grou
 		if group.Tokens <= 0 {
 			continue
 		}
-		lines = append(lines, "■ "+padRight(group.Name, 22)+padLeft(humanize.Comma(group.Tokens), 8)+
+		lines = append(lines, "■ "+padRight(group.Name, 22)+padLeft(humanize.Comma(group.Tokens), 9)+
 			padLeft(usagePercent(group.Tokens, window), 7))
 		for _, row := range group.Rows {
 			note := ""
 			if len(row.Members) > 0 {
-				note = "  "+strings.Join(memberNames(row.Members), ", ")
+				note = "  " + strings.Join(memberNames(row.Members), ", ")
 			}
-			lines = append(lines, "    "+padLeft(row.Label, 14)+" "+padLeft(humanize.Comma(row.Tokens), 8)+
-				"  "+padLeft(usageEighths(row.Tokens, largest), usageRowBarScale+1)+note)
+			lines = append(lines, strings.TrimRight("    "+padRight(row.Label, 12)+padLeft(humanize.Comma(row.Tokens), 8)+
+				"  "+padRight(usageEighths(row.Tokens, largest), usageRowBarScale)+note, " "))
 		}
 	}
-	lines = append(lines, "□ "+padRight("free", 22)+padLeft(humanize.Comma(max(0, window-used)), 8)+
+	lines = append(lines, "□ "+padRight("free", 22)+padLeft(humanize.Comma(max(0, window-used)), 9)+
 		padLeft(usagePercent(max(0, window-used), window), 7))
 	last, session := usageReasoningParts(usage, breakdown)
 	if last != "" {
@@ -484,7 +489,7 @@ func (p *usagePanel) rowAt() (int, int) {
 	seen := 0
 	for gi, g := range p.Groups {
 		if p.Selected < seen+len(g.Rows) {
-			return gi, p.Selected-seen
+			return gi, p.Selected - seen
 		}
 		seen += len(g.Rows)
 	}
@@ -525,7 +530,7 @@ func (m *model) updateUsagePanelKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 // moveUsageCursor steps the cursor over the rows, keeping it inside them.
 func (m *model) moveUsageCursor(step int) {
 	p := &m.usagePanel
-	next := p.Selected+step
+	next := p.Selected + step
 	if next < 0 || next >= usagePanelRowCount(p.Groups) {
 		return
 	}
