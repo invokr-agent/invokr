@@ -97,6 +97,7 @@ func toolOutcomeName(name string) string { return cmp.Or(strings.TrimSpace(name)
 type tokenUsageState struct {
 	mu                                                                                                               sync.Mutex
 	contextWindowTokens, sessionPromptTokens, sessionCachedPromptTokens, sessionCompletionTokens, sessionTotalTokens int64
+	sessionReasoningTokens                                                                                           int64
 }
 
 type TokenUsage struct {
@@ -117,6 +118,13 @@ type TokenUsage struct {
 	SessionCachedPromptTokens int64 `json:"session_cached_prompt_tokens,omitempty"`
 	SessionCompletionTokens   int64 `json:"session_completion_tokens,omitempty"`
 	SessionTotalTokens        int64 `json:"session_total_tokens,omitempty"`
+	// TurnReasoningTokens sums the turn's provider-reported reasoning.
+	TurnReasoningTokens int64 `json:"turn_reasoning_tokens,omitempty"`
+	// SessionReasoningTokens accumulates LatestReasoningTokens alongside the other
+	// session counters; it stays zero for a provider that reports no reasoning
+	// count, which is why /usage falls back to a char estimate of the thinking
+	// text the transcript carries.
+	SessionReasoningTokens int64 `json:"session_reasoning_tokens,omitempty"`
 	// SessionCost is the priced session spend, set by the runner when
 	// provider pricing is configured; zero otherwise.
 	SessionCost float64          `json:"session_cost,omitempty"`
@@ -174,6 +182,7 @@ func (u TokenUsage) AccumulateTurnUsage(delta TokenUsage) TokenUsage {
 	u.TurnCachedPromptTokens += delta.LatestCachedPromptTokens
 	u.TurnCompletionTokens += delta.TurnCompletionTokens
 	u.TurnTotalTokens += delta.TurnTotalTokens
+	u.TurnReasoningTokens += delta.LatestReasoningTokens
 	return u
 }
 
@@ -191,9 +200,11 @@ func (u TokenUsage) RecordUsage() TokenUsage {
 	u.state.sessionCachedPromptTokens += u.TurnCachedPromptTokens
 	u.state.sessionCompletionTokens += u.TurnCompletionTokens
 	u.state.sessionTotalTokens += u.TurnTotalTokens
+	u.state.sessionReasoningTokens += u.TurnReasoningTokens
 	u.SessionPromptTokens = u.state.sessionPromptTokens
 	u.SessionCachedPromptTokens = u.state.sessionCachedPromptTokens
 	u.SessionCompletionTokens = u.state.sessionCompletionTokens
 	u.SessionTotalTokens = u.state.sessionTotalTokens
+	u.SessionReasoningTokens = u.state.sessionReasoningTokens
 	return u
 }

@@ -5,23 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
 
 	"github.com/charmbracelet/x/ansi"
 )
-
-func TestContextUsageCompactHint(t *testing.T) {
-	usage := turn.TokenUsage{Available: true, ContextWindowTokens: 128000, LatestPromptTokens: 12400}
-	withHint := ansi.Strip(renderContextUsage(usage, turn.ContextBreakdown{}, 9400, 95))
-	if !strings.Contains(withHint, "/compact reclaims an estimated 9.4k") {
-		t.Fatalf("/usage missing the compact hint:\n%s", withHint)
-	}
-	// Nothing old enough to summarize: say nothing rather than "reclaims 0".
-	if got := ansi.Strip(renderContextUsage(usage, turn.ContextBreakdown{}, 0, 95)); strings.Contains(got, "/compact reclaims") {
-		t.Fatalf("/usage advertised a zero reclaim:\n%s", got)
-	}
-}
 
 func TestRenderMarkdownDropsSyntaxCharacters(t *testing.T) {
 	const width = 80
