@@ -101,7 +101,11 @@ SCRIPTS = {
         # those rows (a real terminal does not), so the demo skips past the
         # popup rather than pausing on a frame that misrenders here.
         (1.4, "/usage\r", True),         # run it
-        (5.0, None, True),                 # the per-category token breakdown, open
+        (2.5, None, True),                 # the per-category token breakdown, open
+        (0.9, "j", True),                  # walk the rows: the bar follows the cursor
+        (0.9, "j", True),
+        (0.9, "j", True),
+        (2.5, "j", True),                  # into history: the other group lights up
     ], 20.0),                              # still: the approval panel, open
 }
 RECORD = os.environ.get("RECORD", "demo")
