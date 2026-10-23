@@ -49,7 +49,7 @@ type commandRule struct {
 var commandRules = map[string]commandRule{
 	// Flag-only utilities with no write mode reachable from argv.
 	"ls": {}, "pwd": {}, "cat": {}, "head": {}, "tail": {}, "wc": {}, "grep": {}, "which": {}, "file": {},
-	"cut": {}, "sha256sum": {}, "awk": {}, "tee": {Readonly: []string{"--help"}},
+	"cut": {}, "sha256sum": {}, "tee": {Readonly: []string{"--help"}},
 	// echo writes only to stdout; od dumps bytes; sort has -o (write to file),
 	// so its read-only flags are an allowlist.
 	"echo": {}, "od": {},
@@ -59,9 +59,10 @@ var commandRules = map[string]commandRule{
 	// command it runs and tiers that instead. The row keeps the doctor check
 	// from reading an allowlisted xargs as untiered.
 	"xargs": {},
-	// sed's only write mode is -i (also spelled -i.bak, --in-place), so the
-	// read-only flags are an allowlist and every -i spelling falls closed.
-	"sed": {ReadFlags: []string{"-n", "-e", "-E", "-r", "-s", "-z", "-f", "--quiet", "--silent", "--expression", "--regexp-extended"}},
+	// awk and sed programs write files and run commands (awk system() and
+	// print >, sed w/W/e), so no argv shape proves a read: every real call is
+	// write tier. `sed -n N,Mp FILE` still reroutes to read_file first.
+	"awk": {Readonly: []string{"--help"}}, "sed": {Readonly: []string{"--help"}},
 	// Identity and clock: no argv reaches a file at all. date -s needs root and
 	// is not a write to the workspace, so the flag-only shape still holds.
 	"whoami": {}, "id": {}, "date": {},

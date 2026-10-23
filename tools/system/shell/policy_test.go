@@ -385,7 +385,7 @@ func TestAssignmentPrefixRefused(t *testing.T) {
 // own tier would launder the command it wraps, so it is classified by the
 // inner root instead.
 func TestPolicyWidenedRootsAndTimeoutWrapper(t *testing.T) {
-	allowed := []string{"ls", "rm", "sed", "timeout", "which", "diff"}
+	allowed := []string{"ls", "rm", "sed", "awk", "timeout", "which", "diff"}
 	wsp := workspace.NewWorkspacePolicy(config.WorkspaceConfig{Root: t.TempDir()})
 	cases := []struct {
 		line string
@@ -394,8 +394,13 @@ func TestPolicyWidenedRootsAndTimeoutWrapper(t *testing.T) {
 		{"rm x", shellTierWrite},
 		{"sed -i s/a/b/ f", shellTierWrite},
 		{"sed -i.bak s/a/b/ f", shellTierWrite},
-		{"sed -n '1,5p' f", shellTierReadonly},
-		{"sed s/a/b/ f", shellTierReadonly},
+		{"sed -n '1,5p' f", shellTierWrite},
+		{"sed s/a/b/ f", shellTierWrite},
+		{"sed 'w out' f", shellTierWrite},
+		{"sed 'e id' f", shellTierWrite},
+		{"awk '{print}' f", shellTierWrite},
+		{`awk 'BEGIN{system("id")}'`, shellTierWrite},
+		{`awk '{print > "out"}' f`, shellTierWrite},
 		{"which ls", shellTierReadonly},
 		{"diff a b", shellTierReadonly},
 		{"timeout 5 ls", shellTierReadonly},
