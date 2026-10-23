@@ -54,13 +54,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git checkout -q origin/main
+          git checkout -q -f origin/main
           scripts/changelog.sh "$GITHUB_REF_NAME"
           git diff --quiet && exit 0
           branch="changelog/$GITHUB_REF_NAME"
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git switch -c "$branch"
-          git commit -am "docs: changelog for $GITHUB_REF_NAME"
+          git commit -m "docs: changelog for $GITHUB_REF_NAME" CHANGELOG.md
           git push origin "$branch"
           gh pr create --base main --head "$branch" --title "docs: changelog for $GITHUB_REF_NAME" --body "Changes since the previous release, grouped by type."
