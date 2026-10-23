@@ -41,7 +41,7 @@ var budgets = []area{
 	// Surfaces. The TUI is the thinnest subsystem against comparable
 	// harnesses (3.8k here against crush's 27k), so it gets the most room:
 	// the cap should not be what stops the TUI catching up.
-	{"cmd/agentui", 5893},    // 2026-10-22 to the measured count: the /usage panel (layout D) lands in full.
+	{"cmd/agentui", 5901},    // 2026-10-22 to the measured count: the /usage panel (layout D) lands in full, plus its reasoning clamp and rune-indexed bars.
 	{"cmd", 2500},
 	// 2026-10-22 measured count: the installer downloads, verifies and swaps the
 	// release binary in Go instead of running install.sh.

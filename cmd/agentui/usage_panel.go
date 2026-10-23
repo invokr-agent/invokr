@@ -174,13 +174,13 @@ func usageEighths(tokens, largest int64) string {
 	}
 	scaled := float64(tokens) / float64(largest) * float64(usageRowBarScale)
 	full, part := int(scaled), int((scaled - float64(int(scaled))) * 8)
-	marks := " ▏▎▍▌▋▊▉█"
+	marks := []rune(" ▏▎▍▌▋▊▉█")
 	if full == 0 && part == 0 {
 		return "▏"
 	}
 	bar := strings.Repeat("█", full)
 	if part > 0 {
-		bar += marks[part : part+1]
+		bar += string(marks[part])
 	}
 	return bar
 }
@@ -300,13 +300,25 @@ func usageReasoningParts(usage turn.TokenUsage, breakdown turn.ContextBreakdown)
 	if breakdown.ReasoningEstimated {
 		mark = "~"
 	}
+	// A char estimate of the thinking text can overshoot the completion the
+	// provider measured, which would print a share over 100% and an answer of
+	// nothing, so an estimate never outruns the provider's own counts.
+	// char estimate bounded by the completion counts
+	latest := breakdown.ReasoningTokens
+	total := breakdown.SessionReasoningTokens
+	if breakdown.ReasoningEstimated {
+		latest = min(latest, usage.LatestCompletionTokens)
+		total = min(total, usage.SessionCompletionTokens)
+	}
 	var lastParts []string
-	if breakdown.ReasoningTokens > 0 {
-		lastParts = append(lastParts, "reasoning "+mark+formatTokensCompact(breakdown.ReasoningTokens))
+	if latest > 0 {
+		lastParts = append(lastParts, "reasoning "+mark+formatTokensCompact(latest))
 	}
 	if usage.LatestCompletionTokens > 0 {
-		answer := max(0, usage.LatestCompletionTokens-breakdown.ReasoningTokens)
-		lastParts = append(lastParts, "answer "+formatTokensCompact(answer))
+		answer := max(0, usage.LatestCompletionTokens-latest)
+		if !breakdown.ReasoningEstimated || answer > 0 {
+			lastParts = append(lastParts, "answer "+formatTokensCompact(answer))
+		}
 	}
 	if usage.LatestPromptTokens > 0 && usage.LatestCachedPromptTokens > 0 {
 		lastParts = append(lastParts, "cached "+fmt.Sprintf("%.0f%%", float64(usage.LatestCachedPromptTokens)/float64(usage.LatestPromptTokens)*100))
@@ -314,10 +326,10 @@ func usageReasoningParts(usage turn.TokenUsage, breakdown turn.ContextBreakdown)
 	if len(lastParts) > 0 {
 		last = strings.Join(lastParts, " · ")
 	}
-	if breakdown.SessionReasoningTokens > 0 {
-		session = "reasoning "+mark+formatTokensCompact(breakdown.SessionReasoningTokens)
+	if total > 0 {
+		session = "reasoning "+mark+formatTokensCompact(total)
 		if usage.SessionCompletionTokens > 0 {
-			share := float64(breakdown.SessionReasoningTokens)/float64(usage.SessionCompletionTokens)*100
+			share := float64(total)/float64(usage.SessionCompletionTokens)*100
 			session += " of "+formatTokensCompact(usage.SessionCompletionTokens)+" ("+fmt.Sprintf("%.0f%%", share)+")"
 		}
 		session += " · only history shrinks on /compact"
@@ -406,7 +418,7 @@ func usagePanelLines(usage turn.TokenUsage, breakdown turn.ContextBreakdown, gro
 	lines = append(lines, usageGroupLines(groups, window, usageLargestRow(groups), selected, expanded)...)
 	lines = append(lines, usageFreeLine(max(0, window-used), window))
 	lines = append(lines, usagePanelReasoningLines(usage, breakdown)...)
-	lines = append(lines, "", ui.Invokr.Muted.Render("↑↓ select · enter expand other · esc close"))
+	lines = append(lines, "", ui.Invokr.Muted.Render("↑↓ select · enter expand other"))
 	return strings.Join(lines, "\n")
 }
 
