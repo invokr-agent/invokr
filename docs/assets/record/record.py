@@ -42,6 +42,11 @@ FONT_PATH = "/usr/share/fonts/TTF/JetBrainsMonoNerdFontMono-Regular.ttf"
 # .notdef box. Anything monospace that does have it works as a stand-in for the
 # handful of characters in that position.
 FALLBACK_FONT_PATH = "/usr/share/fonts/TTF/FiraCodeNerdFontMono-Regular.ttf"
+# Emoji in the status bar (📁 and friends) are in neither mono font. Noto Color
+# Emoji is a bitmap font that only loads at 109px, so its glyphs are drawn at
+# that size and scaled down into the cell.
+EMOJI_FONT_PATH = "/usr/share/fonts/noto/NotoColorEmoji.ttf"
+EMOJI_SIZE = 109
 FONT_SIZE = 13
 PAD = 16
 FRAME_MS = 100  # sample rate; a shared palette keeps even this cheap
@@ -267,6 +272,34 @@ def glyph_font(char, font, fallback):
 NOTDEF = "\U000FFFFD"
 _GLYPH_FONT = {}
 FALLBACK = None
+EMOJI = None
+_MISSING = {}
+
+
+def missing(char, font):
+    """Whether font draws char as .notdef."""
+    key = (char, id(font))
+    if key not in _MISSING:
+        _MISSING[key] = bytes(font.getmask(char)) == bytes(font.getmask(NOTDEF))
+    return _MISSING[key]
+
+
+_EMOJI_CACHE = {}
+
+
+def paste_emoji(image, char, px, py, cell_w, cell_h):
+    """Draw a colour emoji two cells wide, scaled from Noto's fixed bitmap size."""
+    if char not in _EMOJI_CACHE:
+        glyph = Image.new("RGBA", (EMOJI_SIZE * 2, EMOJI_SIZE * 2), (0, 0, 0, 0))
+        ImageDraw.Draw(glyph).text((0, 0), char, font=EMOJI, embedded_color=True)
+        box = glyph.getbbox()
+        if box:
+            glyph = glyph.crop(box)
+        side = min(cell_h, 2 * cell_w) - 2
+        glyph.thumbnail((side, side), Image.LANCZOS)
+        _EMOJI_CACHE[char] = glyph
+    glyph = _EMOJI_CACHE[char]
+    image.paste(glyph, (px + 1, py + (cell_h - glyph.height) // 2), glyph)
 
 
 def draw(buffer, font, cell_w, cell_h, t=None):
@@ -282,7 +315,10 @@ def draw(buffer, font, cell_w, cell_h, t=None):
                 canvas.rectangle([px, py, px + cell_w, py + cell_h], fill=bg)
             if char.data.strip():
                 fg = BG if char.reverse else color(char.fg, FG)
-                canvas.text((px, py), char.data, font=glyph_font(char.data, font, FALLBACK), fill=fg)
+                if EMOJI and missing(char.data, font) and (FALLBACK is None or missing(char.data, FALLBACK)):
+                    paste_emoji(image, char.data, px, py, cell_w, cell_h)
+                else:
+                    canvas.text((px, py), char.data, font=glyph_font(char.data, font, FALLBACK), fill=fg)
     if t is not None:
         # A wall clock, drawn by the recorder rather than the program, so two
         # recordings of different builds share one timebase.
@@ -323,6 +359,9 @@ def main():
     font = ImageFont.truetype(FONT_PATH, FONT_SIZE)
     if os.path.exists(FALLBACK_FONT_PATH):
         FALLBACK = ImageFont.truetype(FALLBACK_FONT_PATH, FONT_SIZE)
+    global EMOJI
+    if os.path.exists(EMOJI_FONT_PATH):
+        EMOJI = ImageFont.truetype(EMOJI_FONT_PATH, EMOJI_SIZE)
     cell_w = round(font.getlength("M"))
     ascent, descent = font.getmetrics()
     cell_h = ascent + descent
