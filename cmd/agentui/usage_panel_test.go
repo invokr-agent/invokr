@@ -172,6 +172,68 @@ func TestUsageUnsplitPromptStaysOutOfHistory(t *testing.T) {
 	}
 }
 
+// TestUsageExpandedMembersKeepTheColumns: a member label longer than the plain
+// 12 columns, such as response contract, widens the label column for every line
+// the panel draws rather than pushing its own tokens and bar right. The token
+// right edge and the bar start therefore sit on one column across rows and
+// members alike, and a member sits two cells deeper than its rows.
+func TestUsageExpandedMembersKeepTheColumns(t *testing.T) {
+	breakdown := turn.ContextBreakdown{Categories: []turn.ContextCategory{
+		{Name: "tool schemas", Tokens: 4948}, {Name: "tool specs", Tokens: 906},
+		{Name: "persona", Tokens: 3100}, {Name: "response contract", Tokens: 2200},
+		{Name: "tool results", Tokens: 83790},
+	}}
+	// instructions leads the setup rows at 5300 tokens, so the cursor opens on
+	// it. response contract is 17 wide and a member sits two cells deeper, so an
+	// expanded body's label column is 19. tool specs stays a row of its own: it is
+	// the only row under the cut.
+	groups := usageGroups(breakdown)
+	largest, _ := usageLargest(groups)
+	const window = 204800
+	for _, expanded := range []bool{false, true} {
+		// a folded body keeps the plain column, an expanded one takes the member's
+		labelWidth := 12
+		if expanded {
+			// response contract's 17 plus the member's two-cell indent
+			labelWidth = 19
+		}
+		// the label column opens 4 cells in and the token field is 8 wide, so the
+		// last token digit ends one cell before the gap that opens the bar
+		edge := 4 + labelWidth + 8 - 1
+		start := edge + 3
+		for _, line := range usageGroupLines(groups, window, largest, 0, expanded) {
+			plain := ansi.Strip(line)
+			// a group header and the free row keep their own columns, so only a
+			// row or a member opens with the indent's blanks
+			if !strings.HasPrefix(plain, " ") {
+				continue
+			}
+			chars := []rune(plain)
+			// the token field is right aligned, so its last digit ends the run on
+			// one column for every row and member
+			if !strings.Contains("0123456789", string(chars[edge])) || chars[edge+1] != ' ' {
+				t.Fatalf("tokens of %q end off column %d", plain, edge)
+			}
+			// the bar opens three cells after the tokens, on one column too
+			if chars[edge+2] != ' ' || !strings.Contains("█▏▎▍▌▋▊▉", string(chars[start])) {
+				t.Fatalf("bar of %q starts off column %d", plain, start)
+			}
+			// a member sits two cells deeper than a row, so its label starts at 6
+			// while its tokens still end at the same edge
+			for _, member := range []string{"persona", "response contract"} {
+				if at := strings.Index(plain, member); at >= 0 && at != 6 {
+					t.Fatalf("member %s starts at %d, want 6: %q", member, at, plain)
+				}
+			}
+			for _, row := range []string{"tool specs", "tool results"} {
+				if at := strings.Index(plain, row); at >= 0 && at != 4 {
+					t.Fatalf("row %s starts at %d, want 4: %q", row, at, plain)
+				}
+			}
+		}
+	}
+}
+
 // TestUsageInstructionsRowHoldsItsSections covers the merged instructions row:
 // every unnamed prompt section becomes one of its members, listed largest first,
 // so enter expands the sections in place. The row itself prints no trailing

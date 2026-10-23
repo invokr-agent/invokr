@@ -259,21 +259,55 @@ func usageBarLine(groups []usageGroup, cells []int, selectedGroup string) string
 	return bar.String()
 }
 
+// usageLabelWidth sizes the label column to the longest label the panel draws:
+// every row, plus the selected row's members when it is expanded, never below
+// the 12 columns the plain rows already have. A folded row's member names trail
+// after the bar, so they ask for no column room.
+func usageLabelWidth(groups []usageGroup, selected int, expanded bool) int {
+	var index int
+	widest := 12
+	for _, group := range groups {
+		// a group with nothing in it draws no rows, so it asks for no room
+		if group.Tokens <= 0 {
+			continue
+		}
+		for _, row := range group.Rows {
+			widest = max(widest, lipgloss.Width(row.Label))
+			if index == selected && expanded {
+				// only the row the cursor sits on lists its members
+				for _, member := range row.Members {
+					// a member sits two cells deeper, so its label needs those two
+					// columns of the shared field to hold its tokens on one column
+					widest = max(widest, lipgloss.Width(member.Label)+2)
+				}
+			}
+			index++
+		}
+	}
+	return widest
+}
+
 // usageRowLine draws one row: cursor, label, tokens, its bar, and for a folded
 // row the list of rows it stands for. A merged row such as instructions holds
-// its members for enter to expand in place, so it prints no trailing names. Only
-// the selected row keeps its label and bar in full colour.
-func usageRowLine(row usageRow, largest int64, style lipgloss.Style, selected bool) string {
+// its members for enter to expand in place, so it prints no trailing names. indent
+// is the row's own marker width and labelWidth the panel's label column: a member
+// sits two columns deeper and gives those two back from its pad, so every token
+// and bar column lines up on rows and members alike. Only the selected row keeps
+// its label and bar in full colour.
+func usageRowLine(row usageRow, largest int64, style lipgloss.Style, selected bool,
+	indent, labelWidth int) string {
 	bar := usageEighths(row.Tokens, largest)
 	painted := style
 	if !selected {
 		painted = ui.Invokr.Muted
 	}
-	marker := "    "
+	marker := strings.Repeat(" ", indent)
 	if selected {
-		marker = style.Render("  ▸ ")
+		// the cursor sits two cells in from the label's own edge
+		marker = strings.Repeat(" ", indent-4) + style.Render("  ▸ ")
 	}
-	label := padRight(row.Label, 12)
+	// a member's two extra indent cells come out of its pad, not the column
+	label := padRight(row.Label, labelWidth-indent+4)
 	if selected {
 		label = style.Bold(true).Render(label)
 	} else {
@@ -510,6 +544,9 @@ func usageBreakdownOf(usage turn.TokenUsage, breakdown turn.ContextBreakdown) tu
 // expanded members, in display order.
 func usageGroupLines(groups []usageGroup, window, largest int64, selected int, expanded bool) []string {
 	var lines []string
+	// one label column for the whole body, so a long member label such as
+	// response contract leaves every token and bar column where it already is
+	labelWidth := usageLabelWidth(groups, selected, expanded)
 	index := 0
 	for _, group := range groups {
 		if group.Tokens <= 0 {
@@ -518,11 +555,11 @@ func usageGroupLines(groups []usageGroup, window, largest int64, selected int, e
 		lines = append(lines, usageHeaderLine(group, window))
 		for _, row := range group.Rows {
 			on := index == selected
-			lines = append(lines, usageRowLine(row, largest, group.Style, on))
+			lines = append(lines, usageRowLine(row, largest, group.Style, on, 4, labelWidth))
 			if on && expanded {
 				for _, member := range row.Members {
 					lines = append(lines, usageRowLine(usageRow{Label: member.Label, Tokens: member.Tokens},
-						largest, group.Style, false))
+						largest, group.Style, false, 6, labelWidth))
 				}
 			}
 			index++
