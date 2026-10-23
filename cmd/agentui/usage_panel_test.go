@@ -49,11 +49,41 @@ func TestUsageReasoningPartsClampsEstimated(t *testing.T) {
 // TestUsagePanelHintOmitsEscClose: the overlay already paints its own esc close
 // footer, so the panel must not say it twice.
 func TestUsagePanelHintOmitsEscClose(t *testing.T) {
-	usage := turn.TokenUsage{Available: true, ContextWindowTokens: 1000, LatestPromptTokens: 100, LatestCompletionTokens: 50}
+	if strings.Contains(usagePanelHint, "esc close") {
+		t.Fatalf("panel hint = %q, want it without a second esc close", usagePanelHint)
+	}
+}
+
+// TestUsagePlainText covers plain-mode /usage: the fallback split without a
+// breakdown, the effective compaction trigger, and the /compact estimate that
+// is omitted rather than advertised as zero.
+func TestUsagePlainText(t *testing.T) {
+	usage := turn.TokenUsage{Available: true, ContextWindowTokens: 61440, LatestPromptTokens: 12400, LatestCompletionTokens: 50,
+		LatestCachedPromptTokens: 9920}
 	breakdown := usageBreakdownOf(usage, turn.ContextBreakdown{})
-	got := usagePanelLines(usage, breakdown, usageGroups(breakdown), 0, false, 85)
-	if !strings.Contains(got, "↑↓ select · enter expand other") || strings.Contains(got, "esc close") {
-		t.Fatalf("panel hint = %q, want the hint without a second esc close", got)
+	percent := compactionThreshold(nil, usage.ContextWindowTokens)
+	got := usagePlainText(usage, breakdown, usageGroups(breakdown), 9400, percent)
+	for _, want := range []string{"■ history", "    prompt", "last reply", "□ free", "compacts at 89%", "cached 80%",
+		"/compact reclaims an estimated 9.4k"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("plain /usage missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "instructions") || strings.Contains(got, "\x1b") || strings.Contains(got, "▸") {
+		t.Fatalf("plain /usage misfiled the prompt, kept colour or a cursor:\n%s", got)
+	}
+	if got := usagePlainText(usage, breakdown, usageGroups(breakdown), 0, percent); strings.Contains(got, "/compact reclaims") {
+		t.Fatalf("plain /usage advertised a zero reclaim:\n%s", got)
+	}
+}
+
+// TestUsageCursorCollapsesOther: leaving an expanded other row collapses it,
+// so coming back finds it folded.
+func TestUsageCursorCollapsesOther(t *testing.T) {
+	m := &model{usagePanel: usagePanel{Expanded: true, Groups: []usageGroup{{Rows: []usageRow{{Label: "a"}, {Label: "other"}}}}, Selected: 1}}
+	m.moveUsageCursor(-1)
+	if m.usagePanel.Expanded || m.usagePanel.Selected != 0 {
+		t.Fatalf("cursor move left the panel at row %d, expanded %v", m.usagePanel.Selected, m.usagePanel.Expanded)
 	}
 }
 
@@ -71,7 +101,8 @@ func TestUsagePanelMatchesSpecColumns(t *testing.T) {
 	}}
 	groups := []usageGroup{setup, history}
 	const window = 204800
-	lines := usageGroupLines(groups, window, usageLargestRow(groups), usagePanelStart(groups), false)
+	largest, start := usageLargest(groups)
+	lines := usageGroupLines(groups, window, largest, start, false)
 	lines = append(lines, usageFreeLine(92031, window))
 	for index, line := range lines {
 		lines[index] = ansi.Strip(line)

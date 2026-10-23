@@ -21,9 +21,9 @@ type ContextCategory struct {
 // ReasoningEstimated marks them as char-count estimates because the provider
 // reported no reasoning count of its own.
 type ContextBreakdown struct {
-	Available, Estimated     bool
-	WindowTokens, FreeTokens int64
+	Available, Estimated                    bool
+	WindowTokens, FreeTokens                int64
 	ReasoningTokens, SessionReasoningTokens int64
-	ReasoningEstimated              bool
-	Categories                      []ContextCategory
+	ReasoningEstimated                      bool
+	Categories                              []ContextCategory
 }

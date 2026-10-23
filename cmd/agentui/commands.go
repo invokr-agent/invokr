@@ -478,18 +478,6 @@ func compactFeedback(session turn.Session) string {
 	return "context compaction requested\ncontext before compaction: " + contextUsageLine(usage)
 }
 
-func renderContextUsage(usage turn.TokenUsage, breakdown turn.ContextBreakdown, reclaimable int64, compactPercent int) string {
-	// The overlay's title row is the heading, so the body opens at the bar; a
-	// CONTEXT rule under a "context" title reads as the same line twice. The
-	// plain renderer has no title, and its first line already reads
-	// "context: N / M tokens", which names the section.
-	var body string
-	if bar := renderContextSegments(usage, breakdown); bar != "" {
-		body = bar + "\n"
-	}
-	return body + renderContextTotals(usage, compactPercent) + lastTurnLine(usage) + costLine(usage) + compactHint(reclaimable)
-}
-
 func compactionThreshold(session turn.Session, window int64) int {
 	if source, ok := session.(interface{ CompactionThreshold() int }); ok {
 		return source.CompactionThreshold()
@@ -509,23 +497,6 @@ func contextBreakdown(session turn.Session) turn.ContextBreakdown {
 	return turn.ContextBreakdown{}
 }
 
-// lastTurnLine reports completion-side and cache counters that do not occupy
-// the context window, so they stay off the bar (reasoning is not carried into
-// later prompts; cached tokens are a subset of the prompt).
-func lastTurnLine(usage turn.TokenUsage) string {
-	var parts []string
-	if usage.LatestReasoningTokens > 0 {
-		parts = append(parts, "reasoning "+formatTokensCompact(usage.LatestReasoningTokens))
-	}
-	if usage.LatestCachedPromptTokens > 0 && usage.LatestPromptTokens > 0 {
-		parts = append(parts, fmt.Sprintf("cached %s (%.0f%%)", formatTokensCompact(usage.LatestCachedPromptTokens), float64(usage.LatestCachedPromptTokens)/float64(usage.LatestPromptTokens)*100))
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return ui.Invokr.Muted.Render("\nlast turn: " + strings.Join(parts, " · "))
-}
-
 // compactionEstimator is the optional session capability behind the design's
 // "/compact reclaims an estimated 9.4k" footer. A session that cannot say —
 // anything but the real agent.Session — simply omits the line.
@@ -536,86 +507,6 @@ func compactionEstimate(session turn.Session) int64 {
 		return estimator.CompactionEstimate()
 	}
 	return 0
-}
-
-// compactHint is the design's /usage footer. It stays silent rather than
-// advertising a reclaim of zero when there is nothing old enough to summarize.
-func compactHint(reclaimable int64) string {
-	if reclaimable <= 0 {
-		return ""
-	}
-	return ui.Invokr.Muted.Render("\n/compact reclaims an estimated " + formatTokensCompact(reclaimable))
-}
-
-// renderContextSegments draws the window as a filled bar split by where the
-// tokens went, with a swatch legend under it. With a session that can attribute
-// usage (agent.Session), the bar is split per category — prompt sections, tool
-// schemas, message kinds, plus an "unattributed" residual so it sums to the
-// provider-reported total; otherwise it falls back to prompt/completion/free,
-// restated as a two-category breakdown so both paths share one renderer.
-func renderContextSegments(usage turn.TokenUsage, breakdown turn.ContextBreakdown) string {
-	if !usage.Available || usage.ContextWindowTokens <= 0 {
-		return ""
-	}
-	if !breakdown.Available || breakdown.WindowTokens <= 0 || len(breakdown.Categories) == 0 {
-		breakdown = turn.ContextBreakdown{
-			WindowTokens: usage.ContextWindowTokens,
-			FreeTokens:   max(0, usage.ContextWindowTokens-usage.LatestPromptTokens-usage.LatestCompletionTokens),
-			Categories: []turn.ContextCategory{
-				{Name: "prompt", Tokens: usage.LatestPromptTokens}, {Name: "completion", Tokens: usage.LatestCompletionTokens},
-			},
-		}
-	}
-	return renderBreakdownSegments(breakdown)
-}
-
-// contextSegmentStyles colors breakdown segments and legend swatches, cycled
-// when there are more categories than styles.
-var contextSegmentStyles = []*lipgloss.Style{&ui.Invokr.Accent, &ui.Invokr.Info, &ui.Invokr.Warn, &ui.Invokr.Success}
-
-// renderBreakdownSegments maps the categories onto tuikit's SegmentBar.
-func renderBreakdownSegments(breakdown turn.ContextBreakdown) string {
-	window := float64(breakdown.WindowTokens)
-	segments := make([]tuikit.Segment, len(breakdown.Categories))
-	for index, category := range breakdown.Categories {
-		segments[index] = tuikit.Segment{Label: category.Name, Value: humanize.Comma(category.Tokens),
-			Share: float64(category.Tokens) / window, Style: *contextSegmentStyles[index%len(contextSegmentStyles)]}
-	}
-	bar := tuikit.SegmentBar(maxContextBarWidth, segments, tuikit.Segment{Label: "free",
-		Value: humanize.Comma(breakdown.FreeTokens), Share: float64(breakdown.FreeTokens) / window, Style: ui.Invokr.Muted})
-	if breakdown.Estimated {
-		bar = ui.Invokr.Muted.Render("(estimated — no provider usage reported yet)") + "\n" + bar
-	}
-	return bar
-}
-
-// costLine is empty unless provider.pricing is configured — no pricing means
-// "cost unknown", never "cost zero".
-func costLine(usage turn.TokenUsage) string {
-	if usage.SessionCost <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("\nsession cost: %.4f", usage.SessionCost)
-}
-
-func renderContextTotals(usage turn.TokenUsage, compactPercent int) string {
-	trigger := "window size unknown"
-	if usage.ContextWindowTokens > 0 {
-		trigger = fmt.Sprintf("compaction triggers at %d%% (%s tokens); warning at %d%%", compactPercent,
-			humanize.Comma(usage.ContextWindowTokens*int64(compactPercent)/100), constants.ContextWarningPercent)
-	}
-	return contextUsageLine(usage) + "\n" + trigger + "\n" + sessionTotalsLine(usage)
-}
-
-// sessionTotalsLine splits the session prompt total into the cache-served and
-// freshly-evaluated halves whenever the provider reported cached tokens, so
-// /usage shows what the prompt cache actually saved.
-func sessionTotalsLine(usage turn.TokenUsage) string {
-	prompt := humanize.Comma(usage.SessionPromptTokens) + " prompt"
-	if cached := usage.SessionCachedPromptTokens; cached > 0 {
-		prompt += fmt.Sprintf(" (%s cached · %s uncached)", humanize.Comma(cached), humanize.Comma(usage.SessionPromptTokens-cached))
-	}
-	return "session totals: " + prompt + " · " + humanize.Comma(usage.SessionCompletionTokens) + " completion"
 }
 
 func contextUsageLine(usage turn.TokenUsage) string {
