@@ -98,9 +98,9 @@ SCRIPTS = {
         (2.0, None, True),                 # the banner, before anything is typed
         (0.6, Typed(PROMPT), True),        # the prompt, typed a character at a time
         (1.0, "\r", True),                 # send it
-        (18.0, None, True),                # thinking, then the approval panel
+        (40.0, None, True),                # thinking, then the approval panel
         (0.4, "a", True),                  # always-allow go build, so follow-ups run
-        (75.0, None, True),                # the tool runs and the answer streams
+        (110.0, None, True),               # the tool runs and the answer streams
         # Written in one go rather than Typed: while the completion popup is
         # open, pyte keeps the transcript text under it instead of repainting
         # those rows (a real terminal does not), so the demo skips past the
@@ -108,8 +108,9 @@ SCRIPTS = {
         (1.4, "/usage\r", True),         # run it
         (2.5, None, True),                 # the per-category token breakdown, open
         (0.9, "j", True),                  # walk the rows: the bar follows the cursor
-        (0.9, "j", True),
-        (0.9, "j", True),
+        (2.0, "j", True),                  # onto instructions: the hint offers enter
+        (3.0, "\r", True),                 # expand it into its prompt sections
+        (1.2, "\r", True),                 # and fold it back
         (2.5, "j", True),                  # into history: the other group lights up
     ], 20.0),                              # still: the approval panel, open
     # One tiny turn, then /usage: a quick check of how the panel renders.
