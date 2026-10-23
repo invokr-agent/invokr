@@ -107,6 +107,16 @@ SCRIPTS = {
         (0.9, "j", True),
         (2.5, "j", True),                  # into history: the other group lights up
     ], 20.0),                              # still: the approval panel, open
+    # One tiny turn, then /usage: a quick check of how the panel renders.
+    "usage": ([
+        (2.0, None, False),
+        (0.5, "say hi in one word", False),
+        (0.5, "\r", False),
+        (120.0, None, False),
+        (2.0, "/usage\r", True),
+        (0.9, "j", True),
+        (2.0, "j", True),
+    ], 3.0),
 }
 RECORD = os.environ.get("RECORD", "demo")
 SCRIPT, STILL_AT = SCRIPTS[RECORD]
@@ -153,8 +163,17 @@ class Screen(pyte.Screen):
     later cell on the row lands a column early and the text overwrites itself.
     """
 
+    last_char = " "
+
     def draw(self, data):
-        super().draw(re.sub(".\ufe0f", lambda m: m[0][0] + (" " if wcwidth(m[0][0]) == 1 else ""), data))
+        data = re.sub(".\ufe0f", lambda m: m[0][0] + (" " if wcwidth(m[0][0]) == 1 else ""), data)
+        if data:
+            self.last_char = data[-1]
+        super().draw(data)
+
+    def repeat_last(self, count=None):
+        """CSI b (REP), which pyte lacks and bubbletea v2 uses for runs like a bar or a border."""
+        self.draw(self.last_char * (count or 1))
 
     def scroll_down(self, count=None):
         """CSI T, which pyte lacks: a reverse index at the top margin scrolls the region down."""
@@ -166,7 +185,7 @@ class Screen(pyte.Screen):
 
 
 class Stream(pyte.ByteStream):
-    csi = {**pyte.ByteStream.csi, "T": "scroll_down"}
+    csi = {**pyte.ByteStream.csi, "T": "scroll_down", "b": "repeat_last"}
 
 
 def run(command):
