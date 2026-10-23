@@ -29,6 +29,7 @@ require (
 	go.lsp.dev/protocol v1.0.1
 	go.lsp.dev/uri v1.0.1
 	go.uber.org/zap v1.28.0
+	golang.org/x/mod v0.42.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/sys v0.49.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -87,7 +88,6 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/image v0.41.0 // indirect
-	golang.org/x/mod v0.42.0 // indirect
 	golang.org/x/net v0.61.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	modernc.org/libc v1.78.0 // indirect

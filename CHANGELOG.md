@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.5.3 (2026-10-24)
+
+### Features
+
+- **tui** Enter while a turn runs queues the message (#18)
+- **tui** /usage panel, layout D (#25)
+
+### Fixes
+
+- **tools** unwrap stringified tool arguments, and a cancelled tokf run stays unfiltered (#23)
+- **tui** overlays stop repeating their title heading (#21)
+
+### Other
+
+- Shell: redirect sandboxed gh to the github_pr toolbox tool (#16)
+- footer: show the served model and fill the ctx limit (#17)
+
 ## v0.5.2 (2026-10-22)
 
 ### Fixes
