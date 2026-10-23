@@ -17,7 +17,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,13 +34,10 @@ jobs:
           go-version-file: go.mod
       - name: Install aarch64 cross toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-      # Release notes are this tag's CHANGELOG.md section; the file itself is
-      # restored so goreleaser sees a clean tree.
-      - name: Changelog section
-        run: |
-          scripts/changelog.sh "$GITHUB_REF_NAME"
-          awk -v t="## $GITHUB_REF_NAME " 'index($0,t)==1{f=1;next} f&&/^## /{exit} f' CHANGELOG.md >"$RUNNER_TEMP/notes.md"
-          git checkout -- CHANGELOG.md
+      # The release notes are the tag's commits grouped by type; the GitHub
+      # release is the changelog.
+      - name: Release notes
+        run: scripts/changelog.sh "$GITHUB_REF_NAME" >"$RUNNER_TEMP/notes.md"
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
         with:
           args: release --clean --release-notes ${{ runner.temp }}/notes.md
@@ -49,26 +45,3 @@ jobs:
           version: v2.18.3
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      # Tags are cut from main, so the new section lands there through a PR.
-      # The PR is opened as the approver app: one opened with github.token
-      # starts no workflows, so its required checks would never report.
-      - id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ secrets.APPROVER_APP_ID }}
-          private-key: ${{ secrets.APPROVER_PRIVATE_KEY }}
-      - name: Open changelog PR
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          git checkout -q -f origin/main
-          scripts/changelog.sh "$GITHUB_REF_NAME"
-          git diff --quiet && exit 0
-          branch="changelog/$GITHUB_REF_NAME"
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git switch -c "$branch"
-          git commit -m "docs: changelog for $GITHUB_REF_NAME" CHANGELOG.md
-          git config --unset-all http.https://github.com/.extraheader
-          git push "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" "$branch"
-          gh pr create --base main --head "$branch" --title "docs: changelog for $GITHUB_REF_NAME" --body "Changes since the previous release, grouped by type."
