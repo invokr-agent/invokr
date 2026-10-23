@@ -1,0 +1,37 @@
+name: changelog
+
+# On each release tag, adds that tag's section to CHANGELOG.md (commits since
+# the previous tag, grouped by type) and opens a PR into main with it.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Open changelog PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          scripts/changelog.sh "$TAG"
+          git diff --quiet && exit 0
+          branch="changelog/$TAG"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -c "$branch"
+          git commit -am "docs: changelog for $TAG"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "docs: changelog for $TAG" --body "Changes since the previous release, grouped by type."
