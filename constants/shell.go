@@ -33,9 +33,10 @@ const (
 var defaultShellAllowedCommands = []string{
 	"ls", "pwd", "cat", "head", "tail", "wc", "find", "grep", "rg",
 	"git", "go", "gofmt",
-	// Inspection. awk is write tier (its programs can write and exec). "echo" earns its place by unblocking chains: the
-	// model routinely separates steps with `echo "---"`, and one disallowed
-	// segment rejects the whole chain.
+	// Inspection; awk is write tier, since its programs can write and exec.
+	// "echo" earns its place by unblocking chains: the model routinely
+	// separates steps with `echo "---"`, and one disallowed segment rejects
+	// the whole chain.
 	"echo", "file", "od", "sort", "awk", "cut", "tee", "sha256sum",
 	// Environment questions the model asks before deciding what to run: who it
 	// is, what the file is, what time it is. None of them can write.
@@ -45,8 +46,8 @@ var defaultShellAllowedCommands = []string{
 	// script.sh` and `mkdir -p out && cp ...` are rejected outright.
 	"chmod", "mkdir", "cp", "rm", "rmdir", "mv", "touch",
 	// Roots the model reaches for constantly. which/base64/xxd/tr/uniq/diff/
-	// sleep cannot write outside an explicit output argument; sed is write tier
-	// (w/e commands); timeout is a wrapper classified by the command it wraps.
+	// sleep cannot write outside an explicit output argument; sed is write
+	// tier (w/e commands); timeout is classified by the command it wraps.
 	"which", "sed", "base64", "xxd", "sleep", "timeout", "tr", "uniq", "diff",
 	// xargs is a wrapper classified by the command it runs, like timeout.
 	"xargs",
