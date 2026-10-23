@@ -5,7 +5,7 @@
 [![CI](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml/badge.svg)](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml)
 [![E2E](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml/badge.svg)](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml)
 
-![Invokr TUI: a prompt, a tiered shell approval, and the answer](docs/assets/demo.gif)
+![Invokr TUI: a prompt, a tiered shell approval, the answer, and the /usage panel](docs/assets/demo.gif)
 
 ---
 
