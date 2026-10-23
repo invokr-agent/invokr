@@ -364,15 +364,7 @@ func TestResolveShellCWDStripsQuotesAndHidesHostPath(t *testing.T) {
 }
 
 func TestShellDescriptionIsShort(t *testing.T) {
-	// 700→725 2026-09-07: the script escape hatch sentence (#428).
-	// 725→760 2026-09-08: an unsandboxed host (CI) prefixes the sandbox note.
-	// 760→830 2026-09-08: naming /tmp as scratch and cwd's workspace limit
-	// (batch 9, r9 U1/4 spent three calls discovering both); measured 773 on a
-	// sandboxed host and 811 on an unsandboxed one (CI), which prefixes a note.
-	// 830→920 2026-09-09: background processes don't survive past the call
-	// (#508); measured 872 on a sandboxed host.
-	// 920→930 2026-09-10: the 920 cap missed the unsandboxed-CI variant;
-	// measured 925 on an unsandboxed host (CI, golang:1.26 image).
+	// Measured 925 on an unsandboxed host (CI), which prefixes a sandbox note.
 	if desc := shellDescription(testAllowed, t.TempDir(), false); len(desc) > 930 {
 		t.Fatalf("description is %d chars; the contract is bash, it should not enumerate shapes: %s", len(desc), desc)
 	}
