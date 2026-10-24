@@ -63,13 +63,17 @@ func loadStartupConfig() (config.AppConfig, error) {
 	if err != nil {
 		return config.AppConfig{}, err
 	}
-	ensure := setup.Ensure
-	if !choice.setup {
-		// A missing ~/.invokr means a fresh install: ask instead of guessing.
-		ensure = func() (setup.Result, error) { return setup.EnsureFirstRun(os.Stdin, os.Stdout) }
-	}
-	if _, err := ensure(); err != nil {
-		return config.AppConfig{}, err
+	// `setup` owns its home/config creation, including the questionnaire and
+	// prefill check. Creating it here first would turn a first-run setup into
+	// an "already configured" run before the questionnaire can decide that.
+	if choice.configUse {
+		if _, err := setup.Ensure(); err != nil {
+			return config.AppConfig{}, err
+		}
+	} else if !choice.setup {
+		if _, err := setup.EnsureFirstRun(os.Stdin, os.Stdout); err != nil {
+			return config.AppConfig{}, err
+		}
 	}
 	if choice.setup || choice.configUse {
 		return config.LoadDefaultFileWithoutProfile()

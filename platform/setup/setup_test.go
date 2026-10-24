@@ -475,3 +475,62 @@ func TestPreviewThemeFollowsTheAnswer(t *testing.T) {
 		t.Errorf("unmatched preview = %q", got)
 	}
 }
+
+func TestRunQuestionnaireFromExistingPrefillsConfiguredAnswers(t *testing.T) {
+	home := filepath.Join(t.TempDir(), ".invokr")
+	t.Setenv("INVOKR_HOME", home)
+	configPath := filepath.Join(home, constants.DefaultConfigFile)
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, []byte(
+		`{"provider":{"base_url":"http://configured:8080","model":"configured-model"},`+
+		`"memory":{"zerfoo":{"enabled":true}},`+
+		`"workspace":{"reads":"ask"},`+
+		`"ui":{"syntax_theme":"github-light"}}`,
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	result, err := RunQuestionnaireFromExisting(strings.NewReader("\n\n\n\n\n"), &out, "")
+	if err != nil {
+		t.Fatalf("RunQuestionnaireFromExisting returned error: %v", err)
+	}
+	if result.ProviderBaseURL != "http://configured:8080" {
+		t.Fatalf("ProviderBaseURL = %q, want http://configured:8080", result.ProviderBaseURL)
+	}
+	if result.Model != "configured-model" {
+		t.Fatalf("Model = %q, want configured-model", result.Model)
+	}
+	if !result.MemoryEnabled {
+		t.Fatal("expected MemoryEnabled to be prefilled from config")
+	}
+	if !result.OutsideReads {
+		t.Fatal("expected OutsideReads to be prefilled from config")
+	}
+	if result.SyntaxTheme != "github-light" {
+		t.Fatalf("SyntaxTheme = %q, want github-light", result.SyntaxTheme)
+	}
+
+	data, err := os.ReadFile(result.ConfigPath)
+	if err != nil {
+		t.Fatalf("expected config file to exist: %v", err)
+	}
+	var cfg config.AppConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("expected valid config JSON: %v", err)
+	}
+	if cfg.Provider.BaseURL != "http://configured:8080" {
+		t.Fatalf("written provider.base_url = %q, want http://configured:8080", cfg.Provider.BaseURL)
+	}
+	if cfg.Provider.Model != "configured-model" {
+		t.Fatalf("written provider.model = %q, want configured-model", cfg.Provider.Model)
+	}
+	if cfg.Workspace.Reads != config.ReadsAsk {
+		t.Fatalf("written workspace.reads = %q, want ask", cfg.Workspace.Reads)
+	}
+	if cfg.UI.SyntaxTheme != "github-light" {
+		t.Fatalf("written ui.syntax_theme = %q, want github-light", cfg.UI.SyntaxTheme)
+	}
+}

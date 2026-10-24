@@ -30,7 +30,7 @@ func NewSetupCmd() *cobra.Command {
 			if flag := cmd.Flag("base-url"); flag != nil && flag.Changed {
 				baseURL = flag.Value.String()
 			}
-			result, err := setup.RunQuestionnaireFrom(cmd.InOrStdin(), cmd.OutOrStdout(), baseURL)
+			result, err := setup.RunQuestionnaireFromExisting(cmd.InOrStdin(), cmd.OutOrStdout(), baseURL)
 			if err != nil {
 				return err
 			}

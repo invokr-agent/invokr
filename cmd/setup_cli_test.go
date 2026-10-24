@@ -49,6 +49,50 @@ func TestSetupCmdUsesQuestionnaireDefaults(t *testing.T) {
 	}
 }
 
+func TestSetupCmdPrefillsExistingConfigAnswers(t *testing.T) {
+	userHome := t.TempDir()
+	t.Setenv("HOME", userHome)
+	home := filepath.Join(userHome, ".invokr")
+	cfgPath := filepath.Join(home, constants.DefaultConfigFile)
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfgPath, []byte(
+		`{"provider":{"base_url":"http://configured:8080","model":"configured-model"},`+
+		`"memory":{"zerfoo":{"enabled":true}},`+
+		`"workspace":{"reads":"ask"},`+
+		`"ui":{"syntax_theme":"github-light"}}`,
+	), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewSetupCmd()
+	var out bytes.Buffer
+	cmd.SetIn(strings.NewReader("\n\n\n\n\n"))
+	cmd.SetOut(&out)
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("setup command returned error: %v", err)
+	}
+
+	cfg := readSetupConfig(t, cfgPath)
+	if cfg.Provider.BaseURL != "http://configured:8080" {
+		t.Fatalf("expected configured base URL, got %q", cfg.Provider.BaseURL)
+	}
+	if cfg.Provider.Model != "configured-model" {
+		t.Fatalf("expected configured model, got %q", cfg.Provider.Model)
+	}
+	if !cfg.Memory.Zerfoo.Enabled {
+		t.Fatal("expected configured memory enabled")
+	}
+	if cfg.Workspace.Reads != "ask" {
+		t.Fatalf("expected configured reads, got %q", cfg.Workspace.Reads)
+	}
+	if cfg.UI.SyntaxTheme != "github-light" {
+		t.Fatalf("expected configured syntax theme, got %q", cfg.UI.SyntaxTheme)
+	}
+}
+
 func TestSetupCmdUsesCustomAnswers(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "invokr-home")
 

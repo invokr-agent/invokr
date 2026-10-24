@@ -60,9 +60,16 @@ const scriptedQuestions = 5
 // huh's accessible mode: plain line-oriented prompts read from in, so piped
 // and scripted input keeps working without a duplicate plain-text
 // implementation. A blank line accepts each question's default.
-func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool, baseURL string) (QuestionnaireResult, error) {
-	answers := Answers{ProviderBaseURL: cmp.Or(strings.TrimSpace(baseURL), DefaultProviderBaseURL), SyntaxTheme: SyntaxThemeAuto}
-	homeDisplay, memoryAnswer, outsideAnswer := defaultHomePrompt(), defaultMemoryAnswer, defaultMemoryAnswer
+func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool, baseURL string, prefill Answers, prefilled bool) (QuestionnaireResult, error) {
+	answers := Answers{
+		ProviderBaseURL: cmp.Or(strings.TrimSpace(prefill.ProviderBaseURL), cmp.Or(strings.TrimSpace(baseURL), DefaultProviderBaseURL)),
+		Model:           strings.TrimSpace(prefill.Model),
+		MemoryEnabled:   prefill.MemoryEnabled,
+		OutsideReads:    prefill.OutsideReads,
+		SyntaxTheme:     cmp.Or(strings.TrimSpace(prefill.SyntaxTheme), SyntaxThemeAuto),
+		InstallSkills:   !prefilled,
+	}
+	homeDisplay, memoryAnswer, outsideAnswer := defaultHomePrompt(), boolAnswer(answers.MemoryEnabled), boolAnswer(answers.OutsideReads)
 
 	var piped *byteReader
 	if accessible {
@@ -87,7 +94,7 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool, baseURL s
 	}
 	answers.ProviderBaseURL = strings.TrimSpace(answers.ProviderBaseURL)
 
-	answers.Model = keepDefaultModel
+	answers.Model = cmp.Or(strings.TrimSpace(answers.Model), keepDefaultModel)
 	fields := []huh.Field{
 		question("Invokr home path", "Where config, memory, skills and the toolbox live.", &homeDisplay, accessible),
 		memoryQuestion(accessible, &answers.MemoryEnabled, &memoryAnswer),
@@ -160,6 +167,14 @@ func newForm(in io.Reader, out io.Writer, accessible bool, groups ...*huh.Group)
 	// escapes, which would land in captured output — the path this replaced
 	// wrote plain text.
 	return form.WithAccessible(true).WithTheme(huh.ThemeFunc(huh.ThemeBase))
+}
+
+// boolAnswer maps an existing boolean answer to a scripted default line.
+func boolAnswer(value bool) string {
+	if value {
+		return "yes"
+	}
+	return "no"
 }
 
 // question builds a text input. huh prints no descriptions in accessible
