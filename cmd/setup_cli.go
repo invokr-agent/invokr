@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/setup"
 
 	"github.com/spf13/cobra"
@@ -23,7 +24,13 @@ func NewSetupCmd() *cobra.Command {
 			if _, isFile := cmd.InOrStdin().(*os.File); isFile && !isTerminalInput(cmd) {
 				return errors.New("setup needs an interactive terminal; pass --base-url/--model or edit ~/.invokr/config.json")
 			}
-			result, err := setup.RunQuestionnaire(cmd.InOrStdin(), cmd.OutOrStdout())
+			// --base-url or INVOKR_BASE_URL prefill the URL question rather than
+			// being ignored for the built-in default.
+			baseURL := config.Env("INVOKR_BASE_URL")
+			if flag := cmd.Flag("base-url"); flag != nil && flag.Changed {
+				baseURL = flag.Value.String()
+			}
+			result, err := setup.RunQuestionnaireFrom(cmd.InOrStdin(), cmd.OutOrStdout(), baseURL)
 			if err != nil {
 				return err
 			}

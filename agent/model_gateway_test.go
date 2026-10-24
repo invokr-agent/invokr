@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/invokr-ai/invokr/capability/agentprompt"
 	memcore "github.com/invokr-ai/invokr/capability/memory/core"
 	"github.com/invokr-ai/invokr/capability/skills"
 	"github.com/invokr-ai/invokr/tools/core"
 	"github.com/invokr-ai/invokr/tools/system/todo"
-	"reflect"
-	"strings"
-	"testing"
 
 	"github.com/invokr-ai/invokr/capability/syntax"
 	"github.com/invokr-ai/invokr/clients"
@@ -320,6 +322,7 @@ func TestGatewayForwardsPromptCacheExtra(t *testing.T) {
 // router dropping a server error frame, not an answer: the turn is re-issued
 // and the second attempt stands (#499).
 func TestCompleteRetriesTruncatedStream(t *testing.T) {
+	noTruncatedStreamBackoff(t)
 	truncated := &inference.Response{Message: inference.Message{Content: "I'll check the ind"}}
 	good := &inference.Response{
 		Message:      inference.Message{Content: "done"},
@@ -341,6 +344,7 @@ func TestCompleteRetriesTruncatedStream(t *testing.T) {
 // Once the retry budget is spent, the truncated-stream error is handed back
 // rather than looping forever (#499).
 func TestCompleteGivesUpAfterTruncatedStreamRetriesExhausted(t *testing.T) {
+	noTruncatedStreamBackoff(t)
 	truncated := &inference.Response{Message: inference.Message{Content: "I'll check the ind"}}
 	provider := &scriptedProvider{rawFinish: true, outputs: []*inference.Response{truncated, truncated, truncated}}
 	gateway := testModelGateway(provider)
@@ -488,4 +492,36 @@ func TestSetModelDropsStaleServedName(t *testing.T) {
 	if got := gateway.Model(); got != "cyber-tiel/ornith" {
 		t.Fatalf("configured model after a switch = %q, want the new name", got)
 	}
+}
+
+// TestTruncatedStreamRetryBacksOff: re-issues wait (doubling) instead of firing
+// back to back, and a cancel during the wait ends the turn at once.
+func TestTruncatedStreamRetryBacksOff(t *testing.T) {
+	orig := truncatedStreamBackoff
+	truncatedStreamBackoff = 40 * time.Millisecond
+	t.Cleanup(func() { truncatedStreamBackoff = orig })
+	truncated := &inference.Response{Message: inference.Message{Content: "I'll check the ind"}}
+
+	provider := &scriptedProvider{rawFinish: true, outputs: []*inference.Response{truncated, truncated, truncated}}
+	started := time.Now()
+	_, _, _ = testModelGateway(provider).complete(context.Background(), []inference.Message{inference.UserMessage("run")}, "s1", false, false, 0)
+	if waited := time.Since(started); waited < 120*time.Millisecond {
+		t.Fatalf("three attempts took %s, want at least 40ms+80ms of backoff", waited)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	provider = &scriptedProvider{rawFinish: true, outputs: []*inference.Response{truncated, truncated, truncated}}
+	_, _, _ = testModelGateway(provider).complete(ctx, []inference.Message{inference.UserMessage("run")}, "s1", false, false, 0)
+	if provider.calls != 1 {
+		t.Fatalf("calls = %d after a cancel during backoff, want 1", provider.calls)
+	}
+}
+
+// noTruncatedStreamBackoff drops the wait between re-issues for one test.
+func noTruncatedStreamBackoff(t *testing.T) {
+	t.Helper()
+	orig := truncatedStreamBackoff
+	truncatedStreamBackoff = 0
+	t.Cleanup(func() { truncatedStreamBackoff = orig })
 }

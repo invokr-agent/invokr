@@ -3,6 +3,7 @@ package clients
 import (
 	"context"
 	"errors"
+	"math/rand/v2"
 	"time"
 
 	inference "github.com/rivt-ai/go-inference-router"
@@ -11,6 +12,11 @@ import (
 // retryBaseDelay is the first backoff step; each further attempt doubles it.
 // A throttled provider's own Retry-After wins over this schedule.
 const retryBaseDelay = time.Second
+
+// jittered spreads d over [d/2, 3d/2), so clients that failed together do
+// not all retry at the same instant. The router's policy has no jitter of its
+// own, so the whole doubling schedule is offset by jittering its base.
+func jittered(d time.Duration) time.Duration { return d/2 + rand.N(d) }
 
 // retryVeto hides the typed provider error from the retry policy's Kind
 // classification, so a failure that is no longer safe to re-issue (streamed
@@ -27,7 +33,7 @@ func (v retryVeto) Error() string { return v.err.Error() }
 // longer be side-effect free.
 func (c *Client) retry(ctx context.Context, safeToRetry func() bool, call func(context.Context) (*inference.Response, error)) (*inference.Response, error) {
 	var resp *inference.Response
-	policy := inference.RetryPolicy{MaxAttempts: c.MaxRetries + 1, BaseDelay: retryBaseDelay}
+	policy := inference.RetryPolicy{MaxAttempts: c.MaxRetries + 1, BaseDelay: jittered(retryBaseDelay)}
 	err := policy.Do(ctx, func(ctx context.Context) error {
 		var callErr error
 		resp, callErr = call(ctx)

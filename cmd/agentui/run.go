@@ -23,6 +23,9 @@ type LogSource interface {
 var ErrNewSession = errors.New("new session requested")
 
 type Params struct {
+	// ServerNotice is shown at the top of a fresh transcript when the model
+	// server did not answer the start-up probe.
+	ServerNotice  string
 	Session       turn.Session
 	Commands      CommandBackend
 	EventBus      events.Bus
@@ -80,6 +83,9 @@ func Run(ctx context.Context, p Params) error {
 	uiModel := newModelWithCommands(ctx, p.Session, p.Commands, toolEvents, approvalQueue, p.Logs, p.LogView, p.PromptHistory, initialHistory)
 	for _, item := range p.Transcript {
 		uiModel.appendSavedTranscript(item)
+	}
+	if p.ServerNotice != "" {
+		uiModel.chatLog.Append(message{role: "error", text: p.ServerNotice})
 	}
 	uiModel.grants = p.Grants
 	uiModel.prefsPath = prefsPath(p.PrefsDir)

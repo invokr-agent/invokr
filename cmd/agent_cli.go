@@ -50,7 +50,7 @@ func NewAgentCmd(services ServicesProvider) *cobra.Command {
 				return err
 			}
 			return runAgentSessions(cmd.Context(), runtimeServices, agentui.Params{
-				Session: session, Commands: runtimeServices.Commands,
+				Session: session, Commands: runtimeServices.Commands, ServerNotice: runtimeServices.ServerProblem,
 				EventBus: runtimeServices.Events, Approvals: approvals, Grants: runtimeServices.Grants,
 				Logs: runtimeServices.Logs, LogView: runtimeServices.LogView,
 				PromptHistory: runtimeServices.PromptHistory,

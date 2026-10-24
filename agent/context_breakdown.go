@@ -81,7 +81,7 @@ func buildContextBreakdown(sections []agentprompt.PromptSection, schemaChars int
 	} else if prompt > 0 {
 		// room is what the provider total leaves for the transcript once the
 		// setup rows hold their estimates
-		room := prompt-setupEst
+		room := prompt - setupEst
 		if histEst > room {
 			history = scaleCategories(history, histEst, room)
 		} else {
@@ -200,7 +200,7 @@ func scaledReasoning(thinkingChars, answerChars, estimate, completion int64) int
 	if thinkingChars <= 0 || completion <= 0 {
 		return estimate
 	}
-	share := float64(thinkingChars)/float64(thinkingChars+answerChars)
+	share := float64(thinkingChars) / float64(thinkingChars+answerChars)
 	return max(1, min(completion-1, int64(float64(completion)*share+0.5)))
 }
 

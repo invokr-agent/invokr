@@ -17,6 +17,7 @@ import (
 	mcpsystem "github.com/invokr-ai/invokr/tools/system/mcp"
 	tmuxsystem "github.com/invokr-ai/invokr/tools/system/tmux"
 	toolboxsystem "github.com/invokr-ai/invokr/tools/system/toolbox"
+	"github.com/rivt-ai/go-inference-router"
 
 	"github.com/invokr-ai/invokr/agent"
 	"github.com/invokr-ai/invokr/capability/agentdef"
@@ -80,6 +81,10 @@ type Services struct {
 	NewAgentSession func() (Services, error)
 	Commands        CommandBackend
 	Grants          *approval.Store
+	// ServerProblem describes why the start-up probe of the model server
+	// failed, in user words; empty when it answered. The run still starts,
+	// so a server that comes up a moment later just works.
+	ServerProblem string
 }
 
 func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
@@ -90,13 +95,9 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 		return nil, err
 	}
 	provider, app := newProvider(app, opts, l)
-	if explicitModelSource(opts) == "" {
-		// Resolve before the session exists so turn 1 already uses a served
-		// model. An explicitly requested model is never swapped for whatever
-		// the provider lists: the run fails loudly instead.
-		if app.Provider.Model = resolveModel(context.Background(), provider, app.Provider.Model, l.Named("runtime")); app.Provider.Model == "" && !opts.ModelOptional {
-			return nil, errors.New("no model configured; run invokr setup or pass --model")
-		}
+	serverProblem, err := resolveStartModel(&app, opts, provider, l)
+	if err != nil {
+		return nil, err
 	}
 	providerContext := agent.NewProviderContext(int64(app.Provider.ContextWindowTokens), app.Provider.Model)
 	providerContext.SetLogger(l)
@@ -143,8 +144,9 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 		App: app, Logger: l, Events: eventDispatcher, Approvals: approvalBroker,
 		Memory: memoryManager, Session: session, PromptHistory: promptHistory,
 		Logs: opts.LogBuffer, LogView: opts.LogView, NewChatSession: newChatSession,
-		Commands: layer.commandService(session.SessionID(), memoryManager, newChatSession),
-		Grants:   newStandingGrants(backgroundCtx, app, session, eventDispatcher, l, opts.Policy),
+		Commands:      layer.commandService(session.SessionID(), memoryManager, newChatSession),
+		Grants:        newStandingGrants(backgroundCtx, app, session, eventDispatcher, l, opts.Policy),
+		ServerProblem: serverProblem,
 	}
 	services.NewAgentSession = func() (Services, error) {
 		freshLayer, next := layer, services
@@ -274,21 +276,52 @@ func routerSpec(cfg config.RouterConfig) clients.RouterSpec {
 	return spec
 }
 
-func resolveModel(ctx context.Context, provider *clients.Client, configured string, log *zap.Logger) string {
+// resolveStartModel settles the model before the session exists so turn 1
+// already uses a served one. An explicitly requested model is never swapped
+// for whatever the provider lists: the run fails loudly instead. The probe's
+// failure comes back too, in user words, for the start-up notice.
+func resolveStartModel(app *config.AppConfig, opts Options, provider *clients.Client, l *zap.Logger) (string, error) {
+	if explicitModelSource(opts) != "" {
+		return "", nil
+	}
+	var probeErr error
+	app.Provider.Model, probeErr = resolveModel(context.Background(), provider, app.Provider.Model, l.Named("runtime"))
+	problem := ""
+	if probeErr != nil {
+		problem = clients.DescribeError(probeErr)
+	}
+	switch {
+	case app.Provider.Model != "" || opts.ModelOptional:
+		return problem, nil
+	case probeErr != nil:
+		return "", fmt.Errorf("no model configured, and the model server could not be asked for one. %s", problem)
+	}
+	return "", errors.New("no model configured; run invokr setup or pass --model")
+}
+
+// resolveModel also returns the probe's failure, so the caller can tell the
+// user the server is not answering before the first prompt does.
+func resolveModel(ctx context.Context, provider *clients.Client, configured string, log *zap.Logger) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	models, err := provider.ListModels(ctx)
-	if err != nil || len(models) == 0 {
-		return configured // no list endpoint / listing failed → trust config
+	switch {
+	case err == nil:
+	case ctx.Err() != nil:
+		return configured, errors.New("the model server did not answer within 5s at start-up; it may still be loading")
+	case inference.IsKind(err, inference.KindTransport):
+		return configured, err // nothing answered at all: worth saying up front
+	default:
+		return configured, nil // no list endpoint (404) or a server error: trust config
 	}
-	if slices.Contains(models, configured) {
-		return configured
+	if len(models) == 0 || slices.Contains(models, configured) {
+		return configured, nil
 	}
 	if configured != "" { // none configured is the default, not a fault
 		log.Warn("configured model unavailable, falling back",
 			zap.String("configured", configured), zap.String("fallback", models[0]))
 	}
-	return models[0]
+	return models[0], nil
 }
 
 // Models load lazily on first use, so this does not download or load anything.

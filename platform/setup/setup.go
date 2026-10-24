@@ -137,13 +137,19 @@ func ensureWith(homeDir string, writeConfig func(path, homeDir string) (bool, er
 }
 
 func RunQuestionnaire(in io.Reader, out io.Writer) (QuestionnaireResult, error) {
+	return RunQuestionnaireFrom(in, out, "")
+}
+
+// RunQuestionnaireFrom is RunQuestionnaire with the base URL question
+// prefilled, e.g. from --base-url or INVOKR_BASE_URL; empty means the default.
+func RunQuestionnaireFrom(in io.Reader, out io.Writer, baseURL string) (QuestionnaireResult, error) {
 	if in == nil {
 		return QuestionnaireResult{}, fmt.Errorf("input is required")
 	}
 	if out == nil {
 		return QuestionnaireResult{}, fmt.Errorf("output is required")
 	}
-	return runQuestionnaireHuh(in, out, wantsAccessible(in))
+	return runQuestionnaireHuh(in, out, wantsAccessible(in), baseURL)
 }
 
 // wantsAccessible reports whether the questionnaire should use huh's

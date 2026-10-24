@@ -47,7 +47,7 @@ func TestResolveModel_ConfiguredPresent(t *testing.T) {
 	srv := modelsServer([]string{"model-a", "model-b"})
 	defer srv.Close()
 	c := clients.NewClient(srv.URL)
-	got := resolveModel(context.Background(), c, "model-a", zap.NewNop())
+	got, _ := resolveModel(context.Background(), c, "model-a", zap.NewNop())
 	if got != "model-a" {
 		t.Fatalf("expected model-a, got %s", got)
 	}
@@ -57,7 +57,7 @@ func TestResolveModel_ConfiguredAbsent(t *testing.T) {
 	srv := modelsServer([]string{"model-x", "model-y"})
 	defer srv.Close()
 	c := clients.NewClient(srv.URL)
-	got := resolveModel(context.Background(), c, "model-z", zap.NewNop())
+	got, _ := resolveModel(context.Background(), c, "model-z", zap.NewNop())
 	if got != "model-x" {
 		t.Fatalf("expected fallback model-x, got %s", got)
 	}
@@ -69,9 +69,9 @@ func TestResolveModel_404(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := clients.NewClient(srv.URL)
-	got := resolveModel(context.Background(), c, "my-model", zap.NewNop())
-	if got != "my-model" {
-		t.Fatalf("expected unchanged my-model on 404, got %s", got)
+	got, err := resolveModel(context.Background(), c, "my-model", zap.NewNop())
+	if got != "my-model" || err != nil {
+		t.Fatalf("expected unchanged my-model and no problem on 404, got %s, %v", got, err)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestResolveModel_ServerError(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := clients.NewClient(srv.URL)
-	got := resolveModel(context.Background(), c, "my-model", zap.NewNop())
+	got, _ := resolveModel(context.Background(), c, "my-model", zap.NewNop())
 	if got != "my-model" {
 		t.Fatalf("expected unchanged my-model on server error, got %s", got)
 	}
@@ -89,9 +89,12 @@ func TestResolveModel_ServerError(t *testing.T) {
 
 func TestResolveModel_Unreachable(t *testing.T) {
 	c := clients.NewClient("http://127.0.0.1:1") // nothing listening
-	got := resolveModel(context.Background(), c, "my-model", zap.NewNop())
+	got, err := resolveModel(context.Background(), c, "my-model", zap.NewNop())
 	if got != "my-model" {
 		t.Fatalf("expected unchanged my-model when unreachable, got %s", got)
+	}
+	if !strings.Contains(clients.DescribeError(err), "Can't reach the model server at 127.0.0.1:1") {
+		t.Fatalf("unreachable probe error = %v, want it reported", err)
 	}
 }
 
@@ -99,7 +102,7 @@ func TestResolveModel_EmptyList(t *testing.T) {
 	srv := modelsServer([]string{})
 	defer srv.Close()
 	c := clients.NewClient(srv.URL)
-	got := resolveModel(context.Background(), c, "my-model", zap.NewNop())
+	got, _ := resolveModel(context.Background(), c, "my-model", zap.NewNop())
 	if got != "my-model" {
 		t.Fatalf("expected unchanged my-model on empty list, got %s", got)
 	}

@@ -54,7 +54,7 @@ func TestUsagePanelHintOmitsEscClose(t *testing.T) {
 		{Label: "tool results", Tokens: 83790},
 		{Label: "other", Tokens: 443, Members: []usageMember{{Label: "you", Tokens: 300},
 			{Label: "last reply", Tokens: 143}}, Folded: true},
-		}}}
+	}}}
 	for _, expanded := range []bool{false, true} {
 		if got := usageHint(groups, 1, expanded); strings.Contains(got, "esc close") {
 			t.Fatalf("panel hint = %q, want it without a second esc close", got)

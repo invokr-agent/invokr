@@ -56,6 +56,7 @@ func cutReasoningResponse(reason string) *inference.Response {
 }
 
 func TestLengthCutTruncatedContinuationRetries(t *testing.T) {
+	noTruncatedStreamBackoff(t)
 	provider := &scriptedProvider{rawFinish: true, outputs: []*inference.Response{
 		cutReasoningResponse("A"), {Message: inference.Message{Content: "unfinished partial reply"}},
 		{Message: inference.Message{ToolCalls: []inference.ToolCall{{ID: "c1", Name: "edit", Arguments: `{}`}}}, FinishReason: inference.FinishToolCalls},

@@ -102,13 +102,17 @@ func reasoningExhausted(output completionOutput) bool {
 // provider dropped on the floor (#499). The content is partial, so the turn is
 // re-issued rather than accepted as an answer. A provider that legitimately
 // omits the finish reason still reports usage, and is left alone.
-var errTruncatedStream = errors.New("stream ended without a finish reason")
+var errTruncatedStream = errors.New("the model server kept cutting the reply short, even after retrying; send the message again")
 
 // maxTruncatedStreamRetries bounds the re-issues of a turn whose stream was cut
 // short; the overflow that causes it (a concurrent request sharing a unified KV
-// cache) clears once the other request finishes. No delay between attempts —
-// the prefetch headroom gate is the real fix; this is defence in depth.
+// cache) clears once the other request finishes. Attempts back off (1s, 2s)
+// so a server that is restarting has a moment to come back; the prefetch
+// headroom gate is the real fix, this is defence in depth.
 const maxTruncatedStreamRetries = 2
+
+// truncatedStreamBackoff is the wait before the first re-issue; it doubles.
+var truncatedStreamBackoff = time.Second
 
 // truncatedStream reports a completion that carries content but neither a
 // finish reason nor usage.
@@ -552,6 +556,11 @@ func (g *OpenAIModelGateway) completeOnce(ctx context.Context, messages []infere
 		if output, err = g.completeAttempt(ctx, messages, sessionID, disableTools, noThink); !errors.Is(err, errTruncatedStream) || attempt >= maxTruncatedStreamRetries {
 			return output, err
 		}
+		select {
+		case <-ctx.Done():
+			return output, err
+		case <-time.After(truncatedStreamBackoff << attempt):
+		}
 	}
 }
 
@@ -579,7 +588,7 @@ func (g *OpenAIModelGateway) completeAttempt(ctx context.Context, messages []inf
 	}
 	if truncatedStream(output) {
 		g.logger.Warn("stream ended without a finish reason or usage; re-issuing the turn", zap.String("content_tail", tail(output.content, 80)))
-		events.Notice(ctx, g.events, sessionID, g.parentSessionID, "stream cut short; re-issuing the turn")
+		events.Notice(ctx, g.events, sessionID, g.parentSessionID, events.StreamRetryNotice)
 		return output, errTruncatedStream
 	}
 	g.logger.Info("completion received", zap.Duration("duration", time.Since(started)), zap.Int("content_len", len(output.content)), zap.Int("tool_calls", len(output.toolCalls)), zap.Int64("tokens_predicted", resp.Usage.CompletionTokens), zap.Int64("tokens_evaluated", resp.Usage.PromptTokens), zap.String("finish_reason", string(output.finishReason)), zap.String("reasoning_tail", tail(resp.Reasoning.Summary, 200)))

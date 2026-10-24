@@ -942,16 +942,32 @@ func TestAssistantAnswerIsIndentedUnderItsTurn(t *testing.T) {
 }
 
 func TestRenderThinkingShowsElapsedAndInterrupt(t *testing.T) {
-	idle := renderThinking("◐", time.Time{}, 60)
+	idle := renderThinking("◐", time.Time{}, time.Time{}, 60)
 	if ansi.Strip(idle) != "◐ thinking" {
 		t.Fatalf("thinking without a start time = %q", ansi.Strip(idle))
 	}
 	if !strings.HasPrefix(idle, ui.Invokr.Info.Render("◐ thinking")) {
 		t.Fatalf("thinking is not in the running color: %q", idle)
 	}
-	live := ansi.Strip(renderThinking("◐", time.Now().Add(-1800*time.Millisecond), 60))
+	started := time.Now().Add(-1800 * time.Millisecond)
+	live := ansi.Strip(renderThinking("◐", started, started, 60))
 	if !strings.Contains(live, "1.8s · esc to interrupt") {
 		t.Fatalf("thinking = %q, want live elapsed and the interrupt hint", live)
+	}
+}
+
+// TestRenderThinkingNamesASilentServer: a turn with no output for a while says
+// the model server has not replied, so a dead server reads differently from a
+// slow model; any output resets the clock.
+func TestRenderThinkingNamesASilentServer(t *testing.T) {
+	started := time.Now().Add(-45 * time.Second)
+	silent := ansi.Strip(renderThinking("◐", started, started, 80))
+	if !strings.Contains(silent, "waiting for the model server") || !strings.Contains(silent, "no output for 45") {
+		t.Fatalf("silent turn = %q", silent)
+	}
+	recent := ansi.Strip(renderThinking("◐", started, time.Now().Add(-2*time.Second), 80))
+	if !strings.Contains(recent, "◐ thinking") {
+		t.Fatalf("turn with recent output = %q, want plain thinking", recent)
 	}
 }
 

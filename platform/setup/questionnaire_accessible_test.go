@@ -2,6 +2,7 @@ package setup
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -196,12 +197,12 @@ func TestRecoverSelectPanicReraisesOtherPanics(t *testing.T) {
 // is interactive-only, so no /v1/models probe happens and no
 // extra input line is consumed.
 func TestScriptedQuestionnaireSkipsTheModelQuestion(t *testing.T) {
-	orig := modelOptions
-	modelOptions = func(string) []huh.Option[string] {
+	orig := listModels
+	listModels = func(context.Context, string) ([]string, error) {
 		t.Error("scripted setup must not probe the provider for models")
-		return []huh.Option[string]{huh.NewOption("x", "x")}
+		return nil, nil
 	}
-	t.Cleanup(func() { modelOptions = orig })
+	t.Cleanup(func() { listModels = orig })
 
 	home := t.TempDir()
 	in := strings.NewReader("http://llm.local:9090\n" + home + "\nyes\ncatppuccin-mocha\nyes\n")
