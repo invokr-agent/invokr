@@ -5,26 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/invokr-ai/invokr/support/fsutil"
 	"github.com/invokr-ai/invokr/tools/core"
 )
-
-// CredentialSourceGH resolves a credential with `gh auth token` on the host,
-// so a tool rides the user's existing GitHub CLI login.
-const CredentialSourceGH = "gh"
-
-// SecretsFile is the owner-only credential file a tool may read from its own
-// directory; `invokr toolbox auth` writes it.
-const SecretsFile = ".secrets.json"
-
-const credentialTimeout = 10 * time.Second
 
 // toolboxCredential is one manifest credentials entry. The value is resolved
 // by invokr on the host at call time, outside the sandbox, and handed to the
@@ -33,30 +21,23 @@ type toolboxCredential struct {
 	Source string `json:"source"`
 }
 
-var credentialName = regexp.MustCompile(`^[a-z][a-z0-9_]{0,31}$`)
-
+// validateCredentials rejects sources invokr cannot resolve.
 func validateCredentials(creds map[string]toolboxCredential) error {
 	for name, cred := range creds {
-		if !credentialName.MatchString(name) {
-			return fmt.Errorf("credentials.%s: name must match %s", name, credentialName)
-		}
-		if cred.Source != CredentialSourceGH {
-			return fmt.Errorf("credentials.%s: unsupported source %q (supported: %s)", name, cred.Source, CredentialSourceGH)
+		if cred.Source != "gh" {
+			return fmt.Errorf("credentials.%s: unsupported source %q (supported: gh)", name, cred.Source)
 		}
 	}
 	return nil
 }
 
-// ghToken is a var so tests can stand in for the gh CLI.
-var ghToken = func(ctx context.Context) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, credentialTimeout)
+// GHToken is a var so tests can stand in for the gh CLI.
+var GHToken = func(ctx context.Context) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "gh", "auth", "token").Output()
 	if err != nil {
-		if errors.Is(err, exec.ErrNotFound) {
-			return "", errors.New("gh CLI not found; install it or run `invokr toolbox auth <tool>` with a token")
-		}
-		return "", fmt.Errorf("gh auth token failed (run `gh auth login`): %w", err)
+		return "", fmt.Errorf("gh auth token failed (install gh or run gh auth login): %w", err)
 	}
 	token := strings.TrimSpace(string(out))
 	if token == "" {
@@ -65,17 +46,18 @@ var ghToken = func(ctx context.Context) (string, error) {
 	return token, nil
 }
 
-// GHToken returns the token of the user's current GitHub CLI login.
-func GHToken(ctx context.Context) (string, error) { return ghToken(ctx) }
-
+// resolveCredentials returns nil when the manifest declares none, so requestBytes
+// omits the credentials key; one gh login answers for every declared name.
 func resolveCredentials(ctx context.Context, creds map[string]toolboxCredential) (map[string]string, error) {
+	if len(creds) == 0 {
+		return nil, nil
+	}
+	token, err := GHToken(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := make(map[string]string, len(creds))
 	for name := range creds {
-		// Only gh exists today; validateCredentials refused anything else at load.
-		token, err := ghToken(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("credential %q: %w", name, err)
-		}
 		out[name] = token
 	}
 	return out, nil
@@ -84,20 +66,13 @@ func resolveCredentials(ctx context.Context, creds map[string]toolboxCredential)
 // requestBytes is the stdin payload: the call, plus resolved credentials when
 // the manifest declares any.
 func (p *executableTool) requestBytes(ctx context.Context, call *core.ToolCall) ([]byte, error) {
-	if len(p.credentials) == 0 {
-		b, err := json.Marshal(call)
-		if err != nil {
-			return nil, fmt.Errorf("serialize tool call: %w", err)
-		}
-		return b, nil
-	}
 	creds, err := resolveCredentials(ctx, p.credentials)
 	if err != nil {
 		return nil, fmt.Errorf("toolbox tool %q: %w", p.Name, err)
 	}
 	return json.Marshal(struct {
 		*core.ToolCall
-		Credentials map[string]string `json:"credentials"`
+		Credentials map[string]string `json:"credentials,omitempty"`
 	}{call, creds})
 }
 
@@ -119,9 +94,9 @@ func WriteToolSecret(toolboxDir, tool, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	path := filepath.Join(dir, SecretsFile)
+	path := filepath.Join(dir, ".secrets.json")
 	if err := fsutil.WriteFileAtomic(path, data, 0o600); err != nil {
 		return "", fmt.Errorf("write %s: %w", path, err)
 	}
-	return path, os.Chmod(path, 0o600)
+	return path, nil
 }

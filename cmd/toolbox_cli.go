@@ -29,23 +29,12 @@ func newToolboxAuthCmd(app *config.AppConfig) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auth <tool>",
 		Short: "Store a tool's token in its .secrets.json, from gh or stdin",
-		Long:  "Writes {\"token\": ...} to <toolbox>/<tool>/.secrets.json with mode 0600.\nA tool whose manifest declares credentials with source \"gh\" needs no file: invokr\nruns `gh auth token` at call time instead.\n\n  invokr toolbox auth github_pr --from-gh\n  invokr toolbox auth github_pr < token.txt",
+		Long:  "  invokr toolbox auth github_pr --from-gh          invokr toolbox auth github_pr < token.txt",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var token string
-			if fromGH {
-				var err error
-				if token, err = toolbox.GHToken(cmd.Context()); err != nil {
-					return err
-				}
-			} else {
-				raw, err := io.ReadAll(cmd.InOrStdin())
-				if err != nil {
-					return fmt.Errorf("read token from stdin: %w", err)
-				}
-				if token = strings.TrimSpace(string(raw)); token == "" {
-					return fmt.Errorf("no token on stdin (or pass --from-gh)")
-				}
+			token, err := readToken(cmd, fromGH)
+			if err != nil {
+				return err
 			}
 			path, err := toolbox.WriteToolSecret(app.Toolbox.Dir, args[0], token)
 			if err != nil {
@@ -57,6 +46,22 @@ func newToolboxAuthCmd(app *config.AppConfig) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&fromGH, "from-gh", false, "copy the token from gh auth token")
 	return cmd
+}
+
+// readToken returns the token to store: the gh login token when asked, otherwise
+// the trimmed token piped on stdin.
+func readToken(cmd *cobra.Command, fromGH bool) (string, error) {
+	if fromGH {
+		return toolbox.GHToken(cmd.Context())
+	}
+	raw, err := io.ReadAll(cmd.InOrStdin())
+	if err != nil {
+		return "", fmt.Errorf("read token from stdin: %w", err)
+	}
+	if token := strings.TrimSpace(string(raw)); token != "" {
+		return token, nil
+	}
+	return "", fmt.Errorf("no token on stdin (or pass --from-gh)")
 }
 
 func installTools(cmd *cobra.Command, app config.AppConfig, term string) error {

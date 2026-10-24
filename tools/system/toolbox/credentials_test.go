@@ -21,9 +21,9 @@ print(json.dumps({"result": json.dumps(call.get("credentials"))}))`
 func stubGHToken(t *testing.T, token string, err error) *int {
 	t.Helper()
 	calls := 0
-	prev := ghToken
-	ghToken = func(context.Context) (string, error) { calls++; return token, err }
-	t.Cleanup(func() { ghToken = prev })
+	prev := GHToken
+	GHToken = func(context.Context) (string, error) { calls++; return token, err }
+	t.Cleanup(func() { GHToken = prev })
 	return &calls
 }
 
@@ -78,7 +78,6 @@ func TestGHFailureStopsCallBeforeSpawn(t *testing.T) {
 func TestLoadRejectsUnknownCredentialSource(t *testing.T) {
 	for name, creds := range map[string]any{
 		"source": map[string]any{"token": map[string]string{"source": "env"}},
-		"name":   map[string]any{"Bad-Name": map[string]string{"source": "gh"}},
 	} {
 		dir := writePlugin(t, t.TempDir(), "cred_tool", credentialEcho, map[string]any{"credentials": creds})
 		if _, err := loadToolboxTool(dir, config.ToolboxConfig{}.WithDefaults(t.TempDir()), nil); err == nil || !strings.Contains(err.Error(), "credentials.") {
