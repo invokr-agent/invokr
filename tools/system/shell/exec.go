@@ -207,12 +207,13 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 	// points at is outside the workspace. Without it git cannot read the
 	// repository at all: every command answers "not a git repository".
 	gitDirs := workspace.GitDirs(plan.workspaceRoot)
+	readOnlyGit := plan.readOnlyGit()
 	if slices.Contains(plan.commands, "git") {
 		mountDirs := gitDirs
 		if len(mountDirs) == 2 { // A linked worktree lives inside its shared repository.
 			mountDirs = mountDirs[:1]
 		}
-		if plan.mode != approval.Plan && !plan.gitReadOnly {
+		if !readOnlyGit {
 			sb.PinnedRW = mountDirs
 			sb.RW = append(sb.RW, mountDirs...)
 		}
@@ -225,19 +226,29 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 		// removes the reason to reach for `git config` at all.
 		sb.RO = append(sb.RO, gitConfigFiles()...)
 	}
-	if plan.mode == approval.Plan || plan.gitReadOnly {
+	if readOnlyGit {
 		// Concat, not append: appending onto plan.roots could write into its backing array.
-		sources := slices.Concat(plan.roots, gitDirs)
-		sb.Sealed, sb.RO = append(sb.Sealed, sources...), append(sb.RO, sources...)
-		sb.RW = slices.DeleteFunc(sb.RW, func(path string) bool {
-			return slices.ContainsFunc(sources, func(root string) bool { return workspace.Overlaps(root, path) })
-		})
+		sb = sealReadOnly(sb, slices.Concat(plan.roots, gitDirs))
 	}
 	if plan.mode == approval.Auto {
 		sb.Sealed = append(sb.Sealed, plan.protected...)
 	}
 	sb.Sealed = append(sb.Sealed, plan.readonlyRoots...)
 	return sandbox.DedupPlan(sb)
+}
+
+// readOnlyGit reports whether the repository is mounted read-only: always in
+// Plan mode, and for read-only git probes.
+func (p preparedShellCommand) readOnlyGit() bool { return p.mode == approval.Plan || p.gitReadOnly }
+
+// sealReadOnly mounts sources read-only and sealed, and drops any writable
+// mount that overlaps them.
+func sealReadOnly(sb sandbox.Plan, sources []string) sandbox.Plan {
+	sb.Sealed, sb.RO = append(sb.Sealed, sources...), append(sb.RO, sources...)
+	sb.RW = slices.DeleteFunc(sb.RW, func(path string) bool {
+		return slices.ContainsFunc(sources, func(root string) bool { return workspace.Overlaps(root, path) })
+	})
+	return sb
 }
 
 // sharedTmpDir is the per-workspace directory mounted at /tmp: a scratch file

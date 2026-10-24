@@ -59,9 +59,9 @@ func TestSetupCmdPrefillsExistingConfigAnswers(t *testing.T) {
 	}
 	if err := os.WriteFile(cfgPath, []byte(
 		`{"provider":{"base_url":"http://configured:8080","model":"configured-model"},`+
-		`"memory":{"zerfoo":{"enabled":true}},`+
-		`"workspace":{"reads":"ask"},`+
-		`"ui":{"syntax_theme":"github-light"}}`,
+			`"memory":{"zerfoo":{"enabled":true}},`+
+			`"workspace":{"reads":"ask"},`+
+			`"ui":{"syntax_theme":"github-light"}}`,
 	), 0o600); err != nil {
 		t.Fatal(err)
 	}

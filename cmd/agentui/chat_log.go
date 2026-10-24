@@ -96,19 +96,7 @@ func (c *chatLog) Last() *message {
 // mutating the matching block in place (keyed by tool-call ID) rather than
 // appending a new line per event.
 func (c *chatLog) ApplyEvent(ev events.Event) {
-	if c.applyAssistantDelta(ev) {
-		return
-	}
-	if ev.Type == events.EventReasoning && ev.Reasoning != nil {
-		c.appendReasoning(ev.Reasoning.Text)
-		return
-	}
-	if ev.Type == events.EventNotice && ev.Notice != nil {
-		if ev.Notice.Text == events.StreamRetryNotice {
-			c.noteStreamRetry()
-			return
-		}
-		c.Append(message{role: "tool", text: ev.Notice.Text})
+	if c.applyAssistantDelta(ev) || c.applyTextEvent(ev) {
 		return
 	}
 	if ev.Tool == nil {
@@ -334,6 +322,22 @@ func writeMessage(b *strings.Builder, msg message, width int, spinnerFrame strin
 	case "error":
 		b.WriteString(ui.Invokr.Danger.Render("error: ") + wrapText(msg.text, width-7))
 	}
+}
+
+// applyTextEvent handles the reasoning and notice events, which carry text
+// rather than a tool block.
+func (c *chatLog) applyTextEvent(ev events.Event) bool {
+	switch {
+	case ev.Type == events.EventReasoning && ev.Reasoning != nil:
+		c.appendReasoning(ev.Reasoning.Text)
+	case ev.Type == events.EventNotice && ev.Notice != nil && ev.Notice.Text == events.StreamRetryNotice:
+		c.noteStreamRetry()
+	case ev.Type == events.EventNotice && ev.Notice != nil:
+		c.Append(message{role: "tool", text: ev.Notice.Text})
+	default:
+		return false
+	}
+	return true
 }
 
 // appendReasoning adds a step's reasoning in full. It arrives once the reply is

@@ -373,14 +373,22 @@ func editedFileDiff(name, argsJSON string) string {
 		"\n" + strings.Join(sections, "\n") + "\n*** End Patch"
 }
 
+// textEventLine is the plain line for a notice or reasoning event.
+func textEventLine(ev events.Event) (string, bool) {
+	switch {
+	case ev.Type == events.EventNotice && ev.Notice != nil:
+		return ev.Notice.Text, true
+	case ev.Type == events.EventReasoning && ev.Reasoning != nil:
+		return ui.Invokr.Muted.Render(strings.TrimSpace(ev.Reasoning.Text)), true
+	}
+	return "", false
+}
+
 // renderToolEvent renders one tool event as a standalone line for the plain
 // (non-TUI) streaming renderer, which can't update in place.
 func renderToolEvent(ev events.Event) string {
-	if ev.Type == events.EventNotice && ev.Notice != nil {
-		return ev.Notice.Text
-	}
-	if ev.Type == events.EventReasoning && ev.Reasoning != nil {
-		return ui.Invokr.Muted.Render(strings.TrimSpace(ev.Reasoning.Text))
+	if line, ok := textEventLine(ev); ok {
+		return line
 	}
 	if ev.Tool == nil {
 		return fmt.Sprintf("tool unknown event %s", ev.Type)

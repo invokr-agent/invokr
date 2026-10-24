@@ -367,15 +367,13 @@ func isLocalSetupRouter(router config.RouterConfig) bool {
 	if router.Active != "local" || len(router.Profiles) != 2 || len(router.Providers) != 2 {
 		return false
 	}
-	localProfile, hasLocalProfile := router.Profiles["local"]
-	anthropicProfile, hasAnthropic := router.Profiles["anthropic"]
-	local, hasLocal := router.Providers["local"]
-	anthropic, hasAnthropic := router.Providers["anthropic"]
-	return hasLocalProfile && hasAnthropic && hasLocal &&
-		localProfile.Provider == "local" && anthropicProfile.Provider == "anthropic" &&
+	// A missing entry is a zero value, which fails the field checks below.
+	localProfile, anthropicProfile := router.Profiles["local"], router.Profiles["anthropic"]
+	local, anthropic := router.Providers["local"], router.Providers["anthropic"]
+	return localProfile.Provider == "local" && anthropicProfile.Provider == "anthropic" &&
 		local.Type == "openai-compatible" && anthropic.Type == "anthropic" &&
-        anthropic.APIKeyEnv == "ANTHROPIC_API_KEY" &&
-        anthropicProfile.Model == constants.DefaultAnthropicModel
+		anthropic.APIKeyEnv == "ANTHROPIC_API_KEY" &&
+		anthropicProfile.Model == constants.DefaultAnthropicModel
 }
 
 // defaultHomePrompt is the home-path question's default. It honors

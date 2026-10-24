@@ -36,10 +36,6 @@ const skillsInstallTimeout = 60 * time.Second
 // models, so the select always has something to choose.
 const keepDefaultModel = ""
 
-// defaultMemoryAnswer is the memory question's default in a scripted run: the
-// same "no" the pre-huh plain path defaulted to.
-const defaultMemoryAnswer = "no"
-
 // scriptedQuestions is how many answers a scripted run must supply: base URL,
 // home path, memory, syntax theme, outside reads — the model select is
 // interactive-only.
