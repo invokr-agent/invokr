@@ -307,6 +307,72 @@ func appliedPatchDiff(name, argsJSON string) string {
 	return strings.TrimSpace(fields.Patch)
 }
 
+// editCallOp is one replacement a settled edit call carried in its arguments.
+type editCallOp struct {
+	Old string `json:"oldText"`
+	New string `json:"newText"`
+}
+
+// diffLines is one side of a rebuilt hunk: text prefixed line by line with
+// mark, no line at all for empty text. A delete carries an empty newText:
+// nothing to render as removed.
+func diffLines(text, mark string) []string {
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return nil
+	}
+	for i, line := range lines {
+		// A CRLF file carries the \r at the end of every line; it would render ^M.
+		lines[i] = mark + strings.TrimSuffix(line, "\r")
+	}
+	return lines
+}
+
+// editedFileDiff rebuilds an edit's diff from the call's arguments — the oldText/newText
+// pairs, or the whole content for a write — as apply_patch text, so it renders through the
+// same DiffView as apply_patch. Gutter numbers count within the fragment, not the file.
+func editedFileDiff(name, argsJSON string) string {
+	if name != "edit" {
+		return ""
+	}
+	var fields struct {
+		Path    string       `json:"path"`
+		Edits   []editCallOp `json:"edits"`
+		Content *string      `json:"content"`
+		Deleted bool         `json:"delete"`
+		DryRun  bool         `json:"dry_run"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &fields); err != nil || fields.DryRun {
+		return ""
+	}
+	if fields.Path == "" || fields.Deleted {
+		return ""
+	}
+	// A full file write has no before text to pair against, and apply_patch labels
+	// such a section "Add" rather than "Update".
+	written := fields.Content != nil
+	ops := fields.Edits
+	if written {
+		ops = []editCallOp{{New: *fields.Content}}
+	}
+	sections := make([]string, 0, 2*len(ops)+1)
+	for _, op := range ops {
+		sections = append(sections, "@@")
+		sections = append(sections, diffLines(op.Old, "-")...)
+		sections = append(sections, diffLines(op.New, "+")...)
+	}
+	// One "@@" per op survives when every op changed nothing.
+	if len(sections) == len(ops) {
+		return ""
+	}
+	header := "Update"
+	if written {
+		header = "Add"
+	}
+	return "*** Begin Patch\n*** " + header + " File: " + fields.Path +
+		"\n" + strings.Join(sections, "\n") + "\n*** End Patch"
+}
+
 // renderToolEvent renders one tool event as a standalone line for the plain
 // (non-TUI) streaming renderer, which can't update in place.
 func renderToolEvent(ev events.Event) string {

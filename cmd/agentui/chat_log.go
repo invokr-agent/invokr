@@ -182,7 +182,8 @@ func (c *chatLog) finishToolMessage(t events.ToolPayload, failed bool) int {
 	}
 	if msg.toolStatus == toolDone && t.Code == "" {
 		// A flagged result may not have applied, so it gets no diff.
-		msg.toolDiff = appliedPatchDiff(msg.toolName, msg.toolArgs)
+		msg.toolDiff = cmp.Or(appliedPatchDiff(msg.toolName, msg.toolArgs),
+			editedFileDiff(msg.toolName, msg.toolArgs))
 	}
 	if idx < 0 {
 		// No running block to update (e.g. event arrived out of order); append one.
