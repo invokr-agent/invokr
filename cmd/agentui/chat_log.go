@@ -2,6 +2,7 @@ package agentui
 
 import (
 	"cmp"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ type message struct {
 	id, version uint64
 	role, text  string
 	streaming   bool
+	retries     int // stream retries a retry notice line counts
 
 	// meta (role == "assistant") is the provenance line under the answer:
 	// model, elapsed, tokens.
@@ -98,6 +100,10 @@ func (c *chatLog) ApplyEvent(ev events.Event) {
 		return
 	}
 	if ev.Type == events.EventNotice && ev.Notice != nil {
+		if ev.Notice.Text == events.StreamRetryNotice {
+			c.noteStreamRetry()
+			return
+		}
 		c.Append(message{role: "tool", text: ev.Notice.Text})
 		return
 	}
@@ -322,3 +328,21 @@ func writeMessage(b *strings.Builder, msg message, width int, spinnerFrame strin
 		b.WriteString(ui.Invokr.Danger.Render("error: ") + wrapText(msg.text, width-7))
 	}
 }
+
+// noteStreamRetry handles a reply stream that was cut short and re-issued: the
+// partial reply is dropped, since the retry streams a fresh one, and a single
+// line counts the retries instead of one line per attempt.
+func (c *chatLog) noteStreamRetry() {
+	if last := c.Last(); last != nil && last.role == "assistant" && last.streaming {
+		c.messages = c.messages[:len(c.messages)-1]
+	}
+	if last := c.Last(); last != nil && last.role == "tool" && strings.HasPrefix(last.text, streamRetryLine) {
+		last.retries++
+		last.text = fmt.Sprintf("%s (%d)", streamRetryLine, last.retries)
+		last.version++
+		return
+	}
+	c.Append(message{role: "tool", text: streamRetryLine, retries: 1})
+}
+
+const streamRetryLine = "reply cut off · retrying"

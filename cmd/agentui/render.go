@@ -149,7 +149,17 @@ func renderResponseHeader(width int) string {
 	return wrapText(ui.Invokr.Muted.Render("response"), width)
 }
 
-func renderThinking(frame string, since time.Time, width int) string {
+// silentServerAfter is how long a turn may go without any output before the
+// thinking line says the model server has not replied: long enough for a
+// local model's prompt processing, short enough that a dead server is not
+// mistaken for a slow one.
+const silentServerAfter = 30 * time.Second
+
+func renderThinking(frame string, since, heard time.Time, width int) string {
+	if !heard.IsZero() && time.Since(heard) >= silentServerAfter {
+		line := ui.Invokr.Warn.Render(frame + " waiting for the model server")
+		return wrapText(line+"   "+ui.Invokr.Muted.Render("no output for "+formatDuration(time.Since(heard))+" · esc to stop"), width)
+	}
 	return renderRunning(frame, "thinking", ui.Invokr.Info, since, width)
 }
 

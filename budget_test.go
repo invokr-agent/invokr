@@ -46,7 +46,7 @@ var budgets = []area{
 	{"internal", 150},
 
 	// Agent loop and tool plumbing — the core of the core.
-	{"agent", 3816},
+	{"agent", 3822},
 	{"tools/core", 1344},
 	{"tools/system", 10878},
 	{"tools", 600}, // tools/, tools/integrations

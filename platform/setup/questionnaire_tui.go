@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -16,7 +17,6 @@ import (
 	"github.com/invokr-ai/invokr/capability/skills/hub"
 	"github.com/invokr-ai/invokr/config"
 
-	"github.com/invokr-ai/invokr/clients"
 	"github.com/invokr-ai/invokr/constants"
 )
 
@@ -60,8 +60,8 @@ const scriptedQuestions = 5
 // huh's accessible mode: plain line-oriented prompts read from in, so piped
 // and scripted input keeps working without a duplicate plain-text
 // implementation. A blank line accepts each question's default.
-func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (QuestionnaireResult, error) {
-	answers := Answers{ProviderBaseURL: DefaultProviderBaseURL, SyntaxTheme: SyntaxThemeAuto}
+func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool, baseURL string) (QuestionnaireResult, error) {
+	answers := Answers{ProviderBaseURL: cmp.Or(strings.TrimSpace(baseURL), DefaultProviderBaseURL), SyntaxTheme: SyntaxThemeAuto}
 	homeDisplay, memoryAnswer, outsideAnswer := defaultHomePrompt(), defaultMemoryAnswer, defaultMemoryAnswer
 
 	var piped *byteReader
@@ -73,8 +73,10 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 		piped = &byteReader{r: in}
 		in = piped
 	}
-	// Two forms, not one: the model list is fetched from the base URL, so the
-	// URL has to be answered before the options exist.
+	if !accessible {
+		return runQuestionnairePage(in, out, answers, homeDisplay)
+	}
+	// Scripted runs keep two forms: the URL is read before the rest.
 	urlForm := newForm(in, out, accessible, huh.NewGroup(question(
 		"Invokr setup: LLM provider base URL",
 		"An OpenAI-compatible endpoint. Answers are written to config.json.",
@@ -85,20 +87,14 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 	}
 	answers.ProviderBaseURL = strings.TrimSpace(answers.ProviderBaseURL)
 
-	groups := append(modelGroup(accessible, &answers), personaGroup(accessible)...)
-	groups = append(groups, skillsGroup(accessible, &answers)...)
+	answers.Model = keepDefaultModel
 	fields := []huh.Field{
 		question("Invokr home path", "Where config, memory, skills and the toolbox live.", &homeDisplay, accessible),
 		memoryQuestion(accessible, &answers.MemoryEnabled, &memoryAnswer),
 		question("Syntax highlighting theme", `"auto" matches the terminal background; /syntax changes it later.`, &answers.SyntaxTheme, accessible),
 		yesNoQuestion(accessible, "Let the agent read outside the workspace?", "It asks before each such read; /reads changes it later.", &answers.OutsideReads, &outsideAnswer),
 	}
-	if !accessible {
-		fields = append(fields, huh.NewConfirm().Title("Reset JSON profiles?").
-			Description("Replace shipped JSON profiles in <home>/profiles.").Value(&answers.ResetToolTemplates))
-	}
-	groups = append(groups, huh.NewGroup(fields...))
-	if err := runForm(newForm(in, out, accessible, groups...), accessible); err != nil {
+	if err := runForm(newForm(in, out, accessible, huh.NewGroup(fields...)), accessible); err != nil {
 		return QuestionnaireResult{}, err
 	}
 
@@ -113,6 +109,12 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 			return QuestionnaireResult{}, fmt.Errorf("setup questionnaire ended early: %w", io.ErrUnexpectedEOF)
 		}
 	}
+	return finishQuestionnaire(out, answers, homeDisplay)
+}
+
+// finishQuestionnaire writes what was answered: the config under the chosen
+// home, then the starter skills when asked for.
+func finishQuestionnaire(out io.Writer, answers Answers, homeDisplay string) (QuestionnaireResult, error) {
 	homeDir, err := expandHomePath(homeDisplay)
 	if err != nil {
 		return QuestionnaireResult{}, err
@@ -126,23 +128,6 @@ func runQuestionnaireHuh(in io.Reader, out io.Writer, accessible bool) (Question
 		installDefaultSkills(homeDir, out)
 	}
 	return QuestionnaireResult{Result: result, Answers: answers}, nil
-}
-
-// skillsGroup asks whether to install the curated starter skills, in
-// interactive mode only: like the model select, a scripted run skips it so
-// unattended setup stays off the network.
-func skillsGroup(accessible bool, answers *Answers) []*huh.Group {
-	if accessible {
-		return nil
-	}
-	answers.InstallSkills = true
-	return []*huh.Group{
-		huh.NewGroup(huh.NewConfirm().
-			Title("Install the starter skills?").
-			Description(fmt.Sprintf("From the %s hub: %s.",
-				constants.DefaultSkillsHub, strings.Join(constants.DefaultSetupSkills, ", "))).
-			Value(&answers.InstallSkills)),
-	}
 }
 
 // installDefaultSkills installs the curated set from the default hub. Setup
@@ -205,49 +190,6 @@ func yesNoQuestion(accessible bool, title, hint string, enabled *bool, answer *s
 
 func parseYes(value string) bool {
 	return slices.Contains([]string{"y", "yes", "true", "1"}, strings.ToLower(strings.TrimSpace(value)))
-}
-
-// personaGroup previews the persona (base system prompt) that setup seeds
-// into <home>/PERSONA.md, in interactive mode only. It is a note, not a
-// question: the file is the editor, setup just shows what lands there.
-// Skipping it in accessible mode keeps the scripted input shape
-// (scriptedQuestions) intact — a note would otherwise consume no line but
-// still render noise into pipes.
-func personaGroup(accessible bool) []*huh.Group {
-	if accessible {
-		return nil
-	}
-	return []*huh.Group{
-		huh.NewGroup(huh.NewNote().
-			Title("Persona (system prompt)").
-			Description(fmt.Sprintf(
-				"%s\n\nSaved to <home>/%s — edit that file to change the prompt.\nAn existing %s is kept as-is.",
-				strings.TrimSpace(defaultPersonaTemplate),
-				constants.PersonaFilename, constants.PersonaFilename,
-			))),
-	}
-}
-
-// modelGroup is the "Default model" select, and only in interactive mode. A
-// scripted (accessible) run keeps the built-in default model, which restores
-// the pre-huh plain path's four-answer input shape, keeps an unattended run
-// off the network (no /v1/models probe), and avoids huh v2.0.3's accessible
-// Select — the field that panics on truncated input (see runForm).
-// `invokr config` sets the model after the fact.
-func modelGroup(accessible bool, answers *Answers) []*huh.Group {
-	if accessible {
-		answers.Model = keepDefaultModel
-		return nil
-	}
-	options := modelOptions(answers.ProviderBaseURL)
-	// Land the cursor on a real model when the provider advertised any; the
-	// "keep the default" option is the last resort, not the first suggestion.
-	answers.Model = options[0].Value
-	return []*huh.Group{huh.NewGroup(huh.NewSelect[string]().
-		Title("Default model").
-		Description("Fetched from the provider's /v1/models.").
-		Options(options...).
-		Value(&answers.Model))}
 }
 
 // byteReader serves one byte per Read so line-oriented consumers never buffer
@@ -313,26 +255,6 @@ func recoverSelectPanic(recovered any, err error) error {
 		panic(recovered)
 	}
 	return fmt.Errorf("setup questionnaire aborted on invalid input: %w", runtimeErr)
-}
-
-// modelOptions lists what the provider advertises. A provider that is
-// unreachable or has no /v1/models endpoint yields the single "keep the
-// default" option rather than an error: setup should still complete offline.
-var modelOptions = func(baseURL string) []huh.Option[string] {
-	fallback := []huh.Option[string]{
-		huh.NewOption("pick the server's first model at startup", keepDefaultModel),
-	}
-	baseURL = strings.TrimSpace(baseURL)
-	if baseURL == "" {
-		return fallback
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), modelListTimeout)
-	defer cancel()
-	models, err := clients.NewClient(baseURL).ListModels(ctx)
-	if err != nil || len(models) == 0 {
-		return fallback
-	}
-	return append(huh.NewOptions(models...), fallback...)
 }
 
 // SyntaxThemeAuto is what an empty syntax theme means: pick a stylesheet to

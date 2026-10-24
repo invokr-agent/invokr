@@ -380,7 +380,7 @@ func TestModelOptionsListsProviderModels(t *testing.T) {
 	}))
 	defer server.Close()
 
-	options := modelOptions(server.URL)
+	options := (&modelProbe{}).options(server.URL, nil)
 	if len(options) != 3 {
 		t.Fatalf("expected two models plus the default option, got %d", len(options))
 	}
@@ -392,13 +392,21 @@ func TestModelOptionsListsProviderModels(t *testing.T) {
 	}
 }
 
-func TestModelOptionsFallsBackWhenProviderHasNoModels(t *testing.T) {
+func TestModelProbeSaysWhyTheListIsEmpty(t *testing.T) {
+	probe := &modelProbe{}
+	if options := probe.options("http://127.0.0.1:1", nil); len(options) != 1 || options[0].Value != keepDefaultModel {
+		t.Fatalf("expected only the default option, got %+v", options)
+	}
+	if status := probe.status("http://127.0.0.1:1"); !strings.Contains(status, "Can't reach the model server at 127.0.0.1:1") {
+		t.Fatalf("unreachable status = %q", status)
+	}
+	if status := probe.status("localhost:8080"); !strings.Contains(status, "starting with http://") {
+		t.Fatalf("partial URL status = %q", status)
+	}
 	server := httptest.NewServer(http.HandlerFunc(http.NotFound))
 	defer server.Close()
-
-	options := modelOptions(server.URL)
-	if len(options) != 1 || options[0].Value != keepDefaultModel {
-		t.Fatalf("expected only the default option, got %+v", options)
+	if status := probe.status(server.URL); !strings.Contains(status, "lists no models") {
+		t.Fatalf("no-list-endpoint status = %q", status)
 	}
 }
 
@@ -437,5 +445,33 @@ func TestEnsureFirstRunFallsBackWhenNotATerminal(t *testing.T) {
 	}
 	if !result.HomeCreated || !result.ConfigCreated {
 		t.Fatalf("expected home and config to be created, got %+v", result)
+	}
+}
+
+func TestValidSyntaxTheme(t *testing.T) {
+	for _, ok := range []string{"auto", "AUTO", "monokai", "catppuccin-mocha", " dracula "} {
+		if err := validSyntaxTheme(ok); err != nil {
+			t.Errorf("%q rejected: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"", "monokia", "solarized"} {
+		if err := validSyntaxTheme(bad); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}
+
+func TestPreviewThemeFollowsTheAnswer(t *testing.T) {
+	cases := map[string]string{"": "tokyonight-night", "au": "tokyonight-night", "Monokai": "monokai", "drac": "dracula", "zzz": ""}
+	for value, want := range cases {
+		if got, _ := previewTheme(value); got != want {
+			t.Errorf("previewTheme(%q) = %q, want %q", value, got, want)
+		}
+	}
+	if got := themeDescription("monokai"); !strings.Contains(got, "\x1b[") || !strings.Contains(got, "greet") {
+		t.Errorf("preview is not highlighted code: %q", got)
+	}
+	if got := themeDescription("zzz"); !strings.Contains(got, "No theme matches yet") {
+		t.Errorf("unmatched preview = %q", got)
 	}
 }

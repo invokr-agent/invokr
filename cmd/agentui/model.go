@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-ai/invokr/clients"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
@@ -80,8 +81,11 @@ type model struct {
 	queued []string
 	// cancelSend stops the turn in flight; stopping marks that the cancel was
 	// deliberate, so the response path renders a stop notice, not an error.
-	cancelSend      context.CancelFunc
-	sentAt          time.Time
+	cancelSend context.CancelFunc
+	sentAt     time.Time
+	// heardAt is when the turn last showed signs of life (sent, or any
+	// streamed/tool event), so a silent server can be told from a busy one.
+	heardAt         time.Time
 	compactingAt    time.Time
 	stopping        bool
 	recorded        string
@@ -706,8 +710,11 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		m.recordedWarning = fmt.Sprintf("Interrupted · %d recorded · Alt+R", len(msg.evidence))
 	case msg.err != nil:
 		m.err = msg.err
-		m.chatLog.Append(message{role: "error", text: msg.err.Error()})
-		m.recordedWarning = "turn failed; recorded calls do not verify completion"
+		m.chatLog.Append(message{role: "error", text: clients.DescribeError(msg.err)})
+		m.recordedWarning = ""
+		if len(msg.evidence) > 0 {
+			m.recordedWarning = fmt.Sprintf("Failed · %d recorded · Alt+R", len(msg.evidence))
+		}
 	default:
 		m.usage = msg.usage
 		m.hasUsage = true
@@ -766,6 +773,7 @@ func (m *model) updateToolEvents() (tea.Model, tea.Cmd) {
 func (m *model) drainToolEvents() {
 	if m.toolEvents != nil {
 		for _, ev := range m.toolEvents.Drain() {
+			m.heardAt = time.Now()
 			m.chatLog.ApplyEvent(ev)
 			m.trackCompaction(ev)
 			m.noteToolSuggestion(ev)
@@ -1036,7 +1044,7 @@ func (m *model) chatTail() string {
 		} else if !m.compactingAt.IsZero() {
 			b.WriteString(renderRunning(m.spinner.View(), "compacting context", ui.Invokr.Info, m.compactingAt, m.mainWidth()) + "\n\n")
 		} else {
-			b.WriteString(renderThinking(m.spinner.View(), m.sentAt, m.mainWidth()) + "\n\n")
+			b.WriteString(renderThinking(m.spinner.View(), m.sentAt, m.heardAt, m.mainWidth()) + "\n\n")
 		}
 	}
 	if m.approvalQueue != nil {
@@ -1116,6 +1124,7 @@ func (m *model) sendPrompt(text string) tea.Cmd {
 	m.chatLog.Append(message{role: "user", text: text})
 	m.sending = true
 	m.sentAt = time.Now()
+	m.heardAt = m.sentAt
 	m.userScrolled = false
 	m.syncChatViewport(true)
 

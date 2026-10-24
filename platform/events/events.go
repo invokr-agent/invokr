@@ -173,6 +173,10 @@ type Bus interface {
 	Register(handler Handler) func()
 }
 
+// StreamRetryNotice is the notice the gateway sends when a reply stream was
+// cut short and the turn is re-issued; the TUI drops the partial reply on it.
+const StreamRetryNotice = "stream cut short; re-issuing the turn"
+
 // Notice dispatches a notice event carrying text, stamped with the current
 // time and the given session identifiers. It is a no-op when d is nil.
 func Notice(ctx context.Context, d Dispatcher, sessionID, parentSessionID, text string) {
