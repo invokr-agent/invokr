@@ -313,6 +313,9 @@ func renderToolEvent(ev events.Event) string {
 	if ev.Type == events.EventNotice && ev.Notice != nil {
 		return ev.Notice.Text
 	}
+	if ev.Type == events.EventReasoning && ev.Reasoning != nil {
+		return ui.Invokr.Muted.Render(strings.TrimSpace(ev.Reasoning.Text))
+	}
 	if ev.Tool == nil {
 		return fmt.Sprintf("tool unknown event %s", ev.Type)
 	}

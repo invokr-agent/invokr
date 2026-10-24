@@ -99,6 +99,10 @@ func (c *chatLog) ApplyEvent(ev events.Event) {
 	if c.applyAssistantDelta(ev) {
 		return
 	}
+	if ev.Type == events.EventReasoning && ev.Reasoning != nil {
+		c.appendReasoning(ev.Reasoning.Text)
+		return
+	}
 	if ev.Type == events.EventNotice && ev.Notice != nil {
 		if ev.Notice.Text == events.StreamRetryNotice {
 			c.noteStreamRetry()
@@ -324,8 +328,19 @@ func writeMessage(b *strings.Builder, msg message, width int, spinnerFrame strin
 		} else {
 			b.WriteString(ui.Invokr.Muted.Render(wrapText(msg.text, width)))
 		}
+	case "reasoning":
+		b.WriteString(ui.Invokr.Muted.Italic(true).Render(indentBlock(wrapText(msg.text, width-len(answerIndent)), answerIndent)))
 	case "error":
 		b.WriteString(ui.Invokr.Danger.Render("error: ") + wrapText(msg.text, width-7))
+	}
+}
+
+// appendReasoning adds a step's reasoning in full. It arrives once the reply is
+// complete, so on a final turn it goes above the answer already streamed.
+func (c *chatLog) appendReasoning(text string) {
+	c.Append(message{role: "reasoning", text: strings.TrimSpace(text)})
+	if n := len(c.messages); n > 1 && c.messages[n-2].role == "assistant" && c.messages[n-2].streaming {
+		c.messages[n-2], c.messages[n-1] = c.messages[n-1], c.messages[n-2]
 	}
 }
 
