@@ -36,6 +36,7 @@ type executableTool struct {
 	command, dir, workingDir, Runtime string
 	args, allowHosts, protected       []string
 	allowHiddenPaths, daemon          bool
+	credentials                       map[string]toolboxCredential
 	config                            config.ToolboxConfig
 	logger                            *zap.Logger
 	approver                          approval.Approver
@@ -229,9 +230,9 @@ func approveToolboxCall(ctx context.Context, approver approval.Approver, tool *e
 }
 
 func (p *executableTool) Invoke(ctx context.Context, call *core.ToolCall) (string, error) {
-	reqBytes, err := json.Marshal(call)
+	reqBytes, err := p.requestBytes(ctx, call)
 	if err != nil {
-		return "", fmt.Errorf("serialize tool call: %w", err)
+		return "", err
 	}
 
 	command, env, err := p.prepareCommandAndEnv(ctx)

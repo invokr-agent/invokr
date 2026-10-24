@@ -44,6 +44,9 @@ type toolboxSpec struct {
 	// (e.g. {"name": "browse", "usage": "/browse url=…"}). Approval gating
 	// is unchanged: the command path raises the same tiers as a model call.
 	Command *core.ToolCommand `json:"command,omitempty"`
+	// Credentials names secrets invokr resolves on the host per call and
+	// passes on stdin (e.g. {"token": {"source": "gh"}}).
+	Credentials map[string]toolboxCredential `json:"credentials,omitempty"`
 }
 
 type toolboxLimits struct {
@@ -161,6 +164,10 @@ func loadToolboxTool(pluginDir string, cfg config.ToolboxConfig, logger *zap.Log
 		return nil, fmt.Errorf("tool spec %s: %w", specPath, err)
 	}
 
+	if err := validateCredentials(spec.Credentials); err != nil {
+		return nil, fmt.Errorf("tool spec %s: %w", specPath, err)
+	}
+
 	cfg, err = applyLimits(cfg, spec.Limits)
 	if err != nil {
 		return nil, fmt.Errorf("tool spec %s: %w", specPath, err)
@@ -196,7 +203,7 @@ func loadToolboxTool(pluginDir string, cfg config.ToolboxConfig, logger *zap.Log
 			},
 		},
 		command: command, args: args, dir: pluginDir, Runtime: runtime,
-		daemon: spec.Daemon, allowHosts: allowHosts, config: cfg, logger: logger,
+		daemon: spec.Daemon, allowHosts: allowHosts, credentials: spec.Credentials, config: cfg, logger: logger,
 	}, nil
 }
 
