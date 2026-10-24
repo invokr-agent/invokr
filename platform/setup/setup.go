@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
@@ -140,16 +141,87 @@ func RunQuestionnaire(in io.Reader, out io.Writer) (QuestionnaireResult, error) 
 	return RunQuestionnaireFrom(in, out, "")
 }
 
-// RunQuestionnaireFrom is RunQuestionnaire with the base URL question
-// prefilled, e.g. from --base-url or INVOKR_BASE_URL; empty means the default.
-func RunQuestionnaireFrom(in io.Reader, out io.Writer, baseURL string) (QuestionnaireResult, error) {
+// RunQuestionnaireFromExisting prefills questionnaire answers from the current
+// config file before running the questionnaire. Existing values should not be
+// silently replaced by first-run defaults.
+func RunQuestionnaireFromExisting(in io.Reader, out io.Writer, baseURL string) (QuestionnaireResult, error) {
 	if in == nil {
 		return QuestionnaireResult{}, fmt.Errorf("input is required")
 	}
 	if out == nil {
 		return QuestionnaireResult{}, fmt.Errorf("output is required")
 	}
-	return runQuestionnaireHuh(in, out, wantsAccessible(in), baseURL)
+	cfg, existed, err := fsutil.ReadJSON[config.AppConfig](config.DefaultConfigPath())
+	if err != nil {
+		return QuestionnaireResult{}, fmt.Errorf("parse config %s: %w", config.DefaultConfigPath(), err)
+	}
+	answers := Answers{}
+	if existed {
+		answers = answersFromConfig(cfg)
+	}
+	return runQuestionnaire(in, out, baseURL, answers, existed)
+}
+
+// RunQuestionnaireFrom is RunQuestionnaire with the base URL question
+// prefilled, e.g. from --base-url or INVOKR_BASE_URL; empty means the default.
+func RunQuestionnaireFrom(in io.Reader, out io.Writer, baseURL string) (QuestionnaireResult, error) {
+	return runQuestionnaire(in, out, baseURL, Answers{}, false)
+}
+
+// runQuestionnaire runs the questionnaire with optional answer prefills.
+func runQuestionnaire(in io.Reader, out io.Writer, baseURL string, prefill Answers, prefilled bool) (QuestionnaireResult, error) {
+	if in == nil {
+		return QuestionnaireResult{}, fmt.Errorf("input is required")
+	}
+	if out == nil {
+		return QuestionnaireResult{}, fmt.Errorf("output is required")
+	}
+	return runQuestionnaireHuh(in, out, wantsAccessible(in), baseURL, prefill, prefilled)
+}
+
+// answersFromConfig reads the raw config file and maps the settings that have
+// setup questions onto questionnaire answers.
+func answersFromConfig(cfg config.AppConfig) Answers {
+	baseURL, model := currentProviderAndModel(cfg)
+	return Answers{
+		ProviderBaseURL: baseURL,
+		Model:           model,
+		MemoryEnabled:   cfg.Memory.Zerfoo.Enabled,
+		OutsideReads:    cfg.Workspace.Reads == config.ReadsAsk,
+		SyntaxTheme:     cfg.UI.SyntaxTheme,
+	}
+}
+
+// currentProviderAndModel follows the router table when it is configured,
+// otherwise it uses the single-provider fields.
+func currentProviderAndModel(cfg config.AppConfig) (string, string) {
+	if !cfg.Provider.Router.Enabled() {
+		return cfg.Provider.BaseURL, cfg.Provider.Model
+	}
+	active := cmp.Or(cfg.Provider.Router.Active, soleRouterProfile(cfg.Provider.Router.Profiles))
+	profile, ok := cfg.Provider.Router.Profiles[active]
+	if !ok {
+		return cfg.Provider.BaseURL, cfg.Provider.Model
+	}
+	provider, hasProvider := cfg.Provider.Router.Providers[profile.Provider]
+	baseURL := cfg.Provider.BaseURL
+	if hasProvider && provider.BaseURL != "" {
+		baseURL = provider.BaseURL
+	}
+	model := cmp.Or(profile.Model, cfg.Provider.Model)
+	return baseURL, model
+}
+
+// soleRouterProfile returns the only router profile name, used when the table
+// has one profile and no active profile was written.
+func soleRouterProfile(profiles map[string]config.RouterProfileConfig) string {
+	if len(profiles) != 1 {
+		return ""
+	}
+	for name := range profiles {
+		return name
+	}
+	return ""
 }
 
 // wantsAccessible reports whether the questionnaire should use huh's
@@ -250,30 +322,58 @@ func defaultRouterConfig(provider config.ProviderConfig) config.RouterConfig {
 }
 
 func writeConfiguredDefault(path string, homeDir string, answers Answers) (bool, error) {
+	existing, existed, err := fsutil.ReadJSON[config.AppConfig](path)
+	if err != nil {
+		return false, fmt.Errorf("parse config %s: %w", path, err)
+	}
 	cfg := config.DefaultAppConfigForHome(homeDir)
-	cfg.Provider.BaseURL = strings.TrimSpace(answers.ProviderBaseURL)
+	// Never pin the setup-time cwd; a later run resolves the caller's cwd.
+	cfg.Workspace.Root = ""
+
+	cfg.Provider.BaseURL = cmp.Or(strings.TrimSpace(answers.ProviderBaseURL), existing.Provider.BaseURL, cfg.Provider.BaseURL)
 	if model := strings.TrimSpace(answers.Model); model != "" {
 		cfg.Provider.Model = model
 	}
 	cfg.Memory.Zerfoo.Enabled = answers.MemoryEnabled
 	if answers.OutsideReads {
 		cfg.Workspace.Reads = config.ReadsAsk
+	} else {
+		cfg.Workspace.Reads = cmp.Or(existing.Workspace.Reads, cfg.Workspace.Reads)
 	}
-	cfg.UI.SyntaxTheme = strings.TrimSpace(answers.SyntaxTheme)
-	cfg.Provider.Router = defaultRouterConfig(cfg.Provider)
-	// The workspace root defaults to the cwd at setup time; persisting it would
-	// pin every later run to whatever directory setup happened to run in.
-	// Leave it empty so it resolves to the caller's cwd on each start.
-	cfg.Workspace.Root = ""
+	if theme := strings.TrimSpace(answers.SyntaxTheme); theme != "" {
+		cfg.UI.SyntaxTheme = theme
+	}
 
-	exists, err := fsutil.Exists(path)
-	if err != nil {
-		return false, err
+	// Preserve a custom router table when setup is re-run. If the existing
+	// router is the one setup seeds, refresh it from the answered provider so
+	// the answers are reflected everywhere.
+	if existed && existing.Provider.Router.Enabled() && !isLocalSetupRouter(existing.Provider.Router) {
+		cfg.Provider.Router = existing.Provider.Router
+	} else {
+		cfg.Provider.Router = defaultRouterConfig(cfg.Provider)
 	}
+
 	if err := fsutil.WriteJSON(path, cfg, configFilePerm); err != nil {
 		return false, err
 	}
-	return !exists, nil
+	return !existed, nil
+}
+
+// isLocalSetupRouter reports whether the router is the one setup seeds, so
+// re-running setup can update the answers without replacing a custom router
+// table. It checks the stable shape: the local/anthropic profiles setup
+// installs and a local active profile.
+func isLocalSetupRouter(router config.RouterConfig) bool {
+	if router.Active != "local" || len(router.Profiles) != 2 || len(router.Providers) != 2 {
+		return false
+	}
+	// A missing entry is a zero value, which fails the field checks below.
+	localProfile, anthropicProfile := router.Profiles["local"], router.Profiles["anthropic"]
+	local, anthropic := router.Providers["local"], router.Providers["anthropic"]
+	return localProfile.Provider == "local" && anthropicProfile.Provider == "anthropic" &&
+		local.Type == "openai-compatible" && anthropic.Type == "anthropic" &&
+		anthropic.APIKeyEnv == "ANTHROPIC_API_KEY" &&
+		anthropicProfile.Model == constants.DefaultAnthropicModel
 }
 
 // defaultHomePrompt is the home-path question's default. It honors

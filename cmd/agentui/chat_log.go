@@ -96,15 +96,7 @@ func (c *chatLog) Last() *message {
 // mutating the matching block in place (keyed by tool-call ID) rather than
 // appending a new line per event.
 func (c *chatLog) ApplyEvent(ev events.Event) {
-	if c.applyAssistantDelta(ev) {
-		return
-	}
-	if ev.Type == events.EventNotice && ev.Notice != nil {
-		if ev.Notice.Text == events.StreamRetryNotice {
-			c.noteStreamRetry()
-			return
-		}
-		c.Append(message{role: "tool", text: ev.Notice.Text})
+	if c.applyAssistantDelta(ev) || c.applyTextEvent(ev) {
 		return
 	}
 	if ev.Tool == nil {
@@ -178,7 +170,8 @@ func (c *chatLog) finishToolMessage(t events.ToolPayload, failed bool) int {
 	}
 	if msg.toolStatus == toolDone && t.Code == "" {
 		// A flagged result may not have applied, so it gets no diff.
-		msg.toolDiff = appliedPatchDiff(msg.toolName, msg.toolArgs)
+		msg.toolDiff = cmp.Or(appliedPatchDiff(msg.toolName, msg.toolArgs),
+			editedFileDiff(msg.toolName, msg.toolArgs))
 	}
 	if idx < 0 {
 		// No running block to update (e.g. event arrived out of order); append one.
@@ -324,8 +317,35 @@ func writeMessage(b *strings.Builder, msg message, width int, spinnerFrame strin
 		} else {
 			b.WriteString(ui.Invokr.Muted.Render(wrapText(msg.text, width)))
 		}
+	case "reasoning":
+		b.WriteString(ui.Invokr.Muted.Italic(true).Render(indentBlock(wrapText(msg.text, width-len(answerIndent)), answerIndent)))
 	case "error":
 		b.WriteString(ui.Invokr.Danger.Render("error: ") + wrapText(msg.text, width-7))
+	}
+}
+
+// applyTextEvent handles the reasoning and notice events, which carry text
+// rather than a tool block.
+func (c *chatLog) applyTextEvent(ev events.Event) bool {
+	switch {
+	case ev.Type == events.EventReasoning && ev.Reasoning != nil:
+		c.appendReasoning(ev.Reasoning.Text)
+	case ev.Type == events.EventNotice && ev.Notice != nil && ev.Notice.Text == events.StreamRetryNotice:
+		c.noteStreamRetry()
+	case ev.Type == events.EventNotice && ev.Notice != nil:
+		c.Append(message{role: "tool", text: ev.Notice.Text})
+	default:
+		return false
+	}
+	return true
+}
+
+// appendReasoning adds a step's reasoning in full. It arrives once the reply is
+// complete, so on a final turn it goes above the answer already streamed.
+func (c *chatLog) appendReasoning(text string) {
+	c.Append(message{role: "reasoning", text: strings.TrimSpace(text)})
+	if n := len(c.messages); n > 1 && c.messages[n-2].role == "assistant" && c.messages[n-2].streaming {
+		c.messages[n-2], c.messages[n-1] = c.messages[n-1], c.messages[n-2]
 	}
 }
 

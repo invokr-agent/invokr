@@ -28,7 +28,8 @@ type blockRenderer interface {
 // toolbox scripts, MCP servers, anything not listed — fall back to the generic
 // renderer, which is the pre-seam rendering unchanged.
 var toolRenderers = map[string]blockRenderer{
-	"shell": shellRenderer{}, "apply_patch": patchRenderer{}, "todo": todoRenderer{}, "git_read": gitReadRenderer{},
+	"shell": shellRenderer{}, "apply_patch": patchRenderer{}, "edit": patchRenderer{}, "todo": todoRenderer{},
+	"git_read": gitReadRenderer{},
 }
 
 func rendererFor(name string) blockRenderer {
@@ -98,8 +99,11 @@ func shellText(output string) string {
 	return strings.Join(slices.DeleteFunc(streams, func(s string) bool { return s == "" }), "\n")
 }
 
-// patchRenderer owns the apply_patch diff sub-block. Collapsed it keeps the
-// maxDiffLines preview cap; expanded it shows the whole recorded patch.
+// patchRenderer owns the diff sub-block under a writing tool: apply_patch
+// records its patch text, edit rebuilds a patch-shaped diff from the call's
+// arguments (see editedFileDiff), and both render through the same DiffView.
+// Collapsed it keeps the maxDiffLines preview cap; expanded it shows the whole
+// recorded diff.
 type patchRenderer struct{}
 
 func (patchRenderer) Summary(m message, width int) string {

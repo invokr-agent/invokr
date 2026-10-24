@@ -28,7 +28,6 @@ import (
 // list follows the base URL as it is edited, and the line under it says why
 // it is empty when the server cannot be asked.
 func runQuestionnairePage(in io.Reader, out io.Writer, answers Answers, homeDisplay string) (QuestionnaireResult, error) {
-	answers.InstallSkills = true
 	probe := &modelProbe{}
 	fields := []huh.Field{
 		huh.NewInput().Title("LLM provider base URL").

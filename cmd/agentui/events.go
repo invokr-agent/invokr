@@ -66,6 +66,8 @@ func isToolEvent(ev events.Event) bool {
 		return ev.Delta != nil
 	case events.EventNotice:
 		return ev.Notice != nil
+	case events.EventReasoning:
+		return ev.Reasoning != nil && strings.TrimSpace(ev.Reasoning.Text) != ""
 	case events.EventToolStarted, events.EventToolCompleted, events.EventToolFailed, events.EventToolProgress:
 		return ev.Tool != nil
 	default:

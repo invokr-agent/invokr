@@ -45,14 +45,23 @@ func RegisterGitTools(c core.NativeRegistrar, deps core.CallerDeps, wsp workspac
 // missing, not a repo dir) is wrapped as-is. Arguments are argv-literal — no
 // shell, and never `-c` (config keys can execute arbitrary binaries, #318).
 func gitText(ctx context.Context, root string, args ...string) (string, error) {
-	return gitTextEnv(ctx, root, nil, args...)
+	return gitTextSpec(ctx, shell.GitProcessSpec, root, nil, args...)
+}
+
+// gitProbe is gitText with the repository mounted read-only.
+func gitProbe(ctx context.Context, root string, args ...string) (string, error) {
+	return gitTextSpec(ctx, shell.GitReadOnlyProcessSpec, root, nil, args...)
 }
 
 // gitTextEnv is gitText with an explicit environment. A nil env inherits the
 // host's, as exec.Cmd does; a non-nil one replaces it wholesale, so callers
 // append to os.Environ() rather than building one from scratch.
 func gitTextEnv(ctx context.Context, root string, env []string, args ...string) (string, error) {
-	spec, err := shell.GitProcessSpec(ctx, root, append([]string{"--no-pager"}, args...), env)
+	return gitTextSpec(ctx, shell.GitProcessSpec, root, env, args...)
+}
+
+func gitTextSpec(ctx context.Context, specFor func(context.Context, string, []string, []string) (core.ProcessSpec, error), root string, env []string, args ...string) (string, error) {
+	spec, err := specFor(ctx, root, append([]string{"--no-pager"}, args...), env)
 	if err != nil {
 		return "", err
 	}
