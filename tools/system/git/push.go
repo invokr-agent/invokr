@@ -28,24 +28,27 @@ type pushPlan struct {
 // remote must be a configured name, never a URL, so a push only reaches hosts
 // the user already set up.
 func preparePush(ctx context.Context, root string, args writeArgs) (*pushPlan, error) {
-	branch, err := gitText(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
-	if err != nil || branch == "HEAD" {
-		return nil, fmt.Errorf("push needs a checked-out branch (HEAD is detached or unreadable)")
+	branch, err := gitProbe(ctx, root, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return nil, err
 	}
-	upstreamRemote, _ := gitText(ctx, root, "config", "--get", "branch."+branch+".remote")
+	if branch == "HEAD" {
+		return nil, errors.New("push needs a checked-out branch (HEAD is detached)")
+	}
+	upstreamRemote, _ := gitProbe(ctx, root, "config", "--get", "branch."+branch+".remote")
 	remote := strings.TrimSpace(args.Remote)
 	if remote == "" {
 		remote = cmp.Or(upstreamRemote, "origin")
 	}
-	remotes, _ := gitText(ctx, root, "remote")
+	remotes, _ := gitProbe(ctx, root, "remote")
 	if !slices.Contains(strings.Fields(remotes), remote) {
 		return nil, fmt.Errorf("push: %q is not a configured remote (have: %s)", remote, cmp.Or(strings.Join(strings.Fields(remotes), ", "), "none"))
 	}
 	p := &pushPlan{remote: remote, branch: branch, force: args.ForceWithLease}
-	p.url, _ = gitText(ctx, root, "remote", "get-url", remote)
+	p.url, _ = gitProbe(ctx, root, "remote", "get-url", remote)
 	tracked := remote + "/" + branch
-	if p.commits, err = gitText(ctx, root, "log", "--oneline", "-20", tracked+"..HEAD"); err != nil {
-		p.commits, _ = gitText(ctx, root, "log", "--oneline", "-20", "HEAD")
+	if p.commits, err = gitProbe(ctx, root, "log", "--oneline", "-20", tracked+"..HEAD"); err != nil {
+		p.commits, _ = gitProbe(ctx, root, "log", "--oneline", "-20", "HEAD")
 		p.commits = "(new branch on " + remote + ")\n" + p.commits
 	}
 	p.argv = []string{"push"}
@@ -67,7 +70,7 @@ func preparePush(ctx context.Context, root string, args writeArgs) (*pushPlan, e
 // hookNote warns when the pre-push hook lives somewhere the agent can edit:
 // it runs on the host, outside every sandbox, once the push is approved.
 func hookNote(ctx context.Context, root string) string {
-	hooks, err := gitText(ctx, root, "config", "--get", "core.hooksPath")
+	hooks, err := gitProbe(ctx, root, "config", "--get", "core.hooksPath")
 	if err != nil || hooks == "" {
 		return ""
 	}

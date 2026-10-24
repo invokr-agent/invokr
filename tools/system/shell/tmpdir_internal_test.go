@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-ai/invokr/tools/system/workspace"
 )
 
 // The sandbox's /tmp is a workspace directory, so a scratch file survives the
@@ -95,6 +97,53 @@ func TestSandboxPlanMountsReadonlyRootsReadOnly(t *testing.T) {
 	}
 	if slices.Contains(sb.RW, ref) {
 		t.Fatalf("read-only root must not be writable: %v", sb.RW)
+	}
+}
+
+// The read-only git variant seals the repository even outside Plan mode: the
+// probes that resolve remote, branch and hooks write nothing, so none of them
+// may carry a writable mount that raises a seal approval per probe.
+func TestSandboxPlanSealsGitForReadOnlyProbes(t *testing.T) {
+	// A linked worktree is the shape workspace.GitDirs reports: .git is a
+	// pointer file to a shared directory outside the workspace, and that
+	// directory is what a probe would otherwise pin writable.
+	root := t.TempDir()
+	wt := filepath.Join(root, "wt")
+	shared := filepath.Join(root, "main", ".git")
+	linked := filepath.Join(shared, "worktrees", "wt")
+	for _, dir := range []string{wt, shared, linked, filepath.Join(shared, "hooks"), filepath.Join(linked, "hooks")} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: "+linked), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(linked, "gitdir"), []byte(filepath.Join(wt, ".git")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, dir := range []string{shared, linked} {
+		if err := os.WriteFile(filepath.Join(dir, "config"), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The sealed set is what makes a probe safe: nothing under these paths is
+	// writable, so there is no unsealed protected name left inside a writable
+	// mount, which is what the sandbox asks the user about.
+	sb := sandboxPlan("/bin/bash", preparedShellCommand{mode: approval.Auto, workspaceRoot: wt, cwd: wt, roots: []string{wt},
+		commands: []string{"git"}, protected: []string{filepath.Join(shared, "hooks"), filepath.Join(linked, "hooks")}, gitReadOnly: true})
+	if len(sb.PinnedRW) != 0 {
+		t.Fatalf("read-only git probe keeps writable Git pins: %v", sb.PinnedRW)
+	}
+	for _, writable := range sb.RW {
+		for _, sealed := range sb.Sealed {
+			if workspace.Overlaps(sealed, writable) {
+				t.Fatalf("sealed path sits under a writable mount: RO probe RW=%v Sealed=%v", sb.RW, sb.Sealed)
+			}
+		}
+	}
+	if slices.ContainsFunc(sb.RW, func(path string) bool { return path == wt }) {
+		t.Fatalf("read-only git probe mounts the workspace writable: %v", sb.RW)
 	}
 }
 

@@ -212,7 +212,7 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 		if len(mountDirs) == 2 { // A linked worktree lives inside its shared repository.
 			mountDirs = mountDirs[:1]
 		}
-		if plan.mode != approval.Plan {
+		if plan.mode != approval.Plan && !plan.gitReadOnly {
 			sb.PinnedRW = mountDirs
 			sb.RW = append(sb.RW, mountDirs...)
 		}
@@ -225,7 +225,7 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 		// removes the reason to reach for `git config` at all.
 		sb.RO = append(sb.RO, gitConfigFiles()...)
 	}
-	if plan.mode == approval.Plan {
+	if plan.mode == approval.Plan || plan.gitReadOnly {
 		// Concat, not append: appending onto plan.roots could write into its backing array.
 		sources := slices.Concat(plan.roots, gitDirs)
 		sb.Sealed, sb.RO = append(sb.Sealed, sources...), append(sb.RO, sources...)

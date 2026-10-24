@@ -79,6 +79,8 @@ type preparedShellCommand struct {
 	// a reference checkout it may still read.
 	workspaceRoot        string
 	roots, readonlyRoots []string
+	// gitReadOnly mounts the repository read-only; see GitReadOnlyProcessSpec.
+	gitReadOnly bool
 	// sandboxExec marks a line running project code (an interpreter or a
 	// workspace script), which is always asked for.
 	sandboxExec, isolateEnv bool

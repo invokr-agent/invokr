@@ -115,6 +115,36 @@ func TestGitWritePushRefusals(t *testing.T) {
 	}
 }
 
+// TestGitWritePushAsksOnceInAuto covers the read-only probes preparePush runs
+// before approval: they mount nothing writable, so Auto mode raises exactly the
+// one approval for the push itself, never a seal prompt per probe.
+func TestGitWritePushAsksOnceInAuto(t *testing.T) {
+	repo, bare := repoWithRemote(t)
+	a := &recordingApprover{approve: true}
+	if _, err := pushCall(t, repo, approval.Auto, a, `{"op":"push"}`); err != nil {
+		t.Fatalf("auto push: %v", err)
+	}
+	if len(a.asked) != 1 {
+		t.Fatalf("prompts = %d, want 1 (the push)", len(a.asked))
+	}
+	if req := a.asked[0]; req.Subject != "push origin feat" || !req.Publishes || !req.Network {
+		t.Fatalf("prompt = %+v, want the push itself", a.asked[0])
+	}
+	if got := gitIn(t, bare, "log", "--format=%s", "-1", "feat"); got != "feature work" {
+		t.Fatalf("remote feat = %q", got)
+	}
+}
+
+// TestGitWritePushReportsProbeFailure pins the rev-parse failure to its own
+// cause: only a literal HEAD is a detached checkout, so a directory that is not
+// a repository must not be reported as one.
+func TestGitWritePushReportsProbeFailure(t *testing.T) {
+	_, err := pushCall(t, t.TempDir(), approval.Manual, &recordingApprover{approve: true}, `{"op":"push"}`)
+	if err == nil || !strings.Contains(err.Error(), "not a git repository") || strings.Contains(err.Error(), "detached") {
+		t.Fatalf("not a repo: err=%v, want the rev-parse cause", err)
+	}
+}
+
 func TestGitWritePushWarnsAboutWorkspaceHooks(t *testing.T) {
 	repo, _ := repoWithRemote(t)
 	gitIn(t, repo, "config", "core.hooksPath", ".githooks")

@@ -185,6 +185,17 @@ func publishesWrapped(root string, words []string) bool {
 
 // GitProcessSpec shares the shell's confinement for native git, including hooks.
 func GitProcessSpec(ctx context.Context, root string, argv, env []string) (core.ProcessSpec, error) {
+	return gitProcessSpec(ctx, root, argv, env, false)
+}
+
+// GitReadOnlyProcessSpec is GitProcessSpec with the repository mounted read-only
+// and sealed, as in Plan mode. With nothing writable there is no unsealed
+// protected name to approve, so read-only probes (e.g. before a push) never prompt.
+func GitReadOnlyProcessSpec(ctx context.Context, root string, argv, env []string) (core.ProcessSpec, error) {
+	return gitProcessSpec(ctx, root, argv, env, true)
+}
+
+func gitProcessSpec(ctx context.Context, root string, argv, env []string, gitReadOnly bool) (core.ProcessSpec, error) {
 	mode := approval.ModeFromContext(ctx)
 	if mode == approval.Manual || mode == approval.YOLO {
 		return core.ProcessSpec{Name: "git", Args: argv, Dir: root, Env: env}, nil
@@ -200,7 +211,8 @@ func GitProcessSpec(ctx context.Context, root string, argv, env []string) (core.
 	}
 	wsp := workspace.NewWorkspacePolicy(config.WorkspaceConfig{Root: root}).Protect(approval.RulesPath(ctx))
 	p := preparedShellCommand{mode: mode, line: "git " + strings.Join(core.MapSlice(argv, quoteArg), " "), cwd: root, workspaceRoot: root,
-		roots: []string{root}, commands: []string{"git"}, protected: wsp.ProtectedPaths(), allowNetwork: mode == approval.Auto, isolateEnv: true}
+		roots: []string{root}, commands: []string{"git"}, protected: wsp.ProtectedPaths(), allowNetwork: mode == approval.Auto, isolateEnv: true,
+		gitReadOnly: gitReadOnly}
 	spec, err := processSpec(p)
 	// Only fallback Git identity values are forwarded; never inherit host secrets.
 	for _, kv := range env {
