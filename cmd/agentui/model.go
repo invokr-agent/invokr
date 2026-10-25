@@ -804,7 +804,7 @@ func (m *model) View() tea.View {
 	} else {
 		// The popup is sized against the space inside the YOLO border, so it
 		// cannot hang over the rule.
-		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset())
+		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset()/2)
 	}
 	content = m.settingsView(content)
 	// A YOLO session gets a rule round the whole UI: every call runs unprompted,
@@ -814,7 +814,9 @@ func (m *model) View() tea.View {
 	// the banner is pinned, so the warning keeps the top screen row above it.
 	if m.yoloFrame() {
 		frame := ui.Invokr.YoloFrame
-		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(frame.GetForeground()).
+		// Top and sides only: the input box and status line close the screen
+		// at the bottom, and a rule under them would read as a second box.
+		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), true, true, false).BorderForeground(frame.GetForeground()).
 			Height(m.height-lipgloss.Height(m.modeBanner())).Width(m.width).Render(content)
 	}
 	if banner := m.modeBanner(); banner != "" {
@@ -1377,8 +1379,8 @@ func followViewport(v *viewport.Model, width, height int, content string, forceB
 // yoloFrame reports whether every call in this session runs unprompted.
 func (m *model) yoloFrame() bool { return m.policy.Mode() == approval.YOLO }
 
-// frameInset is what the YOLO border costs the layout: a column on each side,
-// a row on each edge. A prompting session keeps the whole terminal.
+// frameInset is what the YOLO frame costs the layout: a column on each side
+// (half of it is the one top row). A prompting session keeps the whole terminal.
 func (m *model) frameInset() int {
 	if m.yoloFrame() {
 		return 2
@@ -1397,7 +1399,7 @@ func (m *model) chatVisibleLines() int {
 		return rows(text)
 	}
 	chrome := lipgloss.Height(m.tabStrip()) + optional(m.modeBanner()) + optional(m.footer()) + optional(m.completion.view()) + max(1, rows(m.inputArea())) + rows(m.statusRow())
-	return max(1, m.height-m.frameInset()-chrome)
+	return max(1, m.height-m.frameInset()/2-chrome)
 }
 
 func (m *model) showHelp() (*model, tea.Cmd) {

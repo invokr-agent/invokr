@@ -20,8 +20,8 @@ func TestYoloFrameIsTheApprovalYellow(t *testing.T) {
 	}
 }
 
-// TestYoloFrameRulesTheWholeUI: an unprompted session is boxed on all four
-// screen edges, and a prompting session is not boxed at all. The banner keeps a
+// TestYoloFrameRulesTheWholeUI: an unprompted session is ruled on top and both
+// sides (not the bottom), and a prompting session is not ruled at all. The banner keeps a
 // row above the box, so the rule is found among the first rows, not on the first.
 func TestYoloFrameRulesTheWholeUI(t *testing.T) {
 	m := newTestModelWithHiddenLogs()
@@ -31,8 +31,9 @@ func TestYoloFrameRulesTheWholeUI(t *testing.T) {
 	}
 	edges := strings.Split(ansi.Strip(m.View().Content), "\n")
 	head := strings.Join(edges[:min(4, len(edges))], "\n")
-	if !strings.Contains(head, "\n╭") || !strings.HasPrefix(edges[len(edges)-1], "╰") {
-		t.Fatalf("no whole-ui rule: %q", head)
+	last := edges[len(edges)-1]
+	if !strings.Contains(head, "\n╭") || !strings.HasPrefix(last, "│") || strings.HasPrefix(last, "╰") {
+		t.Fatalf("want a rule on top and sides, none at the bottom: head %q, last %q", head, last)
 	}
 	// A prompting session gets no box: its last row is the status line, never a
 	// rule. (The input box has its own rule, so a per-row scan would find one.)
