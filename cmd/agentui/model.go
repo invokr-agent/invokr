@@ -27,22 +27,22 @@ import (
 )
 
 type model struct {
-	inputMemo     inputAreaMemo
-	ctx           context.Context
-	session       turn.Session
-	historyDB     turn.PromptHistory
-	logPanel      logPanel
-	logView       bool
-	toolEvents    *toolEventQueue
-	approvalQueue *approval.ApprovalQueue
-	commands      CommandBackend
-	policy        *approval.Policy
-	grants        *approval.Store
-	approvals     approvalPanel
-	chatLog       chatLog
-	statusline    statusline
-	selection     tuikit.Selection
-	mouseMode     mouseMode
+	inputKey, inputView string // memo of inputArea: a frame measures the box and then draws it
+	ctx                 context.Context
+	session             turn.Session
+	historyDB           turn.PromptHistory
+	logPanel            logPanel
+	logView             bool
+	toolEvents          *toolEventQueue
+	approvalQueue       *approval.ApprovalQueue
+	commands            CommandBackend
+	policy              *approval.Policy
+	grants              *approval.Store
+	approvals           approvalPanel
+	chatLog             chatLog
+	statusline          statusline
+	selection           tuikit.Selection
+	mouseMode           mouseMode
 	// copiedChars sizes the copy notice, copiedAt times it out. Both are only
 	// read while the selection that produced them is still on screen.
 	copiedChars int
@@ -195,7 +195,7 @@ func newModelWithCommands(ctx context.Context, session turn.Session, commands Co
 // styles by value. Called at construction and again whenever the terminal
 // reports its background color.
 func (m *model) applyTheme() {
-	m.inputMemo = inputAreaMemo{} // the box is drawn in theme colours
+	m.inputView = "" // the box is drawn in theme colours
 	// Only the cursor's row carries the caret; the other rows of a multi-line
 	// draft are blank, the way a shell's continuation prompt reads.
 	// The textarea asks for a prompt once per displayed row, top down, and
@@ -867,31 +867,14 @@ func (m *model) inputArea() string {
 	// Lines counts these rows through inputArea, so the transcript gives the
 	// space up instead of the queue drawing over it.
 	queued := m.queuedArea()
-	key := inputAreaKey{draft: m.input.Value(), line: m.input.Line(), column: m.input.Column(),
-		width: m.mainWidth(), height: m.input.Height(), focused: m.input.Focused(), queued: queued}
-	if key != m.inputMemo.key || m.inputMemo.view == "" {
-		box := inputBox(m.mainWidth()).Render(m.input.View())
+	key := fmt.Sprint(m.input.Value(), m.input.Line(), m.input.Column(), m.mainWidth(), m.input.Height(), m.input.Focused(), queued)
+	if key != m.inputKey || m.inputView == "" {
+		m.inputKey, m.inputView = key, inputBox(m.mainWidth()).Render(m.input.View())
 		if queued != "" {
-			box = queued + "\n" + box
+			m.inputView = queued + "\n" + m.inputView
 		}
-		m.inputMemo = inputAreaMemo{key: key, view: box}
 	}
-	return m.inputMemo.view
-}
-
-// inputAreaKey is everything the drawn input box depends on. A frame measures
-// the box (chatVisibleLines) and then draws it, and a long draft makes each
-// textarea render cost real time, so the second one reuses the first.
-type inputAreaKey struct {
-	draft                       string
-	line, column, width, height int
-	focused                     bool
-	queued                      string
-}
-
-type inputAreaMemo struct {
-	key  inputAreaKey
-	view string
+	return m.inputView
 }
 
 // queuedArea is the pending-message block: the count, then one dimmed line per
