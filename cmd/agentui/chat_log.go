@@ -35,6 +35,7 @@ type message struct {
 	// in place from running -> done/failed.
 	toolID, toolName, toolArgs string
 	toolStatus                 toolStatus
+	restored                   bool // rebuilt from a saved session on resume
 	// toolProgressLine is the latest incremental status a running tool
 	// reported (EventToolProgress); shown beside the live elapsed.
 	toolProgressLine    string
@@ -105,7 +106,7 @@ func (c *chatLog) appendTranscript(item turn.TranscriptMessage) {
 // savedToolBlock is a settled tool block rebuilt from a call's saved evidence.
 // Only a shell command is kept on disk, so other tools show their name alone.
 func savedToolBlock(call turn.ExecutionEvidence) message {
-	msg := message{role: "tool", toolID: call.CallID, toolName: call.Tool, toolStatus: toolDone, toolCode: call.Code}
+	msg := message{role: "tool", toolID: call.CallID, toolName: call.Tool, toolStatus: toolDone, toolCode: call.Code, restored: true}
 	if call.Command != "" {
 		args, _ := json.Marshal(map[string]string{"command": call.Command})
 		msg.toolArgs = string(args)

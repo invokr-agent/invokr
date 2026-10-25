@@ -236,6 +236,9 @@ func settledToolLine(m message, width int) string {
 // sub-block below rather than being crammed into brackets here.
 func toolTrailing(m message, state toolStatus) string {
 	dur := formatDuration(m.toolDuration)
+	if m.restored { // a resumed call has no saved timing
+		dur = "earlier"
+	}
 	switch {
 	case isCancelledTool(m):
 		return dur + " · cancelled"
