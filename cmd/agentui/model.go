@@ -722,9 +722,7 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	case interrupted:
 		m.stopping = false
 		m.chatLog.Append(message{role: "tool", text: "⏹ stopped"})
-		if id, ok := m.session.(turn.IdentifiedSession); ok && m.recordInterrupted != nil {
-			m.recordInterrupted(id.SessionID(), m.lastPrompt)
-		}
+		m.saveInterrupted()
 		m.recordedWarning = fmt.Sprintf("Interrupted · %d recorded · Alt+R", len(msg.evidence))
 	case msg.err != nil:
 		m.err = msg.err
@@ -981,6 +979,13 @@ func (m *model) helpHint() string {
 		return hintAffordance(m.keys.Help, "help")
 	}
 	return strings.TrimSpace(m.help.View(m.keys))
+}
+
+// saveInterrupted keeps the stopped prompt in the session for a resume.
+func (m *model) saveInterrupted() {
+	if id, ok := m.session.(turn.IdentifiedSession); ok && m.recordInterrupted != nil {
+		m.recordInterrupted(id.SessionID(), m.lastPrompt)
+	}
 }
 
 func (m *model) showRecorded() {
