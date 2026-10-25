@@ -222,6 +222,9 @@ func (s *Session) ResumeTranscript(transcript []turn.TranscriptMessage) error {
 // text so a resumed session sees what actually ran, not just the model's prose
 // about it (ADR 0001).
 func resumedAssistantText(item turn.TranscriptMessage) string {
+	if item.Interrupted && strings.TrimSpace(item.Text) == "" {
+		item.Text = "[interrupted by the user before an answer]"
+	}
 	text := turn.AppendToolOutcomeGuard(item.Text, item.ToolCalls)
 	text = turn.AppendHistoricalExecution(text, item.ExecutionEvidence)
 	if item.ToolCallCount > 0 {

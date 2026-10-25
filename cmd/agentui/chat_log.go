@@ -2,6 +2,7 @@ package agentui
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -82,8 +83,37 @@ func (c *chatLog) Append(msg message) {
 	c.messages = append(c.messages, msg)
 }
 
+// appendTranscript replays a saved message the way the live turn looked: the
+// turn's tool calls as settled blocks (collapsed), then the answer text alone.
+// The history ledger stays behind Alt+R; failure details and outcome counts
+// are bookkeeping for the model, not transcript.
 func (c *chatLog) appendTranscript(item turn.TranscriptMessage) {
-	c.Append(message{role: item.Role, text: turn.AppendHistoricalExecution(turn.AppendToolOutcomeGuard(item.Text, item.ToolCalls), item.ExecutionEvidence)})
+	if item.Role == "assistant" {
+		for _, call := range item.ExecutionEvidence {
+			c.Append(savedToolBlock(call))
+		}
+		if item.Interrupted {
+			c.Append(message{role: "tool", text: "⏹ interrupted before an answer"})
+			return
+		}
+	}
+	if item.Role != "assistant" || strings.TrimSpace(item.Text) != "" {
+		c.Append(message{role: item.Role, text: item.Text})
+	}
+}
+
+// savedToolBlock is a settled tool block rebuilt from a call's saved evidence.
+// Only a shell command is kept on disk, so other tools show their name alone.
+func savedToolBlock(call turn.ExecutionEvidence) message {
+	msg := message{role: "tool", toolID: call.CallID, toolName: call.Tool, toolStatus: toolDone, toolCode: call.Code}
+	if call.Command != "" {
+		args, _ := json.Marshal(map[string]string{"command": call.Command})
+		msg.toolArgs = string(args)
+	}
+	if call.Outcome != "completed" {
+		msg.toolStatus = toolFailed
+	}
+	return msg
 }
 
 func (c *chatLog) Len() int { return len(c.messages) }

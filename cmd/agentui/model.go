@@ -74,7 +74,9 @@ type model struct {
 	historyPos int
 	// lastPrompt is what /retry replays; draft is the half-typed line the
 	// history walk displaced, and browsing says the walk is in progress.
-	lastPrompt, draft               string
+	lastPrompt, draft string
+	// recordInterrupted is Params.RecordInterrupted.
+	recordInterrupted               func(sessionID, prompt string)
 	browsing, sending, userScrolled bool
 	// queued holds messages Enter submitted while a turn was in flight: they
 	// render dimmed above the input with a count, go out in order when the turn
@@ -720,6 +722,9 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	case interrupted:
 		m.stopping = false
 		m.chatLog.Append(message{role: "tool", text: "⏹ stopped"})
+		if id, ok := m.session.(turn.IdentifiedSession); ok && m.recordInterrupted != nil {
+			m.recordInterrupted(id.SessionID(), m.lastPrompt)
+		}
 		m.recordedWarning = fmt.Sprintf("Interrupted · %d recorded · Alt+R", len(msg.evidence))
 	case msg.err != nil:
 		m.err = msg.err

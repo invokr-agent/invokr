@@ -16,10 +16,15 @@ func TestResumedUIShowsSavedFailedCheckAsHistorical(t *testing.T) {
 	item := turn.TranscriptMessage{Role: "assistant", Text: "All checks passed", ExecutionEvidence: []turn.ExecutionEvidence{check}}
 	m.chatLog.appendTranscript(item)
 	shown := ansi.Strip(m.chatContent())
-	for _, want := range []string{"All checks passed", "go test ./saved", "flagged:1", "historical"} {
+	// The saved call comes back as a failed tool block above the answer, with
+	// no bookkeeping line (A11, A13).
+	for _, want := range []string{"All checks passed", "go test ./saved", "✕"} {
 		if !strings.Contains(shown, want) {
 			t.Fatalf("resumed UI lacks %q: %s", want, shown)
 		}
+	}
+	if strings.Contains(shown, "map[") || strings.Contains(shown, "Execution evidence") {
+		t.Fatalf("resumed UI shows bookkeeping: %s", shown)
 	}
 	if item.ExecutionEvidence[0].Freshness != "current" {
 		t.Fatal("resumed UI mutated saved evidence")
@@ -43,5 +48,17 @@ func TestHiddenFinishedToolRetainsMessageIDs(t *testing.T) {
 	log.Append(message{role: "assistant", text: "after"})
 	if len(log.messages) != 2 || log.messages[0].id != 1 || log.messages[1].id != 3 {
 		t.Fatalf("hidden tool changed message identity: %#v", log.messages)
+	}
+}
+
+// TestResumedInterruptedTurnShowsAsInterrupted: a prompt stopped before it
+// answered comes back with its prompt and an interrupted marker (A14).
+func TestResumedInterruptedTurnShowsAsInterrupted(t *testing.T) {
+	m := newTestModelWithHiddenLogs()
+	m.chatLog.appendTranscript(turn.TranscriptMessage{Role: "user", Text: "add a done command"})
+	m.chatLog.appendTranscript(turn.TranscriptMessage{Role: "assistant", Interrupted: true})
+	shown := ansi.Strip(m.chatContent())
+	if !strings.Contains(shown, "add a done command") || !strings.Contains(shown, "interrupted before an answer") {
+		t.Fatalf("interrupted turn not shown: %s", shown)
 	}
 }
