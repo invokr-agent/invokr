@@ -379,7 +379,9 @@ const streamRetryLine = "reply cut off · retrying"
 // in a long turn the narration between tool calls is never mistaken for the
 // answer, which keeps the plain indent.
 func renderThinkingBlock(text string, width int) string {
-	gutter := ui.Invokr.Frame.Render(thinkingGutter)
+	// The gutter belongs to the thinking itself: drawn in the frame colour it
+	// reads as panel chrome, unconnected to the reasoning it wraps.
+	gutter := ui.Invokr.Thinking.Render(thinkingGutter)
 	lines := strings.Split(wrapText(text, width-len(answerIndent)-len([]rune(thinkingGutter))), "\n")
 	for i, line := range lines {
 		lines[i] = answerIndent + gutter + ui.Invokr.Thinking.Render(line)

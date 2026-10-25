@@ -59,8 +59,8 @@ var Invokr = NewTheme(true)
 func NewTheme(isDark bool) Theme {
 	d := lipgloss.LightDark(isDark)
 	palette := tuikit.Theme{
-		Brand:       d(lipgloss.Color("#2f5fd0"), lipgloss.Color("#4D7AE3")),
-		Blue:        d(lipgloss.Color("#6d3fd4"), lipgloss.Color("#8B5EE5")),
+		Brand:       d(lipgloss.Color("#5b86ea"), lipgloss.Color("#4D7AE3")),
+		Blue:        d(lipgloss.Color("#9a72ea"), lipgloss.Color("#8B5EE5")),
 		Yellow:      d(lipgloss.Color("#9a6b00"), lipgloss.Color("#e8c15a")),
 		Green:       d(lipgloss.Color("#2f7d4f"), lipgloss.Color("#6ec28a")),
 		Red:         d(lipgloss.Color("#c0392b"), lipgloss.Color("#e06a6a")),
@@ -81,7 +81,10 @@ func NewTheme(isDark bool) Theme {
 		Info:    fg(palette.Blue),
 		Warn:    fg(palette.Yellow),
 
-		Thinking: fg(palette.Muted).Italic(true),
+		// Thinking sits apart from Muted on its own step: light enough to read
+		// as the model's narration (~4.6:1 on the dark ground) but dimmer than
+		// an answer, so a gutter and a colour step separate it from the reply.
+		Thinking: fg(d(lipgloss.Color("#8089a0"), lipgloss.Color("#4a5266"))).Italic(true),
 		Notice:   fg(palette.Cyan),
 
 		SelectedBg: d(lipgloss.Color("#ece6fb"), lipgloss.Color("#1c1830")),
