@@ -600,7 +600,7 @@ func (m *model) decideSelectedItem(approved bool) (tea.Model, tea.Cmd) {
 	decision, text := decisionOf(approved, "approval granted: "+item.Pending.Tool, "approval denied: "+item.Pending.Tool)
 	m.approvalQueue.Decide(item.Pending.ID, decision)
 	m.approvals.Collapse()
-	m.chatLog.Append(message{role: "tool", text: text})
+	m.chatLog.insertAboveRunning(item.Pending.Tool, message{role: "tool", text: text})
 	m.clampQueueCursor()
 	m.syncChatViewport(true)
 	return m, nil
