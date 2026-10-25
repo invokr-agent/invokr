@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // TestCursorDisplayRowCountsWrappedAndEarlierLines: the caret row is the
@@ -40,7 +40,7 @@ func TestInputAreaRedrawsAfterTypingAndThemeChange(t *testing.T) {
 	if after := m.inputArea(); after == before || !strings.Contains(after, "x") {
 		t.Fatalf("box did not follow the draft: %q", after)
 	}
-	m.inputMemo.view = "stale"
+	m.inputView = "stale"
 	m.applyTheme()
 	if m.inputArea() == "stale" {
 		t.Fatal("box was not redrawn after a theme change")
