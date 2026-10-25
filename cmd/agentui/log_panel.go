@@ -38,7 +38,10 @@ func (p logPanel) enabled() bool { return p.source != nil }
 
 func (m *model) logsAvailable() bool { return m.logView && m.logPanel.enabled() }
 
-func (m *model) mainWidth() int { return m.width }
+// mainWidth is the usable width, inside the YOLO border when a YOLO session
+// draws one: the frame costs a column on each side and everything else lays
+// itself out against this, so a bordered session cannot overflow the terminal.
+func (m *model) mainWidth() int { return m.width - m.frameInset() }
 
 func (m *model) tabStrip() string {
 	if !m.logsAvailable() {

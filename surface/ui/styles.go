@@ -31,6 +31,12 @@ type Theme struct {
 	// Notice is invokr talking, not the model: mode changes, approval
 	// decisions, command feedback.
 	Notice lipgloss.Style
+	// YoloFrame rules the whole UI on all four edges, and only in a YOLO
+	// session: a prompting session draws no border at all, so a framed screen
+	// means "every call runs unprompted" and nothing else. It reuses the
+	// palette's yellow — the colour the approval chrome already speaks — as a
+	// role of its own so the frame can be themed apart from a warning line.
+	YoloFrame lipgloss.Style
 
 	// SelectedBg fills the cursor row in the pickers and completion popup —
 	// the one place the design paints a background, because a foreground
@@ -86,6 +92,10 @@ func NewTheme(isDark bool) Theme {
 		// an answer, so a gutter and a colour step separate it from the reply.
 		Thinking: fg(d(lipgloss.Color("#8089a0"), lipgloss.Color("#4a5266"))).Italic(true),
 		Notice:   fg(palette.Cyan),
+
+		// The frame is the approval yellow, not a colour of its own: the border
+		// and the warning row are the same subject, so they are the same hue.
+		YoloFrame: fg(palette.Yellow),
 
 		SelectedBg: d(lipgloss.Color("#ece6fb"), lipgloss.Color("#1c1830")),
 		ChipBg:     d(lipgloss.Color("#eceef4"), lipgloss.Color("#161b27")),
