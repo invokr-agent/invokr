@@ -35,3 +35,4 @@ docs/private/bench/*.jsonl
 docs/private/bench/*.log
 docs/private/bench/*.csv
 docs/private/bench/abwork/
+*.test
