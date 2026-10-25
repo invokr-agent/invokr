@@ -566,7 +566,7 @@ func renderQueueNeighbour(req approval.Request, width int) string {
 
 // approvalSubjectLines is how many lines of the command the collapsed row
 // spends before deferring to the details view.
-const approvalSubjectLines = 3
+const approvalSubjectLines = 6
 
 // elideSubject breaks a command line at its pipeline boundaries so a long
 // pipeline reads as one stage per line instead of wrapping mid-token, then

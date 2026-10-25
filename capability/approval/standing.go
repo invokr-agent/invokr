@@ -384,6 +384,11 @@ func (s *Store) save() error {
 // a '*'. They are the characters that let one approved command smuggle another.
 const patternMetachars = ";&|<>$`\\\n\r"
 
+// Compound reports a subject that chains, pipes or redirects: a standing
+// grant can never match it (a wildcard never spans a metacharacter), so
+// "always" would approve this call once and store a rule that never fires.
+func Compound(subject string) bool { return strings.ContainsAny(subject, patternMetachars) }
+
 // validatePattern enforces the literal, deny-by-default pattern grammar:
 // printable ASCII only (no unicode lookalikes), '*' is the only metacharacter,
 // no leading '*' and no "**" (both are --allow-all with extra steps), no ".."

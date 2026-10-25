@@ -635,8 +635,8 @@ func (m *model) alwaysAllowSelected() (tea.Model, tea.Cmd) {
 }
 
 // grantPattern is the pattern "a" would grant, derived from the Subject (the
-// only thing standing rules match on) rather than being it: `find … | sort`
-// grants `find … *`. An error means "a" is not offered for this request.
+// only thing standing rules match on) rather than being it: `go test ./x`
+// grants `go test *`. An error means "a" is not offered for this request.
 func grantPattern(req approval.Request) (string, error) {
 	// A tool that names its own grant pattern (an outside-read directory, a
 	// push of one branch) is grantable even when it publishes.
@@ -648,6 +648,9 @@ func grantPattern(req approval.Request) (string, error) {
 	}
 	if req.Outside {
 		return "", errors.New("too broad to grant (the root or home directory); approve once with y")
+	}
+	if !req.SubjectIsPathList && approval.Compound(req.Subject) {
+		return "", errors.New("a chained or piped command can't be always-allowed; approve once with y")
 	}
 	pattern, ok := approval.DerivePattern(req.Subject)
 	if !ok {
@@ -981,31 +984,32 @@ func (m *model) showRecorded() {
 	m.overlay.Open("recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
 }
 
+// executionWarning is the footer note after a turn whose calls did not all
+// complete cleanly: errors, denials, failures, non-zero exits ("flagged") and
+// unfinished calls, counted together in plain words. Alt+R has the breakdown.
 func executionWarning(failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {
-	counts := map[string]int{}
+	n, denied := len(failures), 0
 	for _, item := range evidence {
-		switch item.Outcome {
-		case "completed":
-			continue
-		case "denied", "failed", "flagged":
-			counts[item.Outcome]++
-		default:
-			counts["incomplete"]++
+		if item.Outcome != "completed" {
+			n++
+		}
+		if item.Outcome == "denied" {
+			denied++
 		}
 	}
-	if len(failures) > 0 {
-		counts["tool errors"] = len(failures)
-	}
-	if len(counts) == 0 {
+	if n == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(counts))
-	for _, status := range []string{"tool errors", "denied", "failed", "flagged", "incomplete"} {
-		if n := counts[status]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, status))
-		}
+	calls := fmt.Sprintf("%d calls need", n)
+	if n == 1 {
+		calls = "1 call needs"
 	}
-	return strings.Join(parts, " · ") + " · Alt+R for recorded calls"
+	if denied > 0 { // a denial changes what happened, so it is named
+		calls = fmt.Sprintf("%s a look (%d denied)", calls, denied)
+	} else {
+		calls += " a look"
+	}
+	return calls + " · Alt+R for recorded calls"
 }
 
 func (m *model) appendSavedTranscript(item turn.TranscriptMessage) {
