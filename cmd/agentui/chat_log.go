@@ -401,7 +401,9 @@ func renderThinkingBlock(text string, width int, expanded bool) string {
 	// Laid out as markdown (lists, code, no stray backticks), then dimmed as
 	// one: thinking is read past, so it takes no colours of its own.
 	body := ansi.Strip(renderMarkdown(strings.TrimSpace(text), max(10, width-len(answerIndent)-len([]rune(thinkingGutter)))))
-	lines := strings.Split(strings.Trim(body, "\n"), "\n")
+	// Blank lines between paragraphs are dropped: the gutter already sets the
+	// block apart, and a folded preview should spend its rows on text.
+	lines := slices.DeleteFunc(strings.Split(body, "\n"), func(line string) bool { return strings.TrimSpace(line) == "" })
 	// Long thinking folds like tool output: a few lines, then a count that
 	// alt+x or a click on the label expands.
 	if hidden := len(lines) - thinkingPreviewLines; hidden > 0 && !expanded {

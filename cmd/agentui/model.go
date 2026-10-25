@@ -813,7 +813,8 @@ func (m *model) View() tea.View {
 	// all, so a framed screen means "unprompted" and nothing else. Drawn before
 	// the banner is pinned, so the warning keeps the top screen row above it.
 	if m.yoloFrame() {
-		content = ui.Invokr.YoloFrame.Border(lipgloss.RoundedBorder()).
+		frame := ui.Invokr.YoloFrame
+		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(frame.GetForeground()).
 			Height(m.height-lipgloss.Height(m.modeBanner())).Width(m.width).Render(content)
 	}
 	if banner := m.modeBanner(); banner != "" {
