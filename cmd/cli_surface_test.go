@@ -104,8 +104,9 @@ func TestBareConfigRunsShow(t *testing.T) {
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "\"provider\"") {
-		t.Fatalf("bare config should print the effective config, got: %q", out.String())
+	// Bare config is a summary (A4); --json is the whole document.
+	if !strings.Contains(out.String(), "provider") || !strings.Contains(out.String(), "model") || strings.Contains(out.String(), "{") {
+		t.Fatalf("bare config should print the summary, got: %q", out.String())
 	}
 }
 

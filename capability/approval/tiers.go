@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strings"
@@ -11,29 +12,71 @@ import (
 // TierPolicy is the unattended approval rule exec and scheduled jobs share:
 // approve everything, or only requests whose every tier is allowed.
 type TierPolicy struct {
-	allowAll bool
-	tiers    map[string]bool
+	allowAll, tests bool
+	tiers           map[string]bool
+}
+
+// tierAliases are the user-facing names --allow takes for the shell tiers.
+var tierAliases = map[string]string{
+	"write":   constants.ShellTierWrite,
+	"network": constants.ShellTierNetwork,
 }
 
 // NewTierPolicy builds the matcher; "read-only" expands to the read-only shell
-// and code-interpreter tiers.
+// and code-interpreter tiers, "write"/"network" name the shell tiers, and
+// "tests" approves a project's test command alone (see testCommand).
 func NewTierPolicy(allowAll bool, tiers []string) TierPolicy {
 	policy := TierPolicy{allowAll: allowAll, tiers: make(map[string]bool)}
 	for _, tier := range tiers {
-		tier = strings.TrimSpace(tier)
-		if tier == "read-only" {
+		switch tier = strings.TrimSpace(tier); tier {
+		case "":
+		case "read-only":
 			policy.tiers[constants.ShellTierReadonly] = true
 			policy.tiers[constants.CodeInterpreterTierReadWorkspace] = true
-		} else if tier != "" {
-			policy.tiers[tier] = true
+		case "tests":
+			policy.tests = true
+		default:
+			policy.tiers[cmp.Or(tierAliases[tier], tier)] = true
 		}
 	}
 	return policy
 }
 
+// testRunners are the commands --allow tests lets run: a project's own test
+// entry points, which build and run its code but are what a "why does this
+// fail" question needs.
+var testRunners = []string{"go test", "go vet", "npm test", "npm run test", "pnpm test", "yarn test", "cargo test", "pytest", "python -m pytest", "make test"}
+
+// testCommand reports a shell subject that is only a test run: a known runner,
+// optionally piped through head/tail/grep, with no other command chained in.
+func testCommand(subject string) bool {
+	subject = strings.ReplaceAll(subject, "2>&1", "")
+	if strings.ContainsAny(subject, ";&`$<>()\n") {
+		return false
+	}
+	stages := strings.Split(subject, "|")
+	head := strings.Join(strings.Fields(stages[0]), " ")
+	// go test -exec/-toolexec run an arbitrary program in the test's place.
+	if slices.ContainsFunc(strings.Fields(head), func(f string) bool {
+		name, _, _ := strings.Cut(strings.TrimLeft(f, "-"), "=")
+		return strings.HasPrefix(f, "-") && (name == "exec" || name == "toolexec")
+	}) {
+		return false
+	}
+	if !slices.ContainsFunc(testRunners, func(r string) bool { return head == r || strings.HasPrefix(head, r+" ") }) {
+		return false
+	}
+	for _, stage := range stages[1:] {
+		if f := strings.Fields(stage); len(f) == 0 || !slices.Contains([]string{"head", "tail", "grep"}, f[0]) {
+			return false
+		}
+	}
+	return true
+}
+
 // Approves reports whether req may run without a human.
 func (p TierPolicy) Approves(req Request) bool {
-	if p.allowAll {
+	if p.allowAll || p.tests && req.Tool == "shell" && testCommand(req.Subject) {
 		return true
 	}
 	if strings.TrimSpace(req.Tier) == "" {

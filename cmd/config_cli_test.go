@@ -69,7 +69,7 @@ func TestConfigShowPrintsReadableDurations(t *testing.T) {
 	cmd := NewConfigCmd(app)
 	var out bytes.Buffer
 	cmd.SetOut(&out)
-	cmd.SetArgs([]string{"show"})
+	cmd.SetArgs([]string{"show", "--json"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("config show: %v", err)
 	}

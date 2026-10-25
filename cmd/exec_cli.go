@@ -38,7 +38,7 @@ func NewExecCmd(services ServicesProvider, appConfig *config.AppConfig) *cobra.C
 		Use:     "exec [prompt|-]",
 		Short:   "Run the agent non-interactively",
 		Long:    "The same agent as the TUI, without a terminal: one prompt in, one\nanswer out, exit code 0. Reads the prompt from the argument, or from\nstdin when it is '-' or absent.\n\nTool approvals auto-DENY here, because nobody is watching. Opt in per\ntier with --allow, or to everything with --allow-all; neither combines\nwith --mode.\n\n--resume <id>/--last continue a stored session, spelled the same as on\nthe interactive agent.",
-		Example: "  invokr exec \"list the failing tests\"\n  git diff | invokr exec -                       # prompt on stdin\n  invokr exec --json \"...\" | jq .                # JSONL event ledger\n  invokr exec --allow read-only \"...\"            # let it read the workspace\n  invokr exec --last \"and now write the fix\"     # continue the last session",
+		Example: "  invokr exec \"list the failing tests\"\n  git diff | invokr exec -                       # prompt on stdin\n  invokr exec --json \"...\" | jq .                # JSONL event ledger\n  invokr exec --allow read-only \"...\"            # let it read the workspace\n  invokr exec --allow tests \"why does go test fail?\"  # and run the tests\n  invokr exec --last \"and now write the fix\"     # continue the last session",
 		GroupID: groupRun,
 		Args:    cobra.MaximumNArgs(1),
 		// A tool-failure exit (--fail-on-tool-error) surfaces as a RunE error;
@@ -72,7 +72,7 @@ func registerExecFlags(cmd *cobra.Command, opts *execOptions, appConfig *config.
 	cmd.Flags().StringVarP(&opts.outputPath, "output-last-message", "o", "", "Also write the final assistant response to this file")
 	cmd.Flags().StringVar(&opts.schemaPath, "output-schema", "", "Path to a JSON Schema: it is appended to the prompt, and the run fails unless the final response parses as JSON")
 	cmd.Flags().BoolVar(&opts.failOnToolError, "fail-on-tool-error", false, "Exit nonzero for failed, denied, or flagged tool results (including nonzero execution exits), even if the agent answered")
-	cmd.Flags().StringSliceVar(&opts.allowTiers, "allow", nil, "Auto-approve one tool tier, repeatable; \"read-only\" covers the read-only workspace tiers")
+	cmd.Flags().StringSliceVar(&opts.allowTiers, "allow", nil, "Auto-approve one tier, repeatable: read-only, tests (test runs only), write, network")
 	cmd.Flags().BoolVar(&opts.allowAll, "allow-all", false, "Auto-approve every tool call — unattended arbitrary code execution, so scope the workspace first")
 	cmd.Flags().StringVar(&opts.resumeID, "resume", "", "Resume a stored session by ID, as listed by 'invokr sessions'")
 	cmd.Flags().BoolVar(&opts.lastSession, "last", false, "Resume the most recent stored session")
@@ -177,7 +177,7 @@ func runExecPrompt(ctx context.Context, s runtime.Services, out io.Writer, errOu
 		progress.persistInterrupted(ctx, s, sessionID, prompt)
 		return err
 	}
-	return completeExecResponse(out, sessionID, s.App.Provider.Model, resp, opts)
+	return completeExecResponse(out, errOut, sessionID, s.App.Provider.Model, resp, opts)
 }
 
 // completedEnvelope is the thread.completed ledger record: the outcome ledger
@@ -199,12 +199,15 @@ func completedEnvelope(sessionID, model, message string, resp turn.AgentResponse
 	return envelope
 }
 
-func completeExecResponse(out io.Writer, sessionID string, model string, resp turn.AgentResponse, opts execOptions) error {
+func completeExecResponse(out, errOut io.Writer, sessionID string, model string, resp turn.AgentResponse, opts execOptions) error {
 	message := resp.Message
-	// Structured-output mode (--json) suppresses the human-facing guard in the
-	// message; callers still get tool_failures/tool_call_count in the JSONL.
+	// stdout carries the answer alone, so it can be piped. The human-facing
+	// guard (failed attempts, execution history) goes to stderr; --json
+	// callers get the same facts as tool_failures/tool_flagged in the JSONL.
 	if !opts.jsonOutput && opts.schemaPath == "" {
-		message = turn.AppendExecutionGuard(turn.AppendToolOutcomeGuard(message, resp.ToolFailures), resp.ExecutionEvidence)
+		if guard := strings.TrimSpace(turn.AppendExecutionGuard(turn.AppendToolOutcomeGuard("", resp.ToolFailures), resp.ExecutionEvidence)); guard != "" {
+			_, _ = fmt.Fprintln(errOut, guard)
+		}
 	}
 	if err := validateExecOutput(message, opts.schemaPath); err != nil {
 		return err

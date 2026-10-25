@@ -3,6 +3,7 @@ package approval
 import (
 	"cmp"
 	"fmt"
+	"github.com/invokr-ai/invokr/constants"
 	"slices"
 	"strings"
 	"sync"
@@ -480,13 +481,31 @@ func DenyReason(req Request) string {
 	flags := make([]string, 0, 3)
 	for tier := range strings.SplitSeq(strings.TrimSpace(req.Tier), ",") {
 		if tier = strings.TrimSpace(tier); tier != "" {
-			flags = append(flags, "--allow "+tier)
+			flags = append(flags, "--allow "+tierFlagName(tier))
 		}
 	}
 	if len(flags) == 0 {
 		flags = append(flags, "--allow <tier>")
 	}
-	return "approval required: re-run with " + strings.Join(flags, " ") + " or add a standing grant"
+	hint := "approval required: re-run with " + strings.Join(flags, " ")
+	if req.Tool == "shell" && testCommand(req.Subject) {
+		hint += " (or --allow tests, for test runs only)"
+	}
+	return hint + ", or add a standing grant"
+}
+
+// tierFlagName is the name --allow takes for a tier: its alias when it has
+// one, so the hint never spells an internal tier name.
+func tierFlagName(tier string) string {
+	for alias, name := range tierAliases {
+		if name == tier {
+			return alias
+		}
+	}
+	if tier == constants.ShellTierReadonly {
+		return "read-only"
+	}
+	return tier
 }
 
 // DerivePattern turns a request subject into a grant pattern that

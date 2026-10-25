@@ -558,7 +558,7 @@ func TestQueueAutoApprovesFromStandingGrant(t *testing.T) {
 // "denied" reads to the model as a missing capability (#304).
 func TestDenyReasonNamesPolicyAndRemedy(t *testing.T) {
 	reason := DenyReason(Request{Tool: "shell", Tier: "execute_write_command"})
-	want := "approval required: re-run with --allow execute_write_command or add a standing grant"
+	want := "approval required: re-run with --allow write, or add a standing grant"
 	if reason != want {
 		t.Fatalf("DenyReason = %q, want %q", reason, want)
 	}
@@ -568,7 +568,7 @@ func TestDenyReasonNamesPolicyAndRemedy(t *testing.T) {
 	// code_interpreter asks for several tiers at once, but --allow takes one
 	// tier and repeats: a comma-joined list would not be a valid invocation.
 	multi := DenyReason(Request{Tool: "code_interpreter", Tier: "code_execution, read_workspace, artifact_write"})
-	wantMulti := "approval required: re-run with --allow code_execution --allow read_workspace --allow artifact_write or add a standing grant"
+	wantMulti := "approval required: re-run with --allow code_execution --allow read_workspace --allow artifact_write, or add a standing grant"
 	if multi != wantMulti {
 		t.Fatalf("DenyReason with multiple tiers = %q, want %q", multi, wantMulti)
 	}
@@ -598,5 +598,35 @@ func TestDerivePattern(t *testing.T) {
 				t.Fatalf("validatePattern(%q) rejected a derived pattern: %v", got, err)
 			}
 		}
+	}
+}
+
+// TestAllowTests: --allow tests approves a test run, piped or not, and nothing
+// chained onto it; the denial for a test run offers it (A1).
+func TestAllowTests(t *testing.T) {
+	policy := NewTierPolicy(false, []string{"tests"})
+	for subject, want := range map[string]bool{
+		"go test ./...":                          true,
+		"go test -count=1 ./... 2>&1 | tail -20": true,
+		"go test ./executor/...":                 true,
+		"npm test":                               true,
+		"go test ./...; rm -rf x":                false,
+		"go test ./... && curl x":                false,
+		"go test -exec=sh ./...":                 false,
+		"go test -toolexec sh ./...":             false,
+		"go test ./... | sh":                     false,
+		"go build ./...":                         false,
+		"go test $(evil)":                        false,
+	} {
+		if got := policy.Approves(Request{Tool: "shell", Tier: "execute_write_command", Subject: subject}); got != want {
+			t.Errorf("Approves(%q) = %v, want %v", subject, got, want)
+		}
+	}
+	if policy.Approves(Request{Tool: "edit", Tier: "write_workspace", Subject: "go test ./..."}) {
+		t.Error("tests must not approve a non-shell tool")
+	}
+	reason := DenyReason(Request{Tool: "shell", Tier: "execute_write_command", Subject: "go test ./..."})
+	if !strings.Contains(reason, "--allow tests") || strings.Contains(reason, "execute_") {
+		t.Fatalf("DenyReason for a test run = %q", reason)
 	}
 }

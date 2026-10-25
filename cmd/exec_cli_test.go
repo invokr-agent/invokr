@@ -103,13 +103,16 @@ func TestRunExecPromptRendersFailuresAndCanFailExit(t *testing.T) {
 	dir := t.TempDir()
 	session := &execFakeSession{id: "s1", message: "model said success", failures: []turn.ToolOutcome{{Tool: "demo", Kind: "error", Detail: "boom"}}, callCount: 1}
 	services := runtime.Services{App: config.AppConfig{Memory: config.MemoryConfig{Dir: dir}}.WithDefaults(), Events: events.NewOrderedDispatcher(nil), Approvals: approval.NewBroker(), Session: session}
-	var out bytes.Buffer
-	err := runExecPrompt(context.Background(), services, &out, &bytes.Buffer{}, "hello", execOptions{failOnToolError: true})
+	var out, errOut bytes.Buffer
+	err := runExecPrompt(context.Background(), services, &out, &errOut, "hello", execOptions{failOnToolError: true})
 	if err == nil || !strings.Contains(err.Error(), "1 failed or flagged tool result") {
 		t.Fatalf("error = %v", err)
 	}
-	if !strings.Contains(out.String(), "[Tool attempt failures — history, not final task status]") || !strings.Contains(out.String(), "demo error: boom") {
-		t.Fatalf("guard missing: %q", out.String())
+	if strings.TrimSpace(out.String()) != "model said success" {
+		t.Fatalf("stdout carries more than the answer: %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "[Tool attempt failures — history, not final task status]") || !strings.Contains(errOut.String(), "demo error: boom") {
+		t.Fatalf("guard missing on stderr: %q", errOut.String())
 	}
 }
 
