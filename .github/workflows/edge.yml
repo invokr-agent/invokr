@@ -2,8 +2,9 @@ name: edge
 
 # Every merge to main publishes an edge pre-release: the next patch after the
 # newest stable tag, numbered by commits since it (v0.5.7 + 3 commits ->
-# v0.5.8-edge.3). Stable releases stay with release.yml and a vX.Y.Z tag; a
-# tag pushed here with the workflow token does not start that workflow.
+# v0.5.8-edge.3). Stable releases stay with release.yml and a vX.Y.Z tag.
+# depstamper publishes: it is the "release tags" ruleset's bypass actor for
+# edge tags, and release.yml ignores them (an app's tag push starts workflows).
 on:
   push:
     branches: [main]
@@ -18,12 +19,19 @@ permissions:
 jobs:
   edge:
     runs-on: ubuntu-latest
+    # The app token does the writing; the workflow token only reads.
     permissions:
-      contents: write
+      contents: read
     steps:
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.APPROVER_APP_ID }}
+          private-key: ${{ secrets.APPROVER_PRIVATE_KEY }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
       - name: Edge version
         id: v
         run: |
@@ -57,12 +65,12 @@ jobs:
           distribution: goreleaser
           version: v2.18.3
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
       # Keep the ten newest edge builds; stable releases never match.
       - name: Prune old edge releases
         if: steps.v.outputs.n != '0'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           gh release list -R "$GITHUB_REPOSITORY" --limit 1000 --json tagName,isPrerelease \
             --jq '[.[] | select(.isPrerelease and (.tagName | test("-edge\\.[0-9]+$")))] | .[10:][].tagName' |
