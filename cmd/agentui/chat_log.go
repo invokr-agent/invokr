@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
@@ -80,6 +81,21 @@ func newChatLog(toolProgress progressMode) chatLog { return chatLog{toolProgress
 func (c *chatLog) Append(msg message) {
 	c.nextID, msg.id = c.nextID+1, c.nextID+1
 	c.messages = append(c.messages, msg)
+}
+
+// insertAboveRunning places an approval decision just above the running block
+// of the tool it decides, so it reads before that tool's output rather than
+// after it; with no such block it is appended.
+func (c *chatLog) insertAboveRunning(tool string, msg message) {
+	i := slices.IndexFunc(c.messages, func(m message) bool {
+		return m.role == "tool" && m.toolName == tool && m.toolStatus == toolRunning
+	})
+	if i < 0 {
+		c.Append(msg)
+		return
+	}
+	c.nextID, msg.id = c.nextID+1, c.nextID+1
+	c.messages = slices.Insert(c.messages, i, msg)
 }
 
 func (c *chatLog) appendTranscript(item turn.TranscriptMessage) {
@@ -229,7 +245,7 @@ func (c *chatLog) renderMessage(i, width int, spinnerFrame string) string {
 // foldable reports whether a message is a settled tool block the user can
 // expand and collapse.
 func (m message) foldable() bool {
-	return m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
+	return m.role == "reasoning" || m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
 }
 
 // Format the latest request for the existing modal, without changing the prose.
@@ -326,7 +342,7 @@ func writeMessage(b *strings.Builder, msg message, width int, spinnerFrame strin
 		}
 		b.WriteString(style.Render("• " + strings.ReplaceAll(wrapText(msg.text, width-2), "\n", "\n  ")))
 	case "reasoning":
-		b.WriteString(renderThinkingBlock(msg.text, width))
+		b.WriteString(renderThinkingBlock(msg.text, width, msg.expanded))
 	case "error":
 		b.WriteString(ui.Invokr.Danger.Render("error: ") + wrapText(msg.text, width-7))
 	}
@@ -378,9 +394,21 @@ const streamRetryLine = "reply cut off · retrying"
 // renderThinkingBlock sets reasoning behind a gutter and a "thinking" label, so
 // in a long turn the narration between tool calls is never mistaken for the
 // answer, which keeps the plain indent.
-func renderThinkingBlock(text string, width int) string {
-	gutter := ui.Invokr.Frame.Render(thinkingGutter)
-	lines := strings.Split(wrapText(text, width-len(answerIndent)-len([]rune(thinkingGutter))), "\n")
+func renderThinkingBlock(text string, width int, expanded bool) string {
+	// The gutter belongs to the thinking itself: drawn in the frame colour it
+	// reads as panel chrome, unconnected to the reasoning it wraps.
+	gutter := ui.Invokr.Thinking.Render(thinkingGutter)
+	// Laid out as markdown (lists, code, no stray backticks), then dimmed as
+	// one: thinking is read past, so it takes no colours of its own.
+	body := ansi.Strip(renderMarkdown(strings.TrimSpace(text), max(10, width-len(answerIndent)-len([]rune(thinkingGutter)))))
+	// Blank lines between paragraphs are dropped: the gutter already sets the
+	// block apart, and a folded preview should spend its rows on text.
+	lines := slices.DeleteFunc(strings.Split(body, "\n"), func(line string) bool { return strings.TrimSpace(line) == "" })
+	// Long thinking folds like tool output: a few lines, then a count that
+	// alt+x or a click on the label expands.
+	if hidden := len(lines) - thinkingPreviewLines; hidden > 0 && !expanded {
+		lines = append(lines[:thinkingPreviewLines:thinkingPreviewLines], fmt.Sprintf("▸ %d more lines", hidden))
+	}
 	for i, line := range lines {
 		lines[i] = answerIndent + gutter + ui.Invokr.Thinking.Render(line)
 	}
@@ -388,3 +416,6 @@ func renderThinkingBlock(text string, width int) string {
 }
 
 const thinkingGutter = "│ "
+
+// thinkingPreviewLines is how much of a folded thinking block stays visible.
+const thinkingPreviewLines = 4

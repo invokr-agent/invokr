@@ -66,7 +66,9 @@ func designStyle() func(*ansi.StyleConfig) {
 		s.BlockQuote.IndentToken = &rule
 		// Inline code lands on the same chip fill the tool lines use.
 		s.Code.BackgroundColor = &chip
-		s.Code.Prefix, s.Code.Suffix = " ", " "
+		// No space padding around the chip: the chip's own fill separates the
+		// code from prose, and padding leaves a gap before punctuation ("Div .").
+		s.Code.Prefix, s.Code.Suffix = "", ""
 	}
 }
 

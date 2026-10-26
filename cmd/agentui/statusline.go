@@ -58,18 +58,21 @@ func shortPath(dir string) string {
 // view renders the row, dropping cells from the right until it fits: the folder
 // is the one that says where a stray command would land, so it goes last.
 func (s statusline) view(model, reasoning, mode string, width int) string {
+	// The row is grey: it reports where the agent works and what answers, which
+	// is metadata, not attention. Only the mode cell carries a colour, and it is
+	// one accent, because the mode is the thing the user must see at a glance.
 	cells := []string{cell(glyphMode, ui.Invokr.Warn, mode)}
 	if s.folder != "" {
-		cells = append(cells, cell(glyphFolder, ui.Invokr.Warn, s.folder))
+		cells = append(cells, cell(glyphFolder, ui.Invokr.Muted, s.folder))
 	}
 	if s.branch != "" {
-		cells = append(cells, cell(glyphBranch, ui.Invokr.Success, s.branch))
+		cells = append(cells, cell(glyphBranch, ui.Invokr.Muted, s.branch))
 	}
 	if model = strings.TrimSpace(model); model != "" {
-		cells = append(cells, cell(glyphModel, ui.Invokr.Info, model))
+		cells = append(cells, cell(glyphModel, ui.Invokr.Muted, model))
 	}
 	if reasoning != "" {
-		cells = append(cells, cell(glyphEffort, ui.Invokr.Info, reasoning))
+		cells = append(cells, cell(glyphEffort, ui.Invokr.Muted, reasoning))
 	}
 	fit := lipgloss.NewStyle().MaxWidth(max(1, width))
 	sep := ui.Invokr.Muted.Render(" \u00b7 ")
