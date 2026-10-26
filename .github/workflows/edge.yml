@@ -2,9 +2,13 @@ name: edge
 
 # Every merge to main publishes an edge pre-release: the next patch after the
 # newest stable tag, numbered by commits since it (v0.5.7 + 3 commits ->
-# v0.5.8-edge.3). Stable releases stay with release.yml and a vX.Y.Z tag.
-# depstamper publishes: it is the "release tags" ruleset's bypass actor for
-# edge tags, and release.yml ignores them (an app's tag push starts workflows).
+# v0.5.8-edge.3). Stable releases stay with release.yml and a vX.Y.Z tag, which
+# ignores edge tags.
+#
+# Two jobs keep credentials away from the build: `build` runs goreleaser (and
+# its hooks, and the code it compiles) with a read-only token and no secrets;
+# `publish` runs in the `edge` environment, whose depstamper secrets reach the
+# token step alone, and only tags, uploads and prunes.
 on:
   push:
     branches: [main]
@@ -13,62 +17,85 @@ concurrency:
   group: edge
   cancel-in-progress: true
 
-permissions:
-  contents: read
+permissions: {}
 
 jobs:
-  edge:
+  build:
     runs-on: ubuntu-latest
-    # The app token does the writing; the workflow token only reads.
     permissions:
       contents: read
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
     steps:
-      - id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ secrets.APPROVER_APP_ID }}
-          private-key: ${{ secrets.APPROVER_PRIVATE_KEY }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
       - name: Edge version
         id: v
         run: |
           last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude '*-*')
           n=$(git rev-list --count "$last"..HEAD)
+          [ "$n" = 0 ] && exit 0 # this commit is a stable release
           IFS=. read -r major minor patch <<<"${last#v}"
-          echo "last=$last" >>"$GITHUB_OUTPUT"
-          echo "n=$n" >>"$GITHUB_OUTPUT"
-          echo "tag=v$major.$minor.$((patch + 1))-edge.$n" >>"$GITHUB_OUTPUT"
+          tag="v$major.$minor.$((patch + 1))-edge.$n"
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          git tag "$tag" # local only: goreleaser reads the version from it
+          scripts/changelog.sh "$tag" "$last" >notes.md
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        if: steps.v.outputs.n != '0'
+        if: steps.v.outputs.tag
         with:
           go-version-file: go.mod
       - name: Install aarch64 cross toolchain
-        if: steps.v.outputs.n != '0'
+        if: steps.v.outputs.tag
         run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
-      - name: Tag
-        if: steps.v.outputs.n != '0'
-        run: |
-          git tag "${{ steps.v.outputs.tag }}"
-          git push origin "${{ steps.v.outputs.tag }}"
-      # Notes cover everything since the last stable release, not just since
-      # the previous edge build.
-      - name: Release notes
-        if: steps.v.outputs.n != '0'
-        run: scripts/changelog.sh "${{ steps.v.outputs.tag }}" "${{ steps.v.outputs.last }}" >"$RUNNER_TEMP/notes.md"
       - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        if: steps.v.outputs.n != '0'
+        if: steps.v.outputs.tag
         with:
-          args: release --clean --release-notes ${{ runner.temp }}/notes.md
+          args: release --clean --skip=publish
           distribution: goreleaser
           version: v2.18.3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.v.outputs.tag
+        with:
+          name: edge
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            notes.md
+          retention-days: 1
+
+  publish:
+    needs: build
+    if: needs.build.outputs.tag
+    runs-on: ubuntu-latest
+    environment: edge
+    permissions: {}
+    env:
+      TAG: ${{ needs.build.outputs.tag }}
+    steps:
+      # The only step that sees the private key. The token it mints is for this
+      # repo alone, may only write contents, and expires within the hour.
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.APPROVER_APP_ID }}
+          private-key: ${{ secrets.APPROVER_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: edge
+      # Creates the tag on the merged commit through the API, as depstamper (the
+      # release-tags ruleset's bypass actor for it).
+      - name: Release
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          gh release create "$TAG" dist/*.tar.gz dist/checksums.txt -R "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md --prerelease
       # Keep the ten newest edge builds; stable releases never match.
       - name: Prune old edge releases
-        if: steps.v.outputs.n != '0'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
