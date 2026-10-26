@@ -344,7 +344,7 @@ func (c *stdioClient) request(ctx context.Context, method string, params any, ou
 		return c.withStderr(err)
 	case <-ctx.Done():
 		c.kill()
-		<-done // Finish pipe I/O and decoding before releasing the gate.
+		<-done //nolint:errcheck // Finish pipe I/O and decoding before releasing the gate.
 		return fmt.Errorf("MCP %s: %w", method, ctx.Err())
 	}
 }

@@ -63,10 +63,10 @@ func newTestClientAllowAll(t *testing.T, allowed []string, allowAll bool) (*Clie
 	t.Helper()
 	dialer, server := pipeDialer()
 	var c *Client
-	done := make(chan error, 1)
+	done := make(chan struct{}, 1)
 	go func() {
 		consumeSubscribe(server)
-		done <- nil
+		done <- struct{}{}
 	}()
 	var err error
 	c, err = newWithDialer("/fake.sock", allowed, allowAll, dialer)
