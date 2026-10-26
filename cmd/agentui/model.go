@@ -823,7 +823,7 @@ func (m *model) View() tea.View {
 		// Top and sides only: the input box and status line close the screen
 		// at the bottom, and a rule under them would read as a second box.
 		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), true, true, false).BorderForeground(frame.GetForeground()).
-			Height(m.height-lipgloss.Height(m.modeBanner())).Width(m.width).Render(content)
+			Height(m.height - lipgloss.Height(m.modeBanner())).Width(m.width).Render(content)
 	}
 	if banner := m.modeBanner(); banner != "" {
 		content = banner + "\n" + content
