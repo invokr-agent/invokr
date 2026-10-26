@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/invokr-ai/invokr/platform/version"
 )
 
 const binName = "invokr"
@@ -33,8 +35,8 @@ var (
 )
 
 // Run installs a release over the running binary. An empty version means the
-// newest release.
-func Run(ctx context.Context, version string, out io.Writer) error {
+// newest release, counting edge pre-releases when edge is set.
+func Run(ctx context.Context, version string, edge bool, out io.Writer) error {
 	target, err := targetPath()
 	if err != nil {
 		return err
@@ -43,7 +45,7 @@ func Run(ctx context.Context, version string, out io.Writer) error {
 		return fmt.Errorf("no release builds for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 	if version == "" {
-		if version, err = latestTag(ctx); err != nil {
+		if version, err = latestTag(ctx, edge); err != nil {
 			return err
 		}
 	}
@@ -86,18 +88,20 @@ func targetPath() (string, error) {
 	return exe, nil
 }
 
-func latestTag(ctx context.Context) (string, error) {
-	body, err := get(ctx, apiBase+"/releases/latest")
+func latestTag(ctx context.Context, edge bool) (string, error) {
+	body, err := get(ctx, apiBase+"/releases?per_page=50")
 	if err != nil {
 		return "", err
 	}
-	var rel struct {
-		TagName string `json:"tag_name"`
+	var releases []version.Release
+	if err := json.Unmarshal(body, &releases); err != nil {
+		return "", fmt.Errorf("resolve latest release: %w", err)
 	}
-	if err := json.Unmarshal(body, &rel); err != nil || rel.TagName == "" {
-		return "", fmt.Errorf("resolve latest release: no tag_name in response")
+	tag := version.Newest(releases, edge)
+	if tag == "" {
+		return "", fmt.Errorf("resolve latest release: none listed")
 	}
-	return rel.TagName, nil
+	return tag, nil
 }
 
 func get(ctx context.Context, url string) ([]byte, error) {

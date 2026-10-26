@@ -14,7 +14,9 @@ import (
 )
 
 const (
-	defaultReleaseURL = "https://api.github.com/repos/invokr-ai/invokr/releases/latest"
+	// The list, not /releases/latest: that one never returns a pre-release,
+	// so the edge channel could not see its builds through it.
+	defaultReleaseURL = "https://api.github.com/repos/invokr-ai/invokr/releases?per_page=50"
 	fetchTimeout      = 10 * time.Second
 	// cacheTTL is how long a fetched answer is reused before another lookup runs.
 	// noUpdateCheckEnv turns the lookup off when set to any non-empty value.
@@ -23,6 +25,9 @@ const (
 )
 
 var (
+	// Edge widens update checks to the edge pre-releases (update_channel: edge).
+	Edge bool
+
 	releaseURL  = defaultReleaseURL
 	fetchClient = http.DefaultClient
 
@@ -36,8 +41,26 @@ var (
 	fetchMu sync.Mutex
 )
 
-type releaseResponse struct {
-	TagName string `json:"tag_name"`
+// Release is one entry of the GitHub releases list.
+type Release struct {
+	TagName    string `json:"tag_name"`
+	Prerelease bool   `json:"prerelease"`
+	Draft      bool   `json:"draft"`
+}
+
+// Newest picks the highest-versioned release: stable ones only, or edge
+// pre-releases too. "" when there is none.
+func Newest(releases []Release, edge bool) string {
+	best := ""
+	for _, r := range releases {
+		if r.Draft || r.Prerelease && !edge || !semver.IsValid(r.TagName) {
+			continue
+		}
+		if best == "" || semver.Compare(r.TagName, best) > 0 {
+			best = r.TagName
+		}
+	}
+	return best
 }
 
 // disabled reports whether this process checks for updates at all: an unstamped
@@ -60,7 +83,7 @@ func claimFetch(force bool) bool {
 	return true
 }
 
-// fetchLatestVersion asks the release endpoint for the newest release tag.
+// fetchLatestVersion asks the releases list for the newest tag on this channel.
 func fetchLatestVersion(ctx context.Context) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, releaseURL, nil)
 	if err != nil {
@@ -78,14 +101,15 @@ func fetchLatestVersion(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("version: %s returned %s", releaseURL, resp.Status)
 	}
 
-	var rel releaseResponse
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return "", fmt.Errorf("version: decode release: %w", err)
+	var releases []Release
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return "", fmt.Errorf("version: decode releases: %w", err)
 	}
-	if rel.TagName == "" {
-		return "", fmt.Errorf("version: %s returned no tag_name", releaseURL)
+	tag := Newest(releases, Edge)
+	if tag == "" {
+		return "", fmt.Errorf("version: %s listed no release", releaseURL)
 	}
-	return rel.TagName, nil
+	return tag, nil
 }
 
 // runFetch performs one lookup and records the outcome. checkedAt advances

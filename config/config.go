@@ -17,8 +17,11 @@ import (
 type AppConfig struct {
 	// Profile names the file profile `invokr config use` persisted;
 	// --profile overrides it for one run.
-	Profile         string                `json:"profile,omitempty"`
-	SessionMode     string                `json:"session_mode,omitempty"`
+	Profile     string `json:"profile,omitempty"`
+	SessionMode string `json:"session_mode,omitempty"`
+	// UpdateChannel is "stable" (default) or "edge": edge also offers the
+	// pre-release built from every merge to main.
+	UpdateChannel   string                `json:"update_channel,omitempty" env:"INVOKR_UPDATE_CHANNEL"`
 	Provider        ProviderConfig        `json:"provider"`
 	Agent           AgentConfig           `json:"agent,omitempty"`
 	Log             LoggingConfig         `json:"log,omitempty"`

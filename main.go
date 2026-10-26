@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/invokr-ai/invokr/platform/version"
 	"io"
 	"os"
 	"os/signal"
@@ -42,6 +43,7 @@ func run(ctx context.Context) (err error) {
 	if err := cmd.ConfigureStartupModes(&cfg, os.Args[1:]); err != nil {
 		return err
 	}
+	version.Edge = cfg.UpdateChannel == "edge"
 	if handled, exitCode, sandboxErr := docker_sandbox.MaybeRelaunch(cfg.Sandbox, cfg.Provider.BaseURL, os.Args); handled {
 		if sandboxErr != nil {
 			return sandboxErr

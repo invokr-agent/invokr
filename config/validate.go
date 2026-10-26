@@ -48,7 +48,7 @@ func (c AppConfig) Validate(logger *zap.Logger) error {
 			return fmt.Errorf("config: %s must not be negative", check.name)
 		}
 	}
-	if err := errors.Join(validateTurnBudget(c.Agent), validateMCP(c.MCP.Servers), validateToolResultStrategies(c.Agent), validateWorkspaceReads(c.Workspace.Reads)); err != nil {
+	if err := errors.Join(validateUpdateChannel(c.UpdateChannel), validateTurnBudget(c.Agent), validateMCP(c.MCP.Servers), validateToolResultStrategies(c.Agent), validateWorkspaceReads(c.Workspace.Reads)); err != nil {
 		return err
 	}
 	logger = cmp.Or(logger, zap.NewNop())
@@ -57,6 +57,13 @@ func (c AppConfig) Validate(logger *zap.Logger) error {
 	warnMissingDir(logger, "skills.dir", c.Skills.Dir, def.Skills.Dir)
 	warnMissingDir(logger, "agents.dir", c.Agents.Dir, def.Agents.Dir)
 	warnMissingDir(logger, "toolbox.dir", c.Toolbox.Dir, def.Toolbox.Dir)
+	return nil
+}
+
+func validateUpdateChannel(channel string) error {
+	if channel != "" && channel != "stable" && channel != "edge" {
+		return fmt.Errorf("config: update_channel must be stable or edge, got %q", channel)
+	}
 	return nil
 }
 

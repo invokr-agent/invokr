@@ -23,13 +23,15 @@ var runInstaller = installer.Run
 // before the binary is replaced or to start after it; the next invocation is
 // already the new build.
 func NewUpdateCmd() *cobra.Command {
-	return &cobra.Command{
+	var edge bool
+	update := &cobra.Command{
 		Use:   "update [version]",
 		Short: "Install the latest release over this binary",
 		Long: "Downloads a release, verifies its checksum, and replaces the binary this\n" +
 			"command came from. Pass a version (e.g. 0.2.1 or v0.2.1) to install that release\n" +
-			"instead of the newest.",
-		Example: "  invokr update\n  invokr update 0.2.1",
+			"instead of the newest. --edge (or update_channel: edge) also considers the edge\n" +
+			"pre-release built from every merge to main.",
+		Example: "  invokr update\n  invokr update --edge\n  invokr update 0.2.1",
 		Args:    cobra.MaximumNArgs(1),
 		GroupID: groupConfigure,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,11 +45,9 @@ func NewUpdateCmd() *cobra.Command {
 				// Release tags carry a leading v; accept the bare number too.
 				wanted = "v" + strings.TrimPrefix(args[0], "v")
 			}
-			return runUpdate(cmd, wanted)
+			return runInstaller(cmd.Context(), wanted, edge || version.Edge, cmd.OutOrStdout())
 		},
 	}
-}
-
-func runUpdate(cmd *cobra.Command, wanted string) error {
-	return runInstaller(cmd.Context(), wanted, cmd.OutOrStdout())
+	update.Flags().BoolVar(&edge, "edge", false, "Include edge pre-releases (built from every merge to main)")
+	return update
 }
