@@ -46,3 +46,6 @@ jobs:
           version: v2.18.3
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # The commit can also carry an edge tag (edge.yml publishes every
+          # merge); without this goreleaser may pick that one.
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
