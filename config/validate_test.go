@@ -2,8 +2,8 @@ package config
 
 import (
 	"fmt"
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
