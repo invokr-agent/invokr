@@ -23,7 +23,9 @@ func TestReasoningShowsBetweenToolCalls(t *testing.T) {
 		t.Fatalf("messages = %+v, want reasoning then the tool", c.messages)
 	}
 	var b strings.Builder
-	writeMessage(&b, c.messages[0], 60, "")
+	expanded := c.messages[0]
+	expanded.expanded = true
+	writeMessage(&b, expanded, 60, "")
 	rendered := ansi.Strip(b.String())
 	if got := strings.Join(strings.Fields(strings.ReplaceAll(rendered, "│", "")), " "); !strings.Contains(got, strings.TrimSpace(long)) {
 		t.Fatalf("reasoning was cut: %q", got)
@@ -64,5 +66,35 @@ func TestNoticesHaveTheirOwnLook(t *testing.T) {
 	writeMessage(&b, message{role: "tool", text: "mode: auto (future calls; running work keeps its permissions)"}, 80, "")
 	if got := ansi.Strip(b.String()); !strings.HasPrefix(got, "• mode: auto") || strings.Contains(got, "│") {
 		t.Fatalf("notice = %q", got)
+	}
+}
+
+// TestLongThinkingFolds: past a few lines thinking folds to a preview and a
+// count, and backticks are laid out rather than printed.
+func TestLongThinkingFolds(t *testing.T) {
+	text := "Check `go test` first.\n\n" + strings.Repeat("Another line of reasoning here.\n\n", 8)
+	var b strings.Builder
+	writeMessage(&b, message{role: "reasoning", text: text}, 80, "")
+	got := ansi.Strip(b.String())
+	if !strings.Contains(got, "more lines") || strings.Contains(got, "`go test`") {
+		t.Fatalf("folded thinking = %q", got)
+	}
+	if !(message{role: "reasoning"}).foldable() {
+		t.Fatal("thinking is not foldable")
+	}
+}
+
+// TestApprovalNoticeGoesAboveItsTool: the decision reads before the tool's
+// output, not after it.
+func TestApprovalNoticeGoesAboveItsTool(t *testing.T) {
+	var c chatLog
+	c.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &events.ToolPayload{ID: "1", Name: "shell"}})
+	c.insertAboveRunning("shell", message{role: "tool", text: "approval granted: shell"})
+	if c.Len() != 2 || c.messages[0].text != "approval granted: shell" || c.messages[1].toolName != "shell" {
+		t.Fatalf("messages = %+v, want the notice above the shell block", c.messages)
+	}
+	c.insertAboveRunning("edit", message{role: "tool", text: "approval granted: edit"})
+	if c.messages[2].text != "approval granted: edit" {
+		t.Fatal("with no running block the notice is appended")
 	}
 }

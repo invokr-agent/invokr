@@ -602,7 +602,7 @@ func (m *model) decideSelectedItem(approved bool) (tea.Model, tea.Cmd) {
 	decision, text := decisionOf(approved, "approval granted: "+item.Pending.Tool, "approval denied: "+item.Pending.Tool)
 	m.approvalQueue.Decide(item.Pending.ID, decision)
 	m.approvals.Collapse()
-	m.chatLog.Append(message{role: "tool", text: text})
+	m.chatLog.insertAboveRunning(item.Pending.Tool, message{role: "tool", text: text})
 	m.clampQueueCursor()
 	m.syncChatViewport(true)
 	return m, nil
@@ -808,9 +808,23 @@ func (m *model) View() tea.View {
 	if m.overlay.IsOpen() && m.overlay.Title() == "tools" && m.toolDialog.open {
 		content = m.toolDialogView(content)
 	} else {
-		content = m.overlay.Render(content, m.width, m.height)
+		// The popup is sized against the space inside the YOLO border, so it
+		// cannot hang over the rule.
+		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset()/2)
 	}
 	content = m.settingsView(content)
+	// A YOLO session gets a rule round the whole UI: every call runs unprompted,
+	// and that fact has to be obvious from anywhere in the transcript, where the
+	// one banner row scrolls out of view. A prompting session gets no border at
+	// all, so a framed screen means "unprompted" and nothing else. Drawn before
+	// the banner is pinned, so the warning keeps the top screen row above it.
+	if m.yoloFrame() {
+		frame := ui.Invokr.YoloFrame
+		// Top and sides only: the input box and status line close the screen
+		// at the bottom, and a rule under them would read as a second box.
+		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), true, true, false).BorderForeground(frame.GetForeground()).
+			Height(m.height-lipgloss.Height(m.modeBanner())).Width(m.width).Render(content)
+	}
 	if banner := m.modeBanner(); banner != "" {
 		content = banner + "\n" + content
 	}
@@ -1376,6 +1390,18 @@ func followViewport(v *viewport.Model, width, height int, content string, forceB
 	}
 }
 
+// yoloFrame reports whether every call in this session runs unprompted.
+func (m *model) yoloFrame() bool { return m.policy.Mode() == approval.YOLO }
+
+// frameInset is what the YOLO frame costs the layout: a column on each side
+// (half of it is the one top row). A prompting session keeps the whole terminal.
+func (m *model) frameInset() int {
+	if m.yoloFrame() {
+		return 2
+	}
+	return 0
+}
+
 func (m *model) chatVisibleLines() int {
 	// An empty footer or popup occupies no row at all; the input and the status
 	// row always occupy at least one.
@@ -1387,7 +1413,7 @@ func (m *model) chatVisibleLines() int {
 		return rows(text)
 	}
 	chrome := lipgloss.Height(m.tabStrip()) + optional(m.modeBanner()) + optional(m.footer()) + optional(m.completion.view()) + max(1, rows(m.inputArea())) + rows(m.statusRow())
-	return max(1, m.height-chrome)
+	return max(1, m.height-m.frameInset()/2-chrome)
 }
 
 func (m *model) showHelp() (*model, tea.Cmd) {

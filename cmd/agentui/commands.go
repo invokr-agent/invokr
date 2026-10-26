@@ -8,11 +8,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/antonikliment/tuikit"
 	"github.com/invokr-ai/invokr/capability/approval"
 
 	humanize "github.com/dustin/go-humanize"
 
-	"github.com/antonikliment/tuikit"
 	"github.com/invokr-ai/invokr/config"
 	"github.com/invokr-ai/invokr/constants"
 	"github.com/invokr-ai/invokr/platform/turn"
@@ -151,10 +151,18 @@ func twoColumnRows(labels, descriptions []string, width int) string {
 	for _, label := range labels {
 		labelWidth = max(labelWidth, ansi.StringWidth(label))
 	}
+	// One long usage (/grants, /reasoning) must not widen every row: the label
+	// column stops at two fifths, and a longer label takes a line of its own
+	// with its description under the description column.
+	labelWidth = min(labelWidth, max(12, width*2/5))
 	descWidth := max(minDescriptionWidth, width-labelWidth-2)
 	var b strings.Builder
 	for i, label := range labels {
 		desc := ui.Invokr.Muted.Render(wrapText(descriptions[i], descWidth))
+		if ansi.StringWidth(label) > labelWidth {
+			b.WriteString(label + "\n")
+			label = ""
+		}
 		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, tuikit.Pad(label, labelWidth+2), desc) + "\n")
 	}
 	return b.String()
