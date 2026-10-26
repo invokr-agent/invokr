@@ -43,7 +43,7 @@ var budgets = []area{
 	// the cap should not be what stops the TUI catching up.
 	{"cmd/agentui", 6173},
 	{"cmd", 2500},
-	{"internal", 150},
+	{"internal", 153},
 
 	// Agent loop and tool plumbing — the core of the core.
 	{"agent", 3825},
@@ -58,8 +58,8 @@ var budgets = []area{
 	{"capability", 4700},
 
 	// Platform, config, clients, surfaces, leaf helpers.
-	{"platform", 2504},
-	{"config", 1382},
+	{"platform", 2520},
+	{"config", 1389},
 	{"clients", 800},
 	{"surface", 1600},
 	{"support", 500},

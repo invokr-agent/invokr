@@ -67,3 +67,6 @@ release:
   # Owner/repo intentionally left unset: goreleaser infers it from the git
   # remote, and the final public-repo location is undecided (see #178).
   draft: false
+  # A suffixed tag (v0.5.8-edge.3) is an edge build: a pre-release, never
+  # "Latest", so /releases/latest and stable installs keep the last vX.Y.Z.
+  prerelease: auto

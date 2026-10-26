@@ -17,8 +17,8 @@ import (
 // swap the package var and assert what the command owns.
 var seen []string
 
-func stub(failure error) func(context.Context, string, io.Writer) error {
-	return func(ctx context.Context, wanted string, out io.Writer) error {
+func stub(failure error) func(context.Context, string, bool, io.Writer) error {
+	return func(ctx context.Context, wanted string, _ bool, out io.Writer) error {
 		seen = append(seen, wanted)
 		_, _ = fmt.Fprintf(out, "would install %s\n", wanted)
 		return failure

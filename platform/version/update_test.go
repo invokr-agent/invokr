@@ -17,10 +17,10 @@ import (
 var pristineVersion = Version
 var restoreOnce sync.Once
 
-// okTag answers with a release object carrying tag.
+// okTag answers with a releases list holding one stable release, tag.
 func okTag(tag string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(releaseResponse{TagName: tag})
+		_ = json.NewEncoder(w).Encode([]Release{{TagName: tag}})
 	}
 }
 
@@ -215,5 +215,26 @@ func TestConcurrentStartsOneFetch(t *testing.T) {
 	waitForFetchingIdle(t)
 	if n := count(); n != 1 {
 		t.Fatalf("requests = %d, want 1", n)
+	}
+}
+
+// TestNewestByChannel: stable sees only releases; edge also sees the
+// pre-release built after the last stable tag, ordered by semver.
+func TestNewestByChannel(t *testing.T) {
+	releases := []Release{
+		{TagName: "v0.5.7"},
+		{TagName: "v0.5.8-edge.2", Prerelease: true},
+		{TagName: "v0.5.8-edge.10", Prerelease: true},
+		{TagName: "v0.5.9", Draft: true},
+		{TagName: "nightly", Prerelease: true},
+	}
+	if got := Newest(releases, false); got != "v0.5.7" {
+		t.Fatalf("stable = %q, want v0.5.7", got)
+	}
+	if got := Newest(releases, true); got != "v0.5.8-edge.10" {
+		t.Fatalf("edge = %q, want v0.5.8-edge.10", got)
+	}
+	if got := Newest(append(releases, Release{TagName: "v0.5.8"}), true); got != "v0.5.8" {
+		t.Fatalf("edge after a stable cut = %q, want v0.5.8", got)
 	}
 }

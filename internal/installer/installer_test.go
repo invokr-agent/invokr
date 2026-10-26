@@ -47,8 +47,8 @@ func fakeRelease(t *testing.T, sums string) (target string) {
 	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/api/releases/latest":
-			_, _ = io.WriteString(w, `{"tag_name":"v1.2.3"}`)
+		case "/api/releases":
+			_, _ = io.WriteString(w, `[{"tag_name":"v1.2.3"},{"tag_name":"v1.2.4-edge.1","prerelease":true}]`)
 		case "/dl/v1.2.3/" + asset:
 			_, _ = w.Write(archive)
 		case "/dl/v1.2.3/checksums.txt":
@@ -74,7 +74,7 @@ func fakeRelease(t *testing.T, sums string) (target string) {
 func TestRunInstallsLatestOverTheBinary(t *testing.T) {
 	target := fakeRelease(t, "")
 	var out bytes.Buffer
-	if err := Run(context.Background(), "", &out); err != nil {
+	if err := Run(context.Background(), "", false, &out); err != nil {
 		t.Fatalf("Run: %v (out = %q)", err, out.String())
 	}
 	if got, _ := os.ReadFile(target); string(got) != "new build" {
@@ -88,7 +88,7 @@ func TestRunInstallsLatestOverTheBinary(t *testing.T) {
 func TestRunRefusesAChecksumMismatch(t *testing.T) {
 	asset := fmt.Sprintf("invokr_1.2.3_%s_%s.tar.gz", runtime.GOOS, runtime.GOARCH)
 	target := fakeRelease(t, strings.Repeat("0", 64)+"  "+asset+"\n")
-	err := Run(context.Background(), "v1.2.3", io.Discard)
+	err := Run(context.Background(), "v1.2.3", false, io.Discard)
 	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
 		t.Fatalf("Run = %v, want a checksum mismatch", err)
 	}
@@ -99,7 +99,7 @@ func TestRunRefusesAChecksumMismatch(t *testing.T) {
 
 func TestRunReportsAMissingRelease(t *testing.T) {
 	fakeRelease(t, "")
-	if err := Run(context.Background(), "v9.9.9", io.Discard); err == nil || !strings.Contains(err.Error(), "404") {
+	if err := Run(context.Background(), "v9.9.9", false, io.Discard); err == nil || !strings.Contains(err.Error(), "404") {
 		t.Fatalf("Run = %v, want a 404", err)
 	}
 }
