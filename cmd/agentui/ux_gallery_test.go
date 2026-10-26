@@ -13,7 +13,9 @@ import (
 
 // TestUXGallery renders every UX variant to UX_GALLERY/<name>.ans for review:
 //
-//	UX_GALLERY=/tmp/ux go test ./cmd/agentui -run TestUXGallery && cat /tmp/ux/*.ans
+//	UX_GALLERY=$PWD/docs/assets/record/gallery go test ./cmd/agentui -run TestUXGallery -count=1
+//
+// then docs/assets/record/snap.py turns them into PNGs.
 //
 // Skipped without UX_GALLERY. Add a scene to cover a new variant.
 func TestUXGallery(t *testing.T) {

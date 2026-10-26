@@ -1,7 +1,9 @@
 """Screenshot the UX gallery: render each .ans file TestUXGallery wrote to a PNG.
 
-    UX_GALLERY=/tmp/ux go test ./cmd/agentui -run TestUXGallery -count=1
-    /tmp/rec/bin/python docs/assets/record/snap.py /tmp/ux
+    UX_GALLERY=$PWD/docs/assets/record/gallery go test ./cmd/agentui -run TestUXGallery -count=1
+    /tmp/rec/bin/python docs/assets/record/snap.py
+
+The gallery folder is gitignored; pass another folder as the first argument.
 
 Uses record.py's pyte screen and Pillow renderer, so a still matches a GIF frame.
 """
@@ -13,6 +15,8 @@ import sys
 from PIL import ImageFont
 
 import record
+
+GALLERY = os.path.join(os.path.dirname(os.path.abspath(__file__)), "gallery")
 
 
 def snap(path, font, cell_w, cell_h):
@@ -33,7 +37,7 @@ def main():
     if os.path.exists(record.EMOJI_FONT_PATH):
         record.EMOJI = ImageFont.truetype(record.EMOJI_FONT_PATH, record.EMOJI_SIZE)
     ascent, descent = font.getmetrics()
-    for path in sorted(glob.glob(os.path.join(sys.argv[1], "*.ans"))):
+    for path in sorted(glob.glob(os.path.join(sys.argv[1] if len(sys.argv) > 1 else GALLERY, "*.ans"))):
         snap(path, font, round(font.getlength("M")), ascent + descent)
         print(path[:-4] + ".png")
 
