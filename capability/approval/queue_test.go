@@ -212,7 +212,10 @@ func TestApprovalQueue_DecideIsIdempotent(t *testing.T) {
 	q.Decide(id, approval.Decision{Approved: true})
 
 	select {
-	case <-done:
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
 	case <-time.After(time.Second):
 		t.Fatal("goroutine did not unblock")
 	}
@@ -306,7 +309,9 @@ func TestApprovalQueue_Snapshot_ReturnsCopy(t *testing.T) {
 		t.Fatalf("expected queue len=1 after snapshot mutation, got %d", q.Len())
 	}
 	q.DecideAll(approval.Decision{Approved: true})
-	<-done
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestApprovalQueue_NewArrivalAfterDecideAll(t *testing.T) {
@@ -329,7 +334,9 @@ func TestApprovalQueue_NewArrivalAfterDecideAll(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	q.DecideAll(approval.Decision{Approved: true})
-	<-done1
+	if err := <-done1; err != nil {
+		t.Fatal(err)
+	}
 
 	// New arrival after DecideAll.
 	done2 := make(chan error, 1)
@@ -349,7 +356,9 @@ func TestApprovalQueue_NewArrivalAfterDecideAll(t *testing.T) {
 		t.Fatalf("expected 1 new item after DecideAll, got %d", q.Len())
 	}
 	q.DecideAll(approval.Decision{Approved: true})
-	<-done2
+	if err := <-done2; err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestApprovalQueue_Close_UnblocksPendingGoroutines(t *testing.T) {
@@ -420,7 +429,9 @@ func TestApprovalQueue_DecideAfterClose_IsNoOp(t *testing.T) {
 	id := items[0].Pending.ID
 
 	q.Close() // resolves the item
-	<-done
+	if err := <-done; err == nil {
+		t.Fatal("expected denial after Close")
+	}
 
 	// Subsequent Decide is a no-op — must not panic.
 	q.Decide(id, approval.Decision{Approved: true})
@@ -476,7 +487,9 @@ func TestApprovalQueue_DecidePreservesOrder(t *testing.T) {
 	// Clean up.
 	q.DecideAll(approval.Decision{Approved: true})
 	for i := 0; i < 3; i++ {
-		<-done
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
