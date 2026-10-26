@@ -74,8 +74,7 @@ type model struct {
 	historyPos int
 	// lastPrompt is what /retry replays; draft is the half-typed line the
 	// history walk displaced, and browsing says the walk is in progress.
-	lastPrompt, draft string
-	// recordInterrupted is Params.RecordInterrupted.
+	lastPrompt, draft               string
 	recordInterrupted               func(sessionID, prompt string)
 	browsing, sending, userScrolled bool
 	// queued holds messages Enter submitted while a turn was in flight: they

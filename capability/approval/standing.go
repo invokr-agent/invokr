@@ -3,7 +3,6 @@ package approval
 import (
 	"cmp"
 	"fmt"
-	"github.com/invokr-ai/invokr/constants"
 	"slices"
 	"strings"
 	"sync"
@@ -506,9 +505,6 @@ func tierFlagName(tier string) string {
 		if name == tier {
 			return alias
 		}
-	}
-	if tier == constants.ShellTierReadonly {
-		return "read-only"
 	}
 	return tier
 }

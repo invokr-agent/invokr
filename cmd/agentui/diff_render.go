@@ -6,6 +6,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/sergi/go-diff/diffmatchpatch"
 
@@ -122,8 +123,6 @@ func renderPatchDiff(patch string, width, maxLines int) string {
 	return renderDiffSections(parsePatchSections(patch), patch, width, maxLines)
 }
 
-// renderEditDiff renders an edit from its whole file when editedFile could
-// rebuild it, and from the patch fragments otherwise.
 func renderEditDiff(file patchSection, patch string, width, maxLines int) string {
 	if file.path == "" {
 		return renderPatchDiff(patch, width, maxLines)
@@ -192,20 +191,17 @@ func renderPatchSection(s patchSection, width, budget int) string {
 	return header + "\n" + indentBlock(body, "    ")
 }
 
-// lineDelta counts the lines added and removed between two texts.
+// lineDelta counts the lines added and removed between two texts. The diff
+// runs on DiffLinesToChars' encoding, where each rune stands for one line.
 func lineDelta(before, after string) (adds, dels int) {
 	dmp := diffmatchpatch.New()
-	a, b, index := dmp.DiffLinesToChars(before, after)
-	for _, d := range dmp.DiffCharsToLines(dmp.DiffMain(a, b, false), index) {
-		n := strings.Count(d.Text, "\n")
-		if !strings.HasSuffix(d.Text, "\n") && d.Text != "" {
-			n++
-		}
+	a, b, _ := dmp.DiffLinesToChars(before, after)
+	for _, d := range dmp.DiffMain(a, b, false) {
 		switch d.Type {
 		case diffmatchpatch.DiffInsert:
-			adds += n
+			adds += utf8.RuneCountInString(d.Text)
 		case diffmatchpatch.DiffDelete:
-			dels += n
+			dels += utf8.RuneCountInString(d.Text)
 		}
 	}
 	return adds, dels

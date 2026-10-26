@@ -20,6 +20,9 @@ type TierPolicy struct {
 var tierAliases = map[string]string{
 	"write":   constants.ShellTierWrite,
 	"network": constants.ShellTierNetwork,
+	// Parsed by its own case (it also opens the read-workspace interpreter
+	// tier); listed so a hint names it.
+	"read-only": constants.ShellTierReadonly,
 }
 
 // NewTierPolicy builds the matcher; "read-only" expands to the read-only shell

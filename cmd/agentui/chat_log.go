@@ -448,5 +448,4 @@ func renderThinkingBlock(text string, width int, expanded bool) string {
 
 const thinkingGutter = "│ "
 
-// thinkingPreviewLines is how much of a folded thinking block stays visible.
 const thinkingPreviewLines = 4
