@@ -263,7 +263,7 @@ func toolFailureDetail(m message) string {
 	switch {
 	case detail == "":
 		return code
-	case code == "":
+	case code == "", strings.Contains(detail, code): // "denied — approval denied for …" says it twice
 		return detail
 	}
 	return code + " — " + detail
@@ -453,7 +453,11 @@ func renderApprovalQueuePanel(items []approval.QueueItem, cursor int, expanded b
 	bindings := []key.Binding{keys.ApproveItem}
 	if pattern, err := grantPattern(items[min(cursor, len(items)-1)].Pending.Request); err == nil {
 		always := keys.AlwaysAllow
-		always.SetHelp("a", fmt.Sprintf("always %q", pattern))
+		label := fmt.Sprintf("always %q", pattern)
+		if strings.HasPrefix(pattern, "sha256:") {
+			label = "always (this exact code)"
+		}
+		always.SetHelp("a", label)
 		bindings = append(bindings, always)
 	}
 	bindings = append(bindings, keys.DenyItem, keys.ExpandItem)
@@ -493,9 +497,10 @@ func renderQueueItemLine(item approval.QueueItem, selected, expanded bool, detai
 	}
 	lines := []string{"", renderApprovalHeadline(req), ""}
 	subject := strings.TrimSpace(req.Subject)
-	// A diff's own header names the file, so the subject would only repeat it.
+	// A diff's own header names the file, so the subject would only repeat it;
+	// a content hash is for grants to match, and the summary shows the code.
 	for _, line := range elideSubject(subject, max(1, width-4), approvalSubjectLines) {
-		if req.Diff != nil {
+		if req.Diff != nil || strings.HasPrefix(subject, "sha256:") {
 			break
 		}
 		lines = append(lines, "    "+ui.Invokr.Text.Bold(true).Render(line))
@@ -540,7 +545,7 @@ func cappedDiffPreview(diff []string, width int) []string {
 	if len(diff) <= approvalDetailHeight {
 		return diff
 	}
-	more := fmt.Sprintf("… %d more lines (v to page)", len(diff)-approvalDetailHeight)
+	more := "… " + moreLines(len(diff)-approvalDetailHeight) + " (v to page)"
 	return append(slices.Clip(diff[:approvalDetailHeight]), "    "+ui.Invokr.Muted.Render(ansi.Truncate(more, max(1, width-4), "…")))
 }
 
@@ -695,7 +700,7 @@ func renderContextStatus(usage turn.TokenUsage, width, compactPercent int) strin
 	used := usage.LatestPromptTokens + usage.LatestCompletionTokens
 	label := ui.Invokr.Muted.Render("ctx")
 	if usage.ContextWindowTokens <= 0 {
-		return label + " " + ui.Invokr.Muted.Render(formatTokensCompact(used)+" / ?")
+		return label + " " + ui.Invokr.Muted.Render(formatTokensCompact(used)) // window unknown: no bare "?"
 	}
 	count := formatTokensCompact(used) + " / " + formatTokensCompact(usage.ContextWindowTokens)
 	style, fill := contextColors(contextPercent(usage), compactPercent)

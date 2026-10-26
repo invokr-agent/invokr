@@ -77,7 +77,7 @@ func TestMCPRequiresSchemaSearchPerSession(t *testing.T) {
 	if _, err := caller.HandleCall(ctx, call); err == nil {
 		t.Fatal("optional MCP call ran before enable")
 	}
-	if _, err := caller.HandleCall(ctx, &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"enable","names":["mcp_fake_echo"]}`)}); err != nil {
+	if _, err := caller.HandleCall(approved(ctx), &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"enable","names":["mcp_fake_echo"]}`)}); err != nil {
 		t.Fatal(err)
 	}
 	managed, err := caller.ResolveToolCall(ctx, &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"run","name":"mcp_fake_echo","arguments":{"text":"hi"}}`)})
@@ -220,4 +220,10 @@ func writeFakeResponse(id int, result any) {
 func writeFakeNotification() {
 	payload, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "method": "notifications/message", "params": map[string]any{}})
 	_, _ = fmt.Fprintf(os.Stdout, "%s\n", payload)
+}
+
+// approved runs a call as a YOLO session would, so "tools enable" is approved.
+func approved(ctx context.Context) context.Context {
+	ctx, _ = approval.NewPolicy(approval.YOLO, false).Begin(ctx, approval.Request{})
+	return ctx
 }

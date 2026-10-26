@@ -2,8 +2,8 @@
 <p align="center">A terminal agent built for local models.</p>
 
 [![Release](https://img.shields.io/github/v/release/invokr-ai/invokr?include_prereleases&sort=semver)](https://github.com/invokr-ai/invokr/releases/latest)
-[![CI](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml/badge.svg)](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml)
-[![E2E](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml/badge.svg)](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml)
+[![CI](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml)
+[![E2E](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml/badge.svg?branch=main&event=push)](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml)
 
 ![Invokr TUI: a prompt, a tiered shell approval, the answer, and the /usage panel](docs/assets/demo.gif)
 

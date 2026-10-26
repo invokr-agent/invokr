@@ -60,7 +60,7 @@ func TestCLI_E2E_MockedLLM_ExecutesToolWithoutWritingMarkdownMemory(t *testing.T
 	)
 	defer provider.Close()
 
-	output, err := runInvokrAgent(t, provider.URL(), state, "please inspect the fixture\nexit\n")
+	output, err := runInvokrAgent(t, provider.URL(), state, "please inspect the fixture\nexit\n", "--yolo")
 	if err != nil {
 		t.Fatalf("invokr agent failed: %v\noutput:\n%s", err, output)
 	}
@@ -187,7 +187,7 @@ func TestCLI_E2E_MockedLLM_PersistsMemoryToolAndLoadsPrompt(t *testing.T) {
 	)
 	defer firstProvider.Close()
 
-	output, err := runInvokrAgent(t, firstProvider.URL(), state, "remember the fixture keyword\nexit\n")
+	output, err := runInvokrAgent(t, firstProvider.URL(), state, "remember the fixture keyword\nexit\n", "--yolo")
 	if err != nil {
 		t.Fatalf("first invokr agent run failed: %v\noutput:\n%s", err, output)
 	}
@@ -298,13 +298,13 @@ func newE2EState(t *testing.T) e2eState {
 	return state
 }
 
-func runInvokrAgent(t *testing.T, baseURL string, state e2eState, stdin string) (string, error) {
+func runInvokrAgent(t *testing.T, baseURL string, state e2eState, stdin string, flags ...string) (string, error) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), invokrE2ETimeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, invokrBinary(t), "--base-url="+baseURL, "--model=test-model", "agent")
+	cmd := exec.CommandContext(ctx, invokrBinary(t), append([]string{"--base-url=" + baseURL, "--model=test-model", "agent"}, flags...)...)
 	cmd.Dir = state.workDir
 	cmd.Env = mergedEnv(os.Environ(), map[string]string{
 		// Isolate from the developer's real ~/.invokr (config.json there can

@@ -883,7 +883,7 @@ func TestRenderContextStatus(t *testing.T) {
 	}
 
 	unknown := ansi.Strip(renderContextStatus(turn.TokenUsage{Available: true, LatestPromptTokens: 100}, 80, 80))
-	if unknown != "ctx 100 / ?" {
+	if unknown != "ctx 100" {
 		t.Fatalf("unknown window status = %q", unknown)
 	}
 	if got := renderContextStatus(turn.TokenUsage{}, 80, 80); got != "" {
@@ -2114,6 +2114,9 @@ func TestApprovalPanelDropsARedundantWhy(t *testing.T) {
 func TestNoAlwaysForCompoundCommands(t *testing.T) {
 	if _, err := grantPattern(approval.Request{Tool: "shell", Subject: "go version; echo --- ; go env"}); err == nil {
 		t.Fatal("always offered for a chained command")
+	}
+	if p, err := grantPattern(approval.Request{Tool: "edit", Subject: "README.md", SubjectIsPathList: true}); err != nil || p != "README.md" {
+		t.Fatalf("edit grant = %q, %v; want the file itself", p, err)
 	}
 	if p, err := grantPattern(approval.Request{Tool: "shell", Subject: "go test ./..."}); err != nil || p != "go test *" {
 		t.Fatalf("plain command: pattern %q, err %v", p, err)

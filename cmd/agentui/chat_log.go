@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"github.com/invokr-ai/invokr/capability/approval"
 	"slices"
 	"strings"
 	"time"
@@ -88,13 +89,16 @@ func (c *chatLog) Append(msg message) {
 // insertAboveRunning places an approval decision just above the running block
 // of the tool it decides, so it reads before that tool's output rather than
 // after it; with no such block it is appended.
-func (c *chatLog) insertAboveRunning(tool string, msg message) {
+func (c *chatLog) insertAboveRunning(tool string, msg message, diff *approval.FileDiff) {
 	i := slices.IndexFunc(c.messages, func(m message) bool {
 		return m.role == "tool" && m.toolName == tool && m.toolStatus == toolRunning
 	})
 	if i < 0 {
 		c.Append(msg)
 		return
+	}
+	if diff != nil { // kept so the settled block shows the change that was approved
+		c.messages[i].editFile = patchSection{path: diff.Path, before: diff.Before, after: diff.After}
 	}
 	c.nextID, msg.id = c.nextID+1, c.nextID+1
 	c.messages = slices.Insert(c.messages, i, msg)
@@ -218,13 +222,15 @@ func (c *chatLog) finishToolMessage(t events.ToolPayload, failed bool) int {
 		// Keep the started event's name/args: some emitters omit them on completion.
 		prev := c.messages[idx]
 		msg.toolStartedAt, msg.toolName, msg.toolArgs, msg.expanded = prev.toolStartedAt, prev.toolName, prev.toolArgs, prev.expanded
-		msg.id, msg.version = prev.id, prev.version+1
+		msg.id, msg.version, msg.editFile = prev.id, prev.version+1, prev.editFile
 	}
 	if msg.toolStatus == toolDone && t.Code == "" {
 		// A flagged result may not have applied, so it gets no diff.
 		msg.toolDiff = cmp.Or(appliedPatchDiff(msg.toolName, msg.toolArgs),
 			editedFileDiff(msg.toolName, msg.toolArgs))
-		msg.editFile = editedFile(msg.toolName, msg.toolArgs)
+		// The approved before/after, when there was one, is the whole truth:
+		// a full-file write cannot be undone back to its old text afterwards.
+		msg.editFile = cmp.Or(msg.editFile, editedFile(msg.toolName, msg.toolArgs))
 	}
 	if idx < 0 {
 		// No running block to update (e.g. event arrived out of order); append one.
@@ -438,7 +444,7 @@ func renderThinkingBlock(text string, width int, expanded bool) string {
 	// Long thinking folds like tool output: a few lines, then a count that
 	// alt+x or a click on the label expands.
 	if hidden := len(lines) - thinkingPreviewLines; hidden > 0 && !expanded {
-		lines = append(lines[:thinkingPreviewLines:thinkingPreviewLines], fmt.Sprintf("▸ %d more lines", hidden))
+		lines = append(lines[:thinkingPreviewLines:thinkingPreviewLines], "▸ "+moreLines(hidden))
 	}
 	for i, line := range lines {
 		lines[i] = answerIndent + gutter + ui.Invokr.Thinking.Render(line)

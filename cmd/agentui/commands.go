@@ -520,7 +520,7 @@ func compactionEstimate(session turn.Session) int64 {
 func contextUsageLine(usage turn.TokenUsage) string {
 	used := usage.LatestPromptTokens + usage.LatestCompletionTokens
 	if usage.ContextWindowTokens == 0 {
-		return fmt.Sprintf("context: %s / ? tokens", humanize.Comma(used))
+		return fmt.Sprintf("context: %s tokens (window size unknown)", humanize.Comma(used))
 	}
 	return fmt.Sprintf("context: %s / %s tokens (%.0f%%)", humanize.Comma(used), humanize.Comma(usage.ContextWindowTokens), float64(used)/float64(usage.ContextWindowTokens)*100)
 }

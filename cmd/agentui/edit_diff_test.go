@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/platform/events"
 )
 
@@ -85,5 +86,20 @@ func TestChatLogRendersEditedFileDiff(t *testing.T) {
 				t.Fatalf("diff shown = %v, want %v\n%s", has, tc.wants, content)
 			}
 		})
+	}
+}
+
+// TestApprovedWriteKeepsItsDiff: a whole-file write's settled block shows the
+// before/after that was approved, not the new file as if it were added.
+func TestApprovedWriteKeepsItsDiff(t *testing.T) {
+	var c chatLog
+	args := `{"path":"README.md","content":"# Todo\n"}`
+	c.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &events.ToolPayload{ID: "1", Name: "edit", Arguments: args}})
+	c.insertAboveRunning("edit", message{role: "tool", text: "approval granted: edit"}, &approval.FileDiff{Path: "README.md", Before: "# todo\n", After: "# Todo\n"})
+	c.ApplyEvent(events.Event{Type: events.EventToolCompleted, Tool: &events.ToolPayload{ID: "1", Name: "edit", Arguments: args, Output: "ok"}})
+	var b strings.Builder
+	writeMessage(&b, *c.Last(), 80, "")
+	if got := ansi.Strip(b.String()); !strings.Contains(got, "+1 −1") {
+		t.Fatalf("settled write = %q, want the approved +1 −1", got)
 	}
 }

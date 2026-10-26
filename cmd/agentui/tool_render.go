@@ -239,7 +239,7 @@ func tailLines(text string, n int) ([]string, int) {
 
 // foldIndicator is the collapsed block's "there is more" marker.
 func foldIndicator(hidden, width int) string {
-	return "    " + ui.Invokr.Muted.Render(ansi.Truncate(fmt.Sprintf("▸ %d more lines", hidden), max(1, width-4), "…"))
+	return "    " + ui.Invokr.Muted.Render(ansi.Truncate("▸ "+moreLines(hidden), max(1, width-4), "…"))
 }
 
 // withOutputBlock appends an indented, muted output block under a tool line.
@@ -266,4 +266,12 @@ func cappedLines(text string, width, maxLines int, style func(string) string) []
 		lines = append(lines, foldIndicator(truncated, width))
 	}
 	return lines
+}
+
+// moreLines is a fold's hidden-line count: "1 more line", "3 more lines".
+func moreLines(n int) string {
+	if n == 1 {
+		return "1 more line"
+	}
+	return fmt.Sprintf("%d more lines", n)
 }

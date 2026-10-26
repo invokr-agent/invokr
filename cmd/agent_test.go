@@ -277,7 +277,7 @@ func TestNewAgentCmd_Execute_RendersTokenUsage(t *testing.T) {
 	agentSession := newTestAgentSession(t, mockProvider)
 	got, err := executeAgentCmd(t, testRuntimeServices(agentSession), "hello\nexit\n")
 	require.NoError(t, err)
-	require.Contains(t, got, "context: 1,290 / ? tokens")
+	require.Contains(t, got, "context: 1,290 tokens (window size unknown)")
 }
 
 func TestAgentSession_Send_TracksSessionTotals(t *testing.T) {

@@ -128,6 +128,11 @@ func (c *Caller) changeEnabled(ctx context.Context, id string, args tool_search.
 // ResolveToolCall resolves before target policy, quotas and execution bookkeeping.
 func (c *Caller) ResolveToolCall(ctx context.Context, call *core.ToolCall) (*core.ToolCall, error) {
 	available := func(name string) bool { return c.advertised(name) && toolInScope(ctx, name) }
+	// Inline Python belongs in the sandboxed interpreter, which the model
+	// opts into; where there is none, the shell still runs it.
+	if available(constants.CodeInterpreterToolName) && shell.InlinePython(call) {
+		return nil, fmt.Errorf("inline Python runs in %[1]s, not the shell: enable it with {\"action\":\"enable\",\"names\":[\"%[1]s\"]}, then {\"action\":\"run\",\"name\":\"%[1]s\",\"arguments\":{\"code\":...}}; it reads the workspace, and output_files copy results back. A script or module (python3 x.py, python3 -m ...) still runs in the shell", constants.CodeInterpreterToolName)
+	}
 	call, err := tool_search.Resolve(call, available, c.protectedTool)
 	if err != nil {
 		return nil, err

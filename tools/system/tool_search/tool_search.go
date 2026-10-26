@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/tools/core"
 )
 
@@ -23,15 +24,29 @@ type Args struct {
 	Definition json.RawMessage `json:"definition,omitempty" schema:"object" desc:"Persistent toolbox definition for create."`
 }
 
-func RegisterManager(c core.NativeRegistrar, execute func(context.Context, Args) (string, error), definition map[string]any) {
+func RegisterManager(c core.NativeRegistrar, approver approval.Approver, execute func(context.Context, Args) (string, error), definition map[string]any) {
 	schema := core.SchemaFor[Args]()
 	schema["properties"].(map[string]any)["arguments"] = map[string]any{"type": "object", "description": "Arguments for the enabled run target."}
 	schema["properties"].(map[string]any)["definition"] = definition
 
 	core.Register(c, core.Tool[Args]{
-		Spec:    core.ToolSpec{Name: "tools", Description: "List or search permitted tools. Enable an optional tool when it fits the task better than a shell workaround, then run it with {\"action\":\"run\",\"name\":...,\"arguments\":{...}}; disable unused tools, or create a persistent toolbox tool.", Parameters: schema, Metadata: core.ReadWorkspaceMetadata("system", core.ToolCapabilities{})},
-		Execute: execute,
+		Spec:     core.ToolSpec{Name: "tools", Description: "List or search permitted tools. Enable an optional tool when it fits the task better than a shell workaround, then run it with {\"action\":\"run\",\"name\":...,\"arguments\":{...}}; disable unused tools, or create a persistent toolbox tool.", Parameters: schema, Metadata: core.ReadWorkspaceMetadata("system", core.ToolCapabilities{})},
+		Approve:  approveEnable,
+		Approver: approver,
+		Execute:  execute,
 	})
+}
+
+// approveEnable asks in Manual before the model widens its own toolset; Auto
+// approves it as confined work. Create enables through create_tool, which
+// carries its own approval.
+func approveEnable(_ context.Context, args Args) core.ApprovalDecision {
+	if args.Action != "enable" {
+		return core.Auto()
+	}
+	names := strings.Join(args.Names, ", ")
+	subject := "enable " + strings.Join(args.Names, " ")
+	return core.Ask(approval.Request{Tool: "tools", Tier: "tool_enable", Confined: true, Subject: subject, GrantPattern: subject, Summary: "Enable tools: " + names})
 }
 
 type Listing struct {

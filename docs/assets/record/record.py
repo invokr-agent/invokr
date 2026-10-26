@@ -58,8 +58,8 @@ QUIET_MS = 30
 BG = (18, 19, 26)
 FG = (200, 205, 212)
 # Shared-palette size. The gradient wordmark is the only thing here with a wide
-# range; 128 covers it without the banding a smaller table shows on its ramp.
-PALETTE_COLORS = 128
+# range; a GIF holds at most 256, and anything less bands its ramp.
+PALETTE_COLORS = 256
 
 class Typed(str):
     """Input to send a character at a time rather than in one paste.

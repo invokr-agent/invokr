@@ -142,7 +142,7 @@ func TestResponseHistoryOpensOnDemand(t *testing.T) {
 	if strings.Contains(collapsed, "Recorded:") || strings.Contains(collapsed, "old missing context") || strings.Contains(collapsed, "streamed draft") {
 		t.Fatalf("execution report leaked into response:\n%s", collapsed)
 	}
-	if warning := ansi.Strip(m.helpHint()); !strings.Contains(warning, "2 calls need a look") {
+	if warning := ansi.Strip(m.helpHint()); !strings.Contains(warning, "1 call needs a look") {
 		t.Fatalf("failure warning hidden: %s", warning)
 	}
 	m.showRecorded()
