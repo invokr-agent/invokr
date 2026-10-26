@@ -1,4 +1,4 @@
-.PHONY: dev record generate test containment e2e e2e-fixture e2e-swe e2e-swe-live e2e-docker e2e-live e2e-report lint lint-ci verify analyze diagram-view install
+.PHONY: dev record screenshots generate test containment e2e e2e-fixture e2e-swe e2e-swe-live e2e-docker e2e-live e2e-report lint lint-ci verify analyze diagram-view install
 
 INSTALL_DIR ?= $(HOME)/.local/bin
 
@@ -81,6 +81,14 @@ dev:
 # reach, and (optionally) ImageMagick to shrink the result.
 record:
 	./docs/assets/record/record.sh
+
+# screenshots renders every TUI view variant (TestUXGallery) to PNGs in
+# docs/assets/record/gallery/ (gitignored). Needs uv; no model server.
+GALLERY := $(CURDIR)/docs/assets/record/gallery
+screenshots:
+	@test -x /tmp/invokr-record-venv/bin/python || (uv venv /tmp/invokr-record-venv >/dev/null && uv pip install --quiet --python /tmp/invokr-record-venv/bin/python pyte pillow)
+	UX_GALLERY=$(GALLERY) go test ./cmd/agentui -run TestUXGallery -count=1
+	/tmp/invokr-record-venv/bin/python docs/assets/record/snap.py $(GALLERY)
 
 # analyze prints a size/complexity breakdown and writes an interactive treemap.
 analyze:
