@@ -61,7 +61,7 @@ func TestExecutionEvidenceDiskResumeIsHistoricalAndBounded(t *testing.T) {
 		t.Fatal("disk lost evidence")
 	}
 	replay := resumedAssistantText(turn.TranscriptMessage{Text: loaded[0].Text, ExecutionEvidence: got})
-	if len(replay) > 600 || !strings.Contains(replay, "historical") || !strings.Contains(replay, "flagged:1000") {
+	if len(replay) > 600 || !strings.Contains(replay, "historical") || !strings.Contains(replay, "1000 flagged") {
 		t.Fatalf("unbounded or missing historical evidence: %.700s", replay)
 	}
 	if got[0].Freshness != "current" || loaded[1].ExecutionEvidence != nil || resumedAssistantText(turn.TranscriptMessage{Text: loaded[1].Text}) != "legacy" {

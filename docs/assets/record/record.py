@@ -389,4 +389,5 @@ def main():
     print(f"{png_path}: frame at t={times[still]:.1f}s")
 
 
-main()
+if __name__ == "__main__":
+    main()

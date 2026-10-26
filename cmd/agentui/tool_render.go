@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -93,11 +94,15 @@ func shellText(output string) string {
 		Stderr string  `json:"stderr"`
 	}
 	if err := json.Unmarshal([]byte(output), &res); err != nil || res.Stdout == nil {
-		return output
+		return exitCodeLine.ReplaceAllString(output, "")
 	}
 	streams := []string{strings.TrimRight(*res.Stdout, "\n"), strings.TrimRight(res.Stderr, "\n")}
 	return strings.Join(slices.DeleteFunc(streams, func(s string) bool { return s == "" }), "\n")
 }
+
+// exitCodeLine is the shell tool's "[exit code N]" fact for the model. The
+// block's status line already shows the exit, so the human copy drops it.
+var exitCodeLine = regexp.MustCompile(`(?m)\n?^\[exit code -?\d+\]$`)
 
 // patchRenderer owns the diff sub-block under a writing tool: apply_patch
 // records its patch text, edit rebuilds a patch-shaped diff from the call's
@@ -111,7 +116,7 @@ func (patchRenderer) Summary(m message, width int) string {
 	if m.toolDiff == "" {
 		return line
 	}
-	return line + "\n" + renderPatchDiff(m.toolDiff, width, maxDiffLines)
+	return line + "\n" + renderEditDiff(m.editFile, m.toolDiff, width, maxDiffLines)
 }
 
 func (patchRenderer) Detail(m message, width int) string {
@@ -119,7 +124,7 @@ func (patchRenderer) Detail(m message, width int) string {
 	if m.toolDiff == "" {
 		return withOutputBlock(line, m.toolOutput, width, 0)
 	}
-	return line + "\n" + renderPatchDiff(m.toolDiff, width, 0)
+	return line + "\n" + renderEditDiff(m.editFile, m.toolDiff, width, 0)
 }
 
 // gitReadRenderer renders git_read results. A diff/show envelope carries the

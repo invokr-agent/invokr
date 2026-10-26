@@ -142,7 +142,7 @@ func TestResponseHistoryOpensOnDemand(t *testing.T) {
 	if strings.Contains(collapsed, "Recorded:") || strings.Contains(collapsed, "old missing context") || strings.Contains(collapsed, "streamed draft") {
 		t.Fatalf("execution report leaked into response:\n%s", collapsed)
 	}
-	if warning := ansi.Strip(m.helpHint()); !strings.Contains(warning, "tool errors") || !strings.Contains(warning, "failed") {
+	if warning := ansi.Strip(m.helpHint()); !strings.Contains(warning, "2 calls need a look") {
 		t.Fatalf("failure warning hidden: %s", warning)
 	}
 	m.showRecorded()
@@ -185,7 +185,7 @@ func TestResponseHistoryDoesNotInventVerification(t *testing.T) {
 			if !strings.Contains(got, tc.want) || strings.Contains(got, "task verified") {
 				t.Fatalf("unexpected summary:\n%s", got)
 			}
-			if tc.name == "flagged latest" && !strings.Contains(ansi.Strip(m.helpHint()), "flagged") {
+			if tc.name == "flagged latest" && !strings.Contains(ansi.Strip(m.helpHint()), "1 call needs a look") {
 				t.Fatalf("styled outcome lost the flagged count:\n%s", got)
 			}
 			if (tc.name == "legacy" || tc.name == "empty") && strings.Contains(got, "Execution history") {

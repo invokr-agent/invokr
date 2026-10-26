@@ -2108,3 +2108,14 @@ func TestApprovalPanelDropsARedundantWhy(t *testing.T) {
 		t.Fatalf("panel dropped a distinct why:\n%s", got)
 	}
 }
+
+// TestNoAlwaysForCompoundCommands: a chained command can never match a
+// standing grant, so "a" is not offered for one (A5).
+func TestNoAlwaysForCompoundCommands(t *testing.T) {
+	if _, err := grantPattern(approval.Request{Tool: "shell", Subject: "go version; echo --- ; go env"}); err == nil {
+		t.Fatal("always offered for a chained command")
+	}
+	if p, err := grantPattern(approval.Request{Tool: "shell", Subject: "go test ./..."}); err != nil || p != "go test *" {
+		t.Fatalf("plain command: pattern %q, err %v", p, err)
+	}
+}

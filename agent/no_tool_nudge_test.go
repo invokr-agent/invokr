@@ -26,7 +26,7 @@ func TestRunnerNudgesZeroToolAnswerOnRepositoryTask(t *testing.T) {
 	gateway := runner.modelGateway.(*sequenceGateway)
 	last := gateway.continueRequests[0].Messages
 	nudge := last[len(last)-1]
-	if nudge.Role != "user" || !strings.Contains(nudge.Content, "not run any tool yet") {
+	if nudge.Role != "user" || !strings.Contains(nudge.Content, "no tool has run yet") {
 		t.Fatalf("nudge = %#v, want the inspect-first user message", nudge)
 	}
 	found := false

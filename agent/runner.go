@@ -71,7 +71,10 @@ const timeWarningPercent = 75
 // deadline set just above RunTimeout killed the run mid-salvage.
 const salvagePercent = 25
 
-const internalNudgePrefix = "[invokr internal retry] "
+// internalNudgePrefix marks a message invokr injects mid-run. It frames the
+// message as a step in the user's task: worded as "internal retry", a model
+// read it as setup with no task and said so in its reasoning (A10).
+const internalNudgePrefix = "[Continuing your task above] "
 
 // exhaustionWrapUp is the instruction the salvage completion carries. Without
 // it the model, handed a tool-free turn with no explanation, narrates its next
@@ -489,7 +492,7 @@ func (r *Runner) nudge(ctx context.Context, req RunRequest, state *runState, mes
 // noToolNudge is sent when the model answers a repository task without
 // having called a single tool: the early give-up shape from #442, where a
 // prompt naming a file or a build command is answered from the model's priors.
-const noToolNudge = internalNudgePrefix + "You have not run any tool yet; inspect the repository before answering. A copied tool-count footer is history metadata, not an executed tool call."
+const noToolNudge = internalNudgePrefix + "Before answering the request above, look at the repository: no tool has run yet, so read the files or run the command it names first. A copied tool-count footer is history metadata, not an executed tool call."
 
 // Match the observed unexecuted-action reply, not examples quoting the marker.
 var copiedToolCount = regexp.MustCompile(`(?i)^(?:(?:i'll|i will|let me) (?:inspect|read|check|run)\b|(?:inspecting|reading|checking|running)\b)[^\n]*\. \[Tool calls this turn: [1-9][0-9]*\]$`)

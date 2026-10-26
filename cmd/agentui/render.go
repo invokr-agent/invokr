@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image/color"
 	"runtime/debug"
+	"slices"
 	"strings"
 	"time"
 
@@ -235,6 +236,9 @@ func settledToolLine(m message, width int) string {
 // sub-block below rather than being crammed into brackets here.
 func toolTrailing(m message, state toolStatus) string {
 	dur := formatDuration(m.toolDuration)
+	if m.restored { // a resumed call has no saved timing
+		dur = "earlier"
+	}
 	switch {
 	case isCancelledTool(m):
 		return dur + " · cancelled"
@@ -489,27 +493,55 @@ func renderQueueItemLine(item approval.QueueItem, selected, expanded bool, detai
 	}
 	lines := []string{"", renderApprovalHeadline(req), ""}
 	subject := strings.TrimSpace(req.Subject)
+	// A diff's own header names the file, so the subject would only repeat it.
 	for _, line := range elideSubject(subject, max(1, width-4), approvalSubjectLines) {
+		if req.Diff != nil {
+			break
+		}
 		lines = append(lines, "    "+ui.Invokr.Text.Bold(true).Render(line))
 	}
-	// "Run <subject>" is the subject again with a verb in front.
-	if why := approvalWhy(req); why != "" && why != "Run "+subject && !expanded {
+	if diff := approvalDiffLines(req, width); diff != nil && !expanded {
+		lines = append(lines, cappedDiffPreview(diff, width)...)
+	} else if why := approvalWhy(req); why != "" && why != "Run "+subject && !expanded {
+		// "Run <subject>" is the subject again with a verb in front.
 		for _, line := range wrapLines(why, max(1, width-4)) {
 			lines = append(lines, "    "+ui.Invokr.Muted.Render(line))
 		}
 	}
 	if expanded {
-		details := approvalDetailLines(req, width)
-		start := min(max(0, detailOffset), max(0, len(details)-approvalDetailHeight))
-		end := min(len(details), start+approvalDetailHeight)
-		for _, line := range details[start:end] {
-			lines = append(lines, "    "+renderApprovalDetailLine(line))
-		}
-		if len(details) > approvalDetailHeight {
-			lines = append(lines, "    "+ui.Invokr.Muted.Render(fmt.Sprintf("details %d-%d/%d", start+1, end, len(details))))
-		}
+		lines = append(lines, approvalDetailPage(req, detailOffset, width)...)
 	}
 	return strings.Join(lines, "\n")
+}
+
+// approvalDetailPage is the expanded view's current page of details, with a
+// position line when there is more than one page.
+func approvalDetailPage(req approval.Request, offset, width int) []string {
+	details := approvalDetailLines(req, width)
+	start := min(max(0, offset), max(0, len(details)-approvalDetailHeight))
+	end := min(len(details), start+approvalDetailHeight)
+	indent := "    "
+	if req.Diff != nil { // the diff rows carry their own indent
+		indent = ""
+	}
+	var lines []string
+	for _, line := range details[start:end] {
+		lines = append(lines, indent+renderApprovalDetailLine(line))
+	}
+	if len(details) > approvalDetailHeight {
+		lines = append(lines, "    "+ui.Invokr.Muted.Render(fmt.Sprintf("details %d-%d/%d", start+1, end, len(details))))
+	}
+	return lines
+}
+
+// cappedDiffPreview is the first approvalDetailHeight rows of a proposed
+// diff, with a hint to page through the rest in the details view.
+func cappedDiffPreview(diff []string, width int) []string {
+	if len(diff) <= approvalDetailHeight {
+		return diff
+	}
+	more := fmt.Sprintf("… %d more lines (v to page)", len(diff)-approvalDetailHeight)
+	return append(slices.Clip(diff[:approvalDetailHeight]), "    "+ui.Invokr.Muted.Render(ansi.Truncate(more, max(1, width-4), "…")))
 }
 
 // renderApprovalHeadline is the design's selected-request line: the tool in
@@ -537,7 +569,7 @@ func renderQueueNeighbour(req approval.Request, width int) string {
 
 // approvalSubjectLines is how many lines of the command the collapsed row
 // spends before deferring to the details view.
-const approvalSubjectLines = 3
+const approvalSubjectLines = 6
 
 // elideSubject breaks a command line at its pipeline boundaries so a long
 // pipeline reads as one stage per line instead of wrapping mid-token, then
@@ -589,6 +621,9 @@ func approvalWhy(req approval.Request) string {
 const approvalDetailHeight = 12
 
 func approvalDetailLines(req approval.Request, width int) []string {
+	if lines := approvalDiffLines(req, width); lines != nil {
+		return lines
+	}
 	// Tool and tier are already on the headline.
 	fields := [][2]string{{"Summary", req.Summary}, {"Reason", req.Reason}}
 	contentWidth := max(1, width-4)
@@ -607,8 +642,20 @@ func approvalDetailLines(req approval.Request, width int) []string {
 	return out
 }
 
+// approvalDiffLines is a write's proposed change as the same tinted diff the
+// transcript shows once it is applied, or nil when the request carries none.
+func approvalDiffLines(req approval.Request, width int) []string {
+	if req.Diff == nil {
+		return nil
+	}
+	file := patchSection{path: req.Diff.Path, before: req.Diff.Before, after: req.Diff.After}
+	return strings.Split(renderPatchSection(file, width, 0), "\n")
+}
+
 func renderApprovalDetailLine(line string) string {
 	switch {
+	case strings.Contains(line, "\x1b["): // already styled: a rendered diff row
+		return line
 	case strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++"):
 		return ui.Invokr.Accent.Render(line)
 	case strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---"):
@@ -691,7 +738,12 @@ func sectionRule(label string, width int) string {
 // soft-wrapped draft makes the two disagree; walking the cursor up on a copy
 // borrows the textarea's own wrap logic rather than re-deriving it.
 func cursorDisplayRow(ta textarea.Model) int {
-	rows := 0
+	// The rows above the cursor inside its own line come straight from
+	// LineInfo; stepping up through them would rehash that whole line once per
+	// row, which is what made a long one-line draft slow to type into. Only the
+	// earlier lines are walked.
+	rows := ta.LineInfo().RowOffset
+	ta.CursorStart()
 	for ta.Line() > 0 || ta.LineInfo().RowOffset > 0 {
 		ta.CursorUp()
 		rows++

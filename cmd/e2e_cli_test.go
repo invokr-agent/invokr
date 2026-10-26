@@ -161,7 +161,7 @@ func TestCLI_E2E_MockedLLM_RecoversFromRepeatedToolLoop(t *testing.T) {
 	assertContains(t, output, "repeated tool call detected; asking model to change approach")
 	assertContains(t, output, "loop recovered")
 	assertContains(t, output, "follow-up clean")
-	assertNotContains(t, output, "[invokr internal retry]")
+	assertNotContains(t, output, "[Continuing your task above]")
 
 	snapshot := provider.Snapshot()
 	provider.AssertClean(t)
@@ -169,10 +169,10 @@ func TestCLI_E2E_MockedLLM_RecoversFromRepeatedToolLoop(t *testing.T) {
 	if got := len(snapshot.CompletionRequests); got != 5 {
 		t.Fatalf("completion calls = %d, want 5", got)
 	}
-	if !messagesContain(snapshot.CompletionRequests[3].Messages, "[invokr internal retry]") {
+	if !messagesContain(snapshot.CompletionRequests[3].Messages, "[Continuing your task above]") {
 		t.Fatal("recovery request missing internal repeated-tool nudge")
 	}
-	if messagesContain(snapshot.CompletionRequests[4].Messages, "[invokr internal retry]") {
+	if messagesContain(snapshot.CompletionRequests[4].Messages, "[Continuing your task above]") {
 		t.Fatal("internal repeated-tool nudge leaked into follow-up history")
 	}
 }

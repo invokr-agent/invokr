@@ -110,6 +110,7 @@ func (m *model) clickFold(y int) bool {
 	if tabs := m.tabStrip(); tabs != "" {
 		tabLines += lipgloss.Height(tabs)
 	}
+	tabLines += m.frameInset() / 2 // the YOLO frame's top row
 	id, line, ok := m.chat.ItemAt(y - tabLines)
 	if !ok || line != 1 { // message item starts with one spacer row
 		return false

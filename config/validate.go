@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/invokr-ai/invokr/constants"
@@ -113,10 +114,21 @@ func validateToolResultStrategies(agent AgentConfig) error {
 }
 
 func warnMissingDir(logger *zap.Logger, key, dir, defaultDir string) {
-	if dir == "" || dir == defaultDir {
+	if dir == "" || dir == defaultDir || freshDefaultLayout(dir, defaultDir) {
 		return
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 		logger.Warn("configured directory does not exist", zap.String("key", key), zap.String("dir", dir))
 	}
+}
+
+// freshDefaultLayout reports the default directory under another home
+// (INVOKR_HOME): the home exists, its subdirectory just has not been created
+// yet. A dir whose parent is missing too is still worth a warning.
+func freshDefaultLayout(dir, defaultDir string) bool {
+	if filepath.Base(dir) != filepath.Base(defaultDir) {
+		return false
+	}
+	info, err := os.Stat(filepath.Dir(dir))
+	return err == nil && info.IsDir()
 }

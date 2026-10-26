@@ -3,6 +3,7 @@ package turn
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 )
@@ -40,7 +41,11 @@ func AppendHistoricalExecution(message string, evidence []ExecutionEvidence) str
 		counts[item.Outcome]++
 		last = cmp.Or(item.Command, last)
 	}
-	return fmt.Sprintf("%s\n\n[Execution evidence: historical, not current verification; outcomes=%v; last command=%.256q]", message, counts, last)
+	outcomes := make([]string, 0, len(counts))
+	for _, outcome := range slices.Sorted(maps.Keys(counts)) {
+		outcomes = append(outcomes, fmt.Sprintf("%d %s", counts[outcome], outcome))
+	}
+	return fmt.Sprintf("%s\n\n[Earlier tool calls (historical, not a current check): %s; last command %.256q]", message, strings.Join(outcomes, ", "), last)
 }
 
 // AppendExecutionGuard is shared by plain, TUI and CLI rendering; nil is legacy/unavailable.

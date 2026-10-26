@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -187,5 +188,20 @@ func TestValidateSkipsMissingDefaultDirs(t *testing.T) {
 	}
 	if n := logs.FilterMessage("configured directory does not exist").Len(); n != 0 {
 		t.Fatalf("got %d missing-dir warnings for default dirs, want 0", n)
+	}
+}
+
+// TestValidateQuietOnFreshHome: the default dirs under a fresh INVOKR_HOME
+// are not created yet, and that is not worth a warning (A3).
+func TestValidateQuietOnFreshHome(t *testing.T) {
+	core, logs := observer.New(zap.WarnLevel)
+	home := t.TempDir()
+	cfg := AppConfig{}
+	cfg.Agents.Dir = filepath.Join(home, "agents")
+	if err := cfg.Validate(zap.New(core)); err != nil {
+		t.Fatal(err)
+	}
+	if logs.Len() != 0 {
+		t.Fatalf("warned on a fresh home: %v", logs.All())
 	}
 }

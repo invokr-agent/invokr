@@ -55,7 +55,7 @@ func TestConfigShowPrintsEffectiveRedactedConfigWithoutBootstrap(t *testing.T) {
 	})
 	var out bytes.Buffer
 	root.SetOut(&out)
-	root.SetArgs([]string{"--model", "flag-model", "config", "show"})
+	root.SetArgs([]string{"--model", "flag-model", "config", "show", "--json"})
 
 	if err := root.Execute(); err != nil {
 		t.Fatal(err)

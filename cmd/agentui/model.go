@@ -27,21 +27,22 @@ import (
 )
 
 type model struct {
-	ctx           context.Context
-	session       turn.Session
-	historyDB     turn.PromptHistory
-	logPanel      logPanel
-	logView       bool
-	toolEvents    *toolEventQueue
-	approvalQueue *approval.ApprovalQueue
-	commands      CommandBackend
-	policy        *approval.Policy
-	grants        *approval.Store
-	approvals     approvalPanel
-	chatLog       chatLog
-	statusline    statusline
-	selection     tuikit.Selection
-	mouseMode     mouseMode
+	inputKey, inputView string // memo of inputArea: a frame measures the box and then draws it
+	ctx                 context.Context
+	session             turn.Session
+	historyDB           turn.PromptHistory
+	logPanel            logPanel
+	logView             bool
+	toolEvents          *toolEventQueue
+	approvalQueue       *approval.ApprovalQueue
+	commands            CommandBackend
+	policy              *approval.Policy
+	grants              *approval.Store
+	approvals           approvalPanel
+	chatLog             chatLog
+	statusline          statusline
+	selection           tuikit.Selection
+	mouseMode           mouseMode
 	// copiedChars sizes the copy notice, copiedAt times it out. Both are only
 	// read while the selection that produced them is still on screen.
 	copiedChars int
@@ -74,6 +75,7 @@ type model struct {
 	// lastPrompt is what /retry replays; draft is the half-typed line the
 	// history walk displaced, and browsing says the walk is in progress.
 	lastPrompt, draft               string
+	recordInterrupted               func(sessionID, prompt string)
 	browsing, sending, userScrolled bool
 	// queued holds messages Enter submitted while a turn was in flight: they
 	// render dimmed above the input with a count, go out in order when the turn
@@ -194,10 +196,19 @@ func newModelWithCommands(ctx context.Context, session turn.Session, commands Co
 // styles by value. Called at construction and again whenever the terminal
 // reports its background color.
 func (m *model) applyTheme() {
+	m.inputView = "" // the box is drawn in theme colours
 	// Only the cursor's row carries the caret; the other rows of a multi-line
 	// draft are blank, the way a shell's continuation prompt reads.
+	// The textarea asks for a prompt once per displayed row, top down, and
+	// finding the cursor's row is linear in the draft, so it is worked out on
+	// the first row of each render and reused: per-row it made typing into a
+	// long draft quadratic (seconds per keystroke past ~1,000 characters).
+	cursorRow := 0
 	m.input.SetPromptFunc(2, func(info textarea.PromptInfo) string {
-		if info.LineNumber != cursorDisplayRow(m.input) {
+		if info.LineNumber == 0 {
+			cursorRow = cursorDisplayRow(m.input)
+		}
+		if info.LineNumber != cursorRow {
 			return ""
 		}
 		return renderPrompt()
@@ -590,7 +601,7 @@ func (m *model) decideSelectedItem(approved bool) (tea.Model, tea.Cmd) {
 	decision, text := decisionOf(approved, "approval granted: "+item.Pending.Tool, "approval denied: "+item.Pending.Tool)
 	m.approvalQueue.Decide(item.Pending.ID, decision)
 	m.approvals.Collapse()
-	m.chatLog.Append(message{role: "tool", text: text})
+	m.chatLog.insertAboveRunning(item.Pending.Tool, message{role: "tool", text: text})
 	m.clampQueueCursor()
 	m.syncChatViewport(true)
 	return m, nil
@@ -625,8 +636,8 @@ func (m *model) alwaysAllowSelected() (tea.Model, tea.Cmd) {
 }
 
 // grantPattern is the pattern "a" would grant, derived from the Subject (the
-// only thing standing rules match on) rather than being it: `find … | sort`
-// grants `find … *`. An error means "a" is not offered for this request.
+// only thing standing rules match on) rather than being it: `go test ./x`
+// grants `go test *`. An error means "a" is not offered for this request.
 func grantPattern(req approval.Request) (string, error) {
 	// A tool that names its own grant pattern (an outside-read directory, a
 	// push of one branch) is grantable even when it publishes.
@@ -638,6 +649,9 @@ func grantPattern(req approval.Request) (string, error) {
 	}
 	if req.Outside {
 		return "", errors.New("too broad to grant (the root or home directory); approve once with y")
+	}
+	if !req.SubjectIsPathList && approval.Compound(req.Subject) {
+		return "", errors.New("a chained or piped command can't be always-allowed; approve once with y")
 	}
 	pattern, ok := approval.DerivePattern(req.Subject)
 	if !ok {
@@ -707,6 +721,7 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	case interrupted:
 		m.stopping = false
 		m.chatLog.Append(message{role: "tool", text: "⏹ stopped"})
+		m.saveInterrupted()
 		m.recordedWarning = fmt.Sprintf("Interrupted · %d recorded · Alt+R", len(msg.evidence))
 	case msg.err != nil:
 		m.err = msg.err
@@ -792,9 +807,23 @@ func (m *model) View() tea.View {
 	if m.overlay.IsOpen() && m.overlay.Title() == "tools" && m.toolDialog.open {
 		content = m.toolDialogView(content)
 	} else {
-		content = m.overlay.Render(content, m.width, m.height)
+		// The popup is sized against the space inside the YOLO border, so it
+		// cannot hang over the rule.
+		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset()/2)
 	}
 	content = m.settingsView(content)
+	// A YOLO session gets a rule round the whole UI: every call runs unprompted,
+	// and that fact has to be obvious from anywhere in the transcript, where the
+	// one banner row scrolls out of view. A prompting session gets no border at
+	// all, so a framed screen means "unprompted" and nothing else. Drawn before
+	// the banner is pinned, so the warning keeps the top screen row above it.
+	if m.yoloFrame() {
+		frame := ui.Invokr.YoloFrame
+		// Top and sides only: the input box and status line close the screen
+		// at the bottom, and a rule under them would read as a second box.
+		content = lipgloss.NewStyle().Border(lipgloss.RoundedBorder(), true, true, false).BorderForeground(frame.GetForeground()).
+			Height(m.height - lipgloss.Height(m.modeBanner())).Width(m.width).Render(content)
+	}
 	if banner := m.modeBanner(); banner != "" {
 		content = banner + "\n" + content
 	}
@@ -857,10 +886,14 @@ func (m *model) inputArea() string {
 	// Lines counts these rows through inputArea, so the transcript gives the
 	// space up instead of the queue drawing over it.
 	queued := m.queuedArea()
-	if queued == "" {
-		return inputBox(m.mainWidth()).Render(m.input.View())
+	key := fmt.Sprint(m.input.Value(), m.input.Line(), m.input.Column(), m.mainWidth(), m.input.Height(), m.input.Focused(), queued)
+	if key != m.inputKey || m.inputView == "" {
+		m.inputKey, m.inputView = key, inputBox(m.mainWidth()).Render(m.input.View())
+		if queued != "" {
+			m.inputView = queued + "\n" + m.inputView
+		}
 	}
-	return queued + "\n" + inputBox(m.mainWidth()).Render(m.input.View())
+	return m.inputView
 }
 
 // queuedArea is the pending-message block: the count, then one dimmed line per
@@ -961,37 +994,45 @@ func (m *model) helpHint() string {
 	return strings.TrimSpace(m.help.View(m.keys))
 }
 
+// saveInterrupted keeps the stopped prompt in the session for a resume.
+func (m *model) saveInterrupted() {
+	if id, ok := m.session.(turn.IdentifiedSession); ok && m.recordInterrupted != nil {
+		m.recordInterrupted(id.SessionID(), m.lastPrompt)
+	}
+}
+
 func (m *model) showRecorded() {
 	// Titles are lowercase throughout, matching the overlay's own title row and
 	// the "Alt+R for recorded calls" hint that points at it.
 	m.overlay.Open("recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
 }
 
+// executionWarning is the footer note after a turn whose calls did not all
+// complete cleanly: errors, denials, failures, non-zero exits ("flagged") and
+// unfinished calls, counted together in plain words. Alt+R has the breakdown.
 func executionWarning(failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {
-	counts := map[string]int{}
+	n, denied := len(failures), 0
 	for _, item := range evidence {
-		switch item.Outcome {
-		case "completed":
-			continue
-		case "denied", "failed", "flagged":
-			counts[item.Outcome]++
-		default:
-			counts["incomplete"]++
+		if item.Outcome != "completed" {
+			n++
+		}
+		if item.Outcome == "denied" {
+			denied++
 		}
 	}
-	if len(failures) > 0 {
-		counts["tool errors"] = len(failures)
-	}
-	if len(counts) == 0 {
+	if n == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(counts))
-	for _, status := range []string{"tool errors", "denied", "failed", "flagged", "incomplete"} {
-		if n := counts[status]; n > 0 {
-			parts = append(parts, fmt.Sprintf("%d %s", n, status))
-		}
+	calls := fmt.Sprintf("%d calls need", n)
+	if n == 1 {
+		calls = "1 call needs"
 	}
-	return strings.Join(parts, " · ") + " · Alt+R for recorded calls"
+	if denied > 0 { // a denial changes what happened, so it is named
+		calls = fmt.Sprintf("%s a look (%d denied)", calls, denied)
+	} else {
+		calls += " a look"
+	}
+	return calls + " · Alt+R for recorded calls"
 }
 
 func (m *model) appendSavedTranscript(item turn.TranscriptMessage) {
@@ -1348,6 +1389,18 @@ func followViewport(v *viewport.Model, width, height int, content string, forceB
 	}
 }
 
+// yoloFrame reports whether every call in this session runs unprompted.
+func (m *model) yoloFrame() bool { return m.policy.Mode() == approval.YOLO }
+
+// frameInset is what the YOLO frame costs the layout: a column on each side
+// (half of it is the one top row). A prompting session keeps the whole terminal.
+func (m *model) frameInset() int {
+	if m.yoloFrame() {
+		return 2
+	}
+	return 0
+}
+
 func (m *model) chatVisibleLines() int {
 	// An empty footer or popup occupies no row at all; the input and the status
 	// row always occupy at least one.
@@ -1359,7 +1412,7 @@ func (m *model) chatVisibleLines() int {
 		return rows(text)
 	}
 	chrome := lipgloss.Height(m.tabStrip()) + optional(m.modeBanner()) + optional(m.footer()) + optional(m.completion.view()) + max(1, rows(m.inputArea())) + rows(m.statusRow())
-	return max(1, m.height-chrome)
+	return max(1, m.height-m.frameInset()/2-chrome)
 }
 
 func (m *model) showHelp() (*model, tea.Cmd) {

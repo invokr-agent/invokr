@@ -2,11 +2,13 @@ package agentui
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/invokr-ai/invokr/platform/events"
 	"github.com/invokr-ai/invokr/platform/turn"
 	"github.com/invokr-ai/invokr/surface/ui"
@@ -34,6 +36,7 @@ type message struct {
 	// in place from running -> done/failed.
 	toolID, toolName, toolArgs string
 	toolStatus                 toolStatus
+	restored                   bool // rebuilt from a saved session on resume
 	// toolProgressLine is the latest incremental status a running tool
 	// reported (EventToolProgress); shown beside the live elapsed.
 	toolProgressLine    string
@@ -44,6 +47,10 @@ type message struct {
 	// toolDiff is the unified diff of an applied edit, rendered under the tool
 	// line so ordinary edits are visible without an approval prompt.
 	toolDiff string
+	// editFile is an applied edit's whole file before and after, so its diff
+	// numbers lines by their place in the file. Empty when it could not be
+	// rebuilt; the diff then falls back to the patch fragments.
+	editFile patchSection
 	// toolOutput is the recorded result as the model saw it (capped upstream).
 	// Per-tool renderers show a tail of it collapsed, all of it expanded.
 	toolOutput string
@@ -78,8 +85,52 @@ func (c *chatLog) Append(msg message) {
 	c.messages = append(c.messages, msg)
 }
 
+// insertAboveRunning places an approval decision just above the running block
+// of the tool it decides, so it reads before that tool's output rather than
+// after it; with no such block it is appended.
+func (c *chatLog) insertAboveRunning(tool string, msg message) {
+	i := slices.IndexFunc(c.messages, func(m message) bool {
+		return m.role == "tool" && m.toolName == tool && m.toolStatus == toolRunning
+	})
+	if i < 0 {
+		c.Append(msg)
+		return
+	}
+	c.nextID, msg.id = c.nextID+1, c.nextID+1
+	c.messages = slices.Insert(c.messages, i, msg)
+}
+
+// appendTranscript replays a saved message the way the live turn looked: the
+// turn's tool calls as settled blocks (collapsed), then the answer text alone.
+// The history ledger stays behind Alt+R; failure details and outcome counts
+// are bookkeeping for the model, not transcript.
 func (c *chatLog) appendTranscript(item turn.TranscriptMessage) {
-	c.Append(message{role: item.Role, text: turn.AppendHistoricalExecution(turn.AppendToolOutcomeGuard(item.Text, item.ToolCalls), item.ExecutionEvidence)})
+	if item.Role == "assistant" {
+		for _, call := range item.ExecutionEvidence {
+			c.Append(savedToolBlock(call))
+		}
+		if item.Interrupted {
+			c.Append(message{role: "tool", text: "⏹ interrupted before an answer"})
+			return
+		}
+	}
+	if item.Role != "assistant" || strings.TrimSpace(item.Text) != "" {
+		c.Append(message{role: item.Role, text: item.Text})
+	}
+}
+
+// savedToolBlock is a settled tool block rebuilt from a call's saved evidence.
+// Only a shell command is kept on disk, so other tools show their name alone.
+func savedToolBlock(call turn.ExecutionEvidence) message {
+	msg := message{role: "tool", toolID: call.CallID, toolName: call.Tool, toolStatus: toolDone, toolCode: call.Code, restored: true}
+	if call.Command != "" {
+		args, _ := json.Marshal(map[string]string{"command": call.Command})
+		msg.toolArgs = string(args)
+	}
+	if call.Outcome != "completed" {
+		msg.toolStatus = toolFailed
+	}
+	return msg
 }
 
 func (c *chatLog) Len() int { return len(c.messages) }
@@ -122,6 +173,7 @@ func (c *chatLog) ApplyEvent(ev events.Event) {
 	settled := c.messages[idx]
 	// Keep only evidence fields; full tool output stays in the transcript owner.
 	settled.toolOutput, settled.toolDiff, settled.toolError = "", "", ""
+	settled.editFile = patchSection{}
 	if prior := slices.IndexFunc(c.recordedTools, func(m message) bool { return m.id == settled.id }); prior >= 0 {
 		c.recordedTools[prior] = settled
 	} else {
@@ -172,6 +224,7 @@ func (c *chatLog) finishToolMessage(t events.ToolPayload, failed bool) int {
 		// A flagged result may not have applied, so it gets no diff.
 		msg.toolDiff = cmp.Or(appliedPatchDiff(msg.toolName, msg.toolArgs),
 			editedFileDiff(msg.toolName, msg.toolArgs))
+		msg.editFile = editedFile(msg.toolName, msg.toolArgs)
 	}
 	if idx < 0 {
 		// No running block to update (e.g. event arrived out of order); append one.
@@ -223,7 +276,7 @@ func (c *chatLog) renderMessage(i, width int, spinnerFrame string) string {
 // foldable reports whether a message is a settled tool block the user can
 // expand and collapse.
 func (m message) foldable() bool {
-	return m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
+	return m.role == "reasoning" || m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
 }
 
 // Format the latest request for the existing modal, without changing the prose.
@@ -311,14 +364,16 @@ func writeMessage(b *strings.Builder, msg message, width int, spinnerFrame strin
 			b.WriteString(renderToolBlock(msg, spinnerFrame, width))
 			return
 		}
-		// Non-block tool lines (approval requests/decisions) keep plain text.
+		// Non-block tool lines are invokr's own notices (approval decisions,
+		// mode changes, command feedback): a marker and their own colour keep
+		// them apart from both the model's thinking and its answer.
+		style := ui.Invokr.Notice
 		if strings.HasPrefix(msg.text, "approval denied") {
-			b.WriteString(ui.Invokr.Danger.Render(wrapText(msg.text, width)))
-		} else {
-			b.WriteString(ui.Invokr.Muted.Render(wrapText(msg.text, width)))
+			style = ui.Invokr.Danger
 		}
+		b.WriteString(style.Render("• " + strings.ReplaceAll(wrapText(msg.text, width-2), "\n", "\n  ")))
 	case "reasoning":
-		b.WriteString(ui.Invokr.Muted.Italic(true).Render(indentBlock(wrapText(msg.text, width-len(answerIndent)), answerIndent)))
+		b.WriteString(renderThinkingBlock(msg.text, width, msg.expanded))
 	case "error":
 		b.WriteString(ui.Invokr.Danger.Render("error: ") + wrapText(msg.text, width-7))
 	}
@@ -366,3 +421,31 @@ func (c *chatLog) noteStreamRetry() {
 }
 
 const streamRetryLine = "reply cut off · retrying"
+
+// renderThinkingBlock sets reasoning behind a gutter and a "thinking" label, so
+// in a long turn the narration between tool calls is never mistaken for the
+// answer, which keeps the plain indent.
+func renderThinkingBlock(text string, width int, expanded bool) string {
+	// The gutter belongs to the thinking itself: drawn in the frame colour it
+	// reads as panel chrome, unconnected to the reasoning it wraps.
+	gutter := ui.Invokr.Thinking.Render(thinkingGutter)
+	// Laid out as markdown (lists, code, no stray backticks), then dimmed as
+	// one: thinking is read past, so it takes no colours of its own.
+	body := ansi.Strip(renderMarkdown(strings.TrimSpace(text), max(10, width-len(answerIndent)-len([]rune(thinkingGutter)))))
+	// Blank lines between paragraphs are dropped: the gutter already sets the
+	// block apart, and a folded preview should spend its rows on text.
+	lines := slices.DeleteFunc(strings.Split(body, "\n"), func(line string) bool { return strings.TrimSpace(line) == "" })
+	// Long thinking folds like tool output: a few lines, then a count that
+	// alt+x or a click on the label expands.
+	if hidden := len(lines) - thinkingPreviewLines; hidden > 0 && !expanded {
+		lines = append(lines[:thinkingPreviewLines:thinkingPreviewLines], fmt.Sprintf("▸ %d more lines", hidden))
+	}
+	for i, line := range lines {
+		lines[i] = answerIndent + gutter + ui.Invokr.Thinking.Render(line)
+	}
+	return answerIndent + ui.Invokr.Muted.Render("thinking") + "\n" + strings.Join(lines, "\n")
+}
+
+const thinkingGutter = "│ "
+
+const thinkingPreviewLines = 4
