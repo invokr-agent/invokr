@@ -40,7 +40,7 @@ Details that matter:
   `turn.AppendToolOutcomeGuard` so model prose can't misreport what happened.
 - **Repeat guard.** Fires after 3 identical tool-call turn signatures, an
   A/B/A/B alternation, or 3 identical failure signatures; appends a
-  user-role nudge prefixed `[invokr internal retry]`. The nudge is stripped
+  user-role nudge prefixed `[Continuing your task above]`. The nudge is stripped
   from history the next turn (or before returning) so it never pollutes
   transcripts or compaction summaries.
 - **Graceful exhaustion.** At the turn limit the runner makes one

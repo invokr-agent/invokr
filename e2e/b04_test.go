@@ -41,7 +41,7 @@ func TestB04_RepeatGuardNonConsecutive(t *testing.T) {
 		}
 		// The nudge is an internal message to the model; it must never reach
 		// the user's transcript.
-		if strings.Contains(got.Resp.Message, "[invokr internal retry]") {
+		if strings.Contains(got.Resp.Message, "[Continuing your task above]") {
 			t.Fatalf("internal nudge leaked into the answer: %q", got.Resp.Message)
 		}
 		if got.Resp.Message != "b04-done" {

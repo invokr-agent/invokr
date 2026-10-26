@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/invokr-ai/invokr/capability/approval"
 	"github.com/invokr-ai/invokr/platform/events"
@@ -42,10 +43,13 @@ type Params struct {
 	SyntaxTheme string
 	// NotifyMode is config's ui.notify. A mode picked in the settings View tab
 	// shadows it.
-	NotifyMode  string
-	Transcript  []turn.TranscriptMessage
-	In          io.Reader
-	Out, ErrOut io.Writer
+	NotifyMode string
+	Transcript []turn.TranscriptMessage
+	// RecordInterrupted saves a prompt the user stopped before it answered,
+	// so a resumed session can show it. Nil skips it (plain and test paths).
+	RecordInterrupted func(sessionID, prompt string)
+	In                io.Reader
+	Out, ErrOut       io.Writer
 }
 
 func validateRunArgs(p Params) error {
@@ -84,9 +88,14 @@ func Run(ctx context.Context, p Params) error {
 	for _, item := range p.Transcript {
 		uiModel.appendSavedTranscript(item)
 	}
+	if slices.ContainsFunc(p.Transcript, func(item turn.TranscriptMessage) bool { return item.Role == "user" }) {
+		// A session's mode is not saved, so a resume says which one it runs in.
+		uiModel.chatLog.Append(message{role: "tool", text: "resumed in " + string(uiModel.policy.Mode()) + " mode (the earlier mode is not saved; shift+tab changes it)"})
+	}
 	if p.ServerNotice != "" {
 		uiModel.chatLog.Append(message{role: "error", text: p.ServerNotice})
 	}
+	uiModel.recordInterrupted = p.RecordInterrupted
 	uiModel.grants = p.Grants
 	uiModel.prefsPath = prefsPath(p.PrefsDir)
 	saved := loadPrefs(uiModel.prefsPath)

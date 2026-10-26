@@ -59,8 +59,10 @@ func executeRead(ctx context.Context, root string, args readArgs) (string, error
 	}
 }
 
+// git_read only reads, so it runs through gitProbe: the repository mounted
+// read-only, nothing writable to seal, and so no approval prompt in Auto.
 func textResult(ctx context.Context, root string, args ...string) (string, error) {
-	out, err := gitText(ctx, root, args...)
+	out, err := gitProbe(ctx, root, args...)
 	if err != nil {
 		return "", err
 	}
@@ -96,11 +98,11 @@ func diffArgs(args readArgs) []string {
 // for the model while the TUI still receives the full text.
 func diffEnvelope(ctx context.Context, root string, argv []string) (string, error) {
 	statArgv := append([]string{argv[0], "--stat"}, argv[1:]...)
-	stat, err := gitText(ctx, root, statArgv...)
+	stat, err := gitProbe(ctx, root, statArgv...)
 	if err != nil {
 		return "", err
 	}
-	diff, err := gitText(ctx, root, argv...)
+	diff, err := gitProbe(ctx, root, argv...)
 	if err != nil {
 		return "", err
 	}

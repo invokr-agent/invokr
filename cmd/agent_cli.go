@@ -53,12 +53,13 @@ func NewAgentCmd(services ServicesProvider) *cobra.Command {
 				Session: session, Commands: runtimeServices.Commands, ServerNotice: runtimeServices.ServerProblem,
 				EventBus: runtimeServices.Events, Approvals: approvals, Grants: runtimeServices.Grants,
 				Logs: runtimeServices.Logs, LogView: runtimeServices.LogView,
-				PromptHistory: runtimeServices.PromptHistory,
-				PrefsDir:      runtimeServices.App.Memory.Dir,
-				SyntaxTheme:   runtimeServices.App.UI.SyntaxTheme,
-				NotifyMode:    runtimeServices.App.UI.Notify,
-				Transcript:    transcript,
-				In:            cmd.InOrStdin(), Out: cmd.OutOrStdout(), ErrOut: cmd.ErrOrStderr(),
+				PromptHistory:     runtimeServices.PromptHistory,
+				PrefsDir:          runtimeServices.App.Memory.Dir,
+				SyntaxTheme:       runtimeServices.App.UI.SyntaxTheme,
+				NotifyMode:        runtimeServices.App.UI.Notify,
+				Transcript:        transcript,
+				RecordInterrupted: interruptRecorder(cmd.Context(), runtimeServices),
+				In:                cmd.InOrStdin(), Out: cmd.OutOrStdout(), ErrOut: cmd.ErrOrStderr(),
 			})
 		},
 	}
@@ -98,6 +99,23 @@ func runAgentSessions(ctx context.Context, services appruntime.Services, params 
 		params.Session, params.Approvals, params.Commands = next.Session, next.Approvals, next.Commands
 		params.Grants = next.Grants
 		params.Transcript = []turn.TranscriptMessage{{Role: "tool", Text: "new session started — saved history and memory kept"}}
+	}
+}
+
+// interruptRecorder saves a prompt the user stopped before it was answered,
+// with an interrupted marker, so a resumed session shows it rather than
+// dropping it: the store is otherwise written only when a turn answers.
+func interruptRecorder(ctx context.Context, services appruntime.Services) func(sessionID, prompt string) {
+	return func(sessionID, prompt string) {
+		store := sessionstore.NewForWorkspace(services.App.Memory.Dir, services.App.Workspace.Root, services.Logger)
+		ctx := context.WithoutCancel(ctx)
+		_, err := store.Append(ctx, sessionID, "user", prompt)
+		if err == nil {
+			_, err = store.AppendInterrupted(ctx, sessionID, "assistant", "", sessionstore.ToolRecord{})
+		}
+		if err != nil {
+			services.Logger.Warn("session store: could not save the interrupted prompt", zap.Error(err))
+		}
 	}
 }
 
@@ -201,7 +219,7 @@ func attachStoredTranscript(services appruntime.Services, sessionID string, stor
 		return nil, nil, nil, err
 	}
 	transcript := toolcore.MapSlice(stored, func(item sessionstore.Message) turn.TranscriptMessage {
-		return turn.TranscriptMessage{Role: item.Role, Text: item.Text,
+		return turn.TranscriptMessage{Role: item.Role, Text: item.Text, Interrupted: item.Interrupted,
 			ToolCalls: item.ToolCalls, ToolCallCount: item.ToolCallCount, ExecutionEvidence: item.ExecutionEvidence}
 	})
 	resumer, ok := session.(turn.TranscriptResumer)

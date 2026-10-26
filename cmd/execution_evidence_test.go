@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 
@@ -14,7 +15,7 @@ func TestExecFlagsAreSeparateAndStrictExitIsOptional(t *testing.T) {
 	resp := turn.AgentResponse{Message: "Tests passed", ExecutionEvidence: []turn.ExecutionEvidence{{CallID: "check", Tool: "shell", Command: "false | cat", Cwd: ".", Outcome: "flagged", Code: "exit 1", ExitCode: &exit, Freshness: "current"}}}
 	for _, strict := range []bool{false, true} {
 		var out bytes.Buffer
-		err := completeExecResponse(&out, "s1", "model", resp, execOptions{jsonOutput: true, failOnToolError: strict})
+		err := completeExecResponse(&out, io.Discard, "s1", "model", resp, execOptions{jsonOutput: true, failOnToolError: strict})
 		if (err != nil) != strict {
 			t.Fatalf("strict=%v err=%v", strict, err)
 		}
@@ -26,11 +27,15 @@ func TestExecFlagsAreSeparateAndStrictExitIsOptional(t *testing.T) {
 			t.Fatalf("changed text/hard failures or missing flagged evidence: %s", out.String())
 		}
 	}
-	var out bytes.Buffer
-	if err := completeExecResponse(&out, "s1", "model", resp, execOptions{}); err != nil {
+	var out, errOut bytes.Buffer
+	if err := completeExecResponse(&out, &errOut, "s1", "model", resp, execOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "Execution history — not final task status") || !strings.Contains(out.String(), "does not establish full task verification") || !strings.Contains(out.String(), "exit=1") {
-		t.Fatalf("missing guard: %s", out.String())
+	// stdout is the answer alone; the guard goes to stderr (A2).
+	if strings.TrimSpace(out.String()) != "Tests passed" {
+		t.Fatalf("stdout carries more than the answer: %q", out.String())
+	}
+	if !strings.Contains(errOut.String(), "Execution history — not final task status") || !strings.Contains(errOut.String(), "does not establish full task verification") || !strings.Contains(errOut.String(), "exit=1") {
+		t.Fatalf("missing guard on stderr: %s", errOut.String())
 	}
 }

@@ -142,7 +142,7 @@ func assertCompactionDiskResume(t *testing.T, dir, request string) {
 		t.Fatal(err)
 	}
 	sent := gateway.beginCalls[0].History
-	for _, want := range []string{request, "Work recorded", "historical", "completed:1", "failed:1", "denied"} {
+	for _, want := range []string{request, "Work recorded", "historical", "1 completed", "1 failed", "denied"} {
 		if !requestsContainMessage([][]inference.Message{sent}, want) {
 			t.Fatalf("resumed request lost %q: %+v", want, sent)
 		}

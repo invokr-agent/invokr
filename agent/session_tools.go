@@ -466,7 +466,9 @@ func (p *TurnProcessor) handleToolError(ctx context.Context, turn int, id, label
 		return output, rawHash, nil
 	}
 
-	p.logger.Warn(label+" failed", zap.Int("turn", turn), zap.String("tool", call.Name), zap.Duration("duration", duration), zap.Error(err))
+	// Info, not Warn: the failure already reaches the user as a tool event, and
+	// a zap line at the default level repeated it on exec's stderr (A3).
+	p.logger.Info(label+" failed", zap.Int("turn", turn), zap.String("tool", call.Name), zap.Duration("duration", duration), zap.Error(err))
 	kind, detail, code := turnpkg.OutcomeKindError, err.Error(), ""
 	if isToolErr && toolErr != nil {
 		code = toolErr.Code

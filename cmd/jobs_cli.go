@@ -64,7 +64,7 @@ func newJobsAddCmd(app *config.AppConfig) *cobra.Command {
 	cmd.Flags().StringVar(&schedule, "schedule", "", "When to run, as a 5-field cron expression, e.g. \"0 3 * * *\" (required)")
 	cmd.Flags().StringVar(&prompt, "prompt", "", "Prompt sent to the agent on every run (required)")
 	// Named to match exec's --allow/--allow-all: one concept, one spelling.
-	cmd.Flags().StringSliceVar(&allowTiers, "allow", nil, "Auto-approve one tool tier on every run, repeatable; \"read-only\" covers the read-only workspace tiers")
+	cmd.Flags().StringSliceVar(&allowTiers, "allow", nil, "Auto-approve one tier on every run, repeatable: read-only, tests (test runs only), write, network")
 	cmd.Flags().BoolVar(&allowAll, "allow-all", false, "Auto-approve every tool call on every run — unattended arbitrary code execution")
 	_ = cmd.MarkFlagRequired("schedule")
 	_ = cmd.MarkFlagRequired("prompt")

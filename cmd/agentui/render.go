@@ -236,6 +236,9 @@ func settledToolLine(m message, width int) string {
 // sub-block below rather than being crammed into brackets here.
 func toolTrailing(m message, state toolStatus) string {
 	dur := formatDuration(m.toolDuration)
+	if m.restored { // a resumed call has no saved timing
+		dur = "earlier"
+	}
 	switch {
 	case isCancelledTool(m):
 		return dur + " · cancelled"
@@ -566,7 +569,7 @@ func renderQueueNeighbour(req approval.Request, width int) string {
 
 // approvalSubjectLines is how many lines of the command the collapsed row
 // spends before deferring to the details view.
-const approvalSubjectLines = 3
+const approvalSubjectLines = 6
 
 // elideSubject breaks a command line at its pipeline boundaries so a long
 // pipeline reads as one stage per line instead of wrapping mid-token, then

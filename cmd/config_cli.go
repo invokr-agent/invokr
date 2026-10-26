@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"slices"
 	"time"
 
@@ -17,16 +18,19 @@ func NewConfigCmd(app *config.AppConfig) *cobra.Command {
 	configCmd := &cobra.Command{
 		Use:     "config",
 		Short:   "Show effective configuration and switch profiles",
-		Long:    "The effective config is what Invokr actually runs with: the file at\n~/.invokr/config.json, overlaid with INVOKR_* environment variables\nand the flags on this invocation. Run bare, it prints that, secrets\nredacted.\n\nA profile can set provider, model, prompt, tools, and mode. `profiles` lists\nthem and `use` switches which is active, writing the choice back to the config\nfile so it outlives the process.",
-		Example: "  invokr config                  # effective config, secrets redacted\n  invokr config profiles         # configured profiles, active one marked *\n  invokr config use anthropic",
+		Long:    "The effective config is what Invokr actually runs with: the file at\n~/.invokr/config.json, overlaid with INVOKR_* environment variables\nand the flags on this invocation. Run bare, it prints a summary of the\nsettings people look for; --json prints all of it, secrets redacted.\n\nA profile can set provider, model, prompt, tools, and mode. `profiles` lists\nthem and `use` switches which is active, writing the choice back to the config\nfile so it outlives the process.",
+		Example: "  invokr config                  # summary: provider, model, mode, paths\n  invokr config --json           # the full effective config, secrets redacted\n  invokr config profiles         # configured profiles, active one marked *\n  invokr config use anthropic",
 		GroupID: groupConfigure,
 	}
-	configCmd.AddCommand(&cobra.Command{
+	show := &cobra.Command{
 		Use:   "show",
-		Short: "Print effective configuration with secrets redacted",
-		Long:  "File, then INVOKR_* environment overrides, then this invocation's flags — as JSON.",
+		Short: "Summarise the effective configuration; --json for all of it",
+		Long:  "File, then INVOKR_* environment overrides, then this invocation's flags.\nBare, a summary; --json, the whole thing with secrets redacted.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if asJSON, _ := cmd.Flags().GetBool("json"); !asJSON {
+				return renderConfigSummary(cmd.OutOrStdout(), app)
+			}
 			v, err := readableDurations(app.Redacted())
 			if err != nil {
 				return err
@@ -35,9 +39,37 @@ func NewConfigCmd(app *config.AppConfig) *cobra.Command {
 			encoder.SetIndent("", "  ")
 			return encoder.Encode(v)
 		},
-	})
+	}
+	show.Flags().Bool("json", false, "Print the full effective config as JSON, secrets redacted")
+	configCmd.AddCommand(show)
 	useDefaultSubcommand(configCmd, "show", newProfilesCmd(app), newUseProfileCmd(app))
 	return configCmd
+}
+
+// renderConfigSummary is the bare `invokr config`: the handful of settings
+// people look for, one per line, instead of the whole document.
+func renderConfigSummary(out io.Writer, app *config.AppConfig) error {
+	home := config.InvokrHomeDir()
+	rows := [][2]string{
+		{"provider", app.Provider.BaseURL},
+		{"model", cmp.Or(app.Provider.Model, "(first model the server lists)")},
+		{"profile", cmp.Or(app.Profile, "(none)")},
+		{"mode", cmp.Or(app.SessionMode, "manual")},
+		{"home", home},
+		{"config", filepath.Join(home, "config.json")},
+		{"skills", app.Skills.Dir},
+		{"agents", app.Agents.Dir},
+		{"toolbox", app.Toolbox.Dir},
+		{"log level", app.Log.Level},
+	}
+	r := newRenderer(out)
+	for _, row := range rows {
+		if _, err := fmt.Fprintf(out, "%-10s %s\n", r.muted(row[0]), row[1]); err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintln(out, r.muted("\ninvokr config --json for every setting"))
+	return err
 }
 
 // readableDurations swaps the config's time.Duration fields (raw nanoseconds

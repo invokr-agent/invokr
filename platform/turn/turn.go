@@ -32,6 +32,8 @@ type TranscriptMessage struct {
 	// ToolCalls is the persisted outcome ledger for the turn (ADR 0001).
 	ToolCalls     []ToolOutcome
 	ToolCallCount int
+	// Interrupted marks a turn stopped before it answered.
+	Interrupted bool
 }
 
 type TranscriptResumer interface {
@@ -87,7 +89,10 @@ func AppendToolOutcomeGuard(message string, failures []ToolOutcome) string {
 	}
 	out.WriteString("[Tool attempt failures — history, not final task status]\n")
 	for _, failure := range failures {
-		fmt.Fprintf(&out, "- %s %s: %s\n", toolOutcomeName(failure.Tool), failure.Kind, failure.Detail)
+		// The first line says what failed; the rest is usually format help
+		// (apply_patch's template) that reads as content when replayed.
+		detail, _, _ := strings.Cut(failure.Detail, "\n")
+		fmt.Fprintf(&out, "- %s %s: %s\n", toolOutcomeName(failure.Tool), failure.Kind, detail)
 	}
 	return strings.TrimSpace(out.String())
 }

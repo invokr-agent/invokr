@@ -119,7 +119,7 @@ func approveSeals(ctx context.Context, missing []missingSeal) error {
 	paths := core.MapSlice(missing, func(m missingSeal) string { return m.Path })
 	req := approval.CallRequest(ctx)
 	req.Protected, req.Confined, req.Writes, req.ReadOnly = true, true, true, false
-	req.Summary = "Run with unsealed protected names"
+	req.Summary = "Let this command create protected paths (.git hooks or config, .invokr) that do not exist yet"
 	req.Details = "These paths do not exist and cannot be sealed. This process and its children could create or modify them:\n" + strings.Join(paths, "\n")
 	handled, err := approval.Authorize(ctx, nil, req, true)
 	if !handled {
