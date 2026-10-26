@@ -28,6 +28,7 @@ def snap(path, font, cell_w, cell_h):
     screen = record.Screen(record.COLS, record.ROWS)
     record.Stream(screen).feed(text.replace("\n", "\r\n").encode())
     record.draw(record.snapshot(screen), font, cell_w, cell_h).save(path[:-4] + ".png")
+    os.remove(path)  # the raw terminal output is only the renderer's input
 
 
 def main():
