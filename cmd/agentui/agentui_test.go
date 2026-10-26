@@ -1820,7 +1820,7 @@ func TestModel_PendingApprovalClearIsRefused(t *testing.T) {
 	waitForQueueLen(t, queue, 1)
 	defer func() {
 		queue.DecideAll(approval.Decision{Approved: false, Reason: "test cleanup"})
-		<-done
+		<-done //nolint:errcheck // cleanup drain; result irrelevant
 	}()
 
 	m.input.SetValue("/clear")

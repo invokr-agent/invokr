@@ -148,7 +148,7 @@ func invokeDaemon(ctx context.Context, dp *daemonProcess, reqBytes []byte) (stri
 		return text, err
 	case <-ctx.Done():
 		dp.kill()
-		<-ch // drain the scanner goroutine before releasing the lock
+		<-ch //nolint:errcheck // drain the scanner goroutine before releasing the lock
 		return "", fmt.Errorf("daemon invoke: %w", ctx.Err())
 	}
 }
