@@ -75,7 +75,7 @@ func defaultKeyMap(showViewSwitch bool) keyMap {
 }
 
 func (k keyMap) ShortHelp() []key.Binding {
-	bindings := []key.Binding{k.Submit, k.Newline, k.Recorded, k.FocusTranscript, k.Help}
+	bindings := []key.Binding{k.Submit, k.Newline, k.FocusTranscript, k.Help}
 	if k.SwitchView.Enabled() {
 		bindings = append(bindings, k.SwitchView)
 	}

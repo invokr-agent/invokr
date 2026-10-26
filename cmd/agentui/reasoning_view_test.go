@@ -89,11 +89,11 @@ func TestLongThinkingFolds(t *testing.T) {
 func TestApprovalNoticeGoesAboveItsTool(t *testing.T) {
 	var c chatLog
 	c.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &events.ToolPayload{ID: "1", Name: "shell"}})
-	c.insertAboveRunning("shell", message{role: "tool", text: "approval granted: shell"})
+	c.insertAboveRunning("shell", message{role: "tool", text: "approval granted: shell"}, nil)
 	if c.Len() != 2 || c.messages[0].text != "approval granted: shell" || c.messages[1].toolName != "shell" {
 		t.Fatalf("messages = %+v, want the notice above the shell block", c.messages)
 	}
-	c.insertAboveRunning("edit", message{role: "tool", text: "approval granted: edit"})
+	c.insertAboveRunning("edit", message{role: "tool", text: "approval granted: edit"}, nil)
 	if c.messages[2].text != "approval granted: edit" {
 		t.Fatal("with no running block the notice is appended")
 	}

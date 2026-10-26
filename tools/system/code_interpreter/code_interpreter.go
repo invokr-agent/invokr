@@ -121,6 +121,11 @@ func RegisterCodeInterpreterTool(registrar core.NativeRegistrar, deps core.Calle
 			decision := approvePrepared(p)
 			if req := decision.Request; req != nil {
 				req.Subject = "sha256:" + p.codeHash
+				// The hash is what a grant matches; the person approving reads the code.
+				req.GrantPattern = req.Subject
+				first, _, _ := strings.Cut(strings.TrimSpace(p.args.Code), "\n")
+				req.Summary = "Run Python: " + first
+				req.Details = "Code:\n" + p.args.Code + "\n\n" + req.Details
 				req.Paths = core.MapSlice(p.outputs, func(out resolvedOutput) string { return wsp.DisplayPath(out.AbsPath) })
 				req.Confined = p.cfg.Backend == constants.CodeInterpreterBackendContainer || sandbox.Available()
 				req.Network = p.cfg.ContainerNetwork

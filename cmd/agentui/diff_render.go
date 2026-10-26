@@ -166,7 +166,7 @@ func renderDiffSections(sections []patchSection, raw string, width, maxLines int
 	budget := maxLines
 	for i, s := range sections {
 		if maxLines > 0 && budget <= 0 {
-			out = append(out, foldIndicator(len(sections)-i, width)+" "+ui.Invokr.Muted.Render("(files)"))
+			out = append(out, "    "+ui.Invokr.Muted.Render(fmt.Sprintf("▸ %d more file(s)", len(sections)-i)))
 			break
 		}
 		block := renderPatchSection(s, width, budget)

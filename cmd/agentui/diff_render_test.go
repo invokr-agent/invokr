@@ -62,11 +62,11 @@ func TestRenderPatchDiffCapsAndFolds(t *testing.T) {
 	if !strings.Contains(got, "more line") {
 		t.Fatalf("capped diff shows no truncation tail:\n%s", got)
 	}
-	if !strings.Contains(got, "▸ 1 more lines (files)") {
+	if !strings.Contains(got, "▸ 1 more file(s)") {
 		t.Fatalf("second file not folded behind an indicator:\n%s", got)
 	}
 	full := ansi.Strip(renderPatchDiff(b.String(), 80, 0))
-	if !strings.Contains(full, "second.go") || strings.Contains(full, "(files)") {
+	if !strings.Contains(full, "second.go") || strings.Contains(full, "more file") {
 		t.Fatalf("uncapped render still folded:\n%s", full)
 	}
 }

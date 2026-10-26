@@ -163,3 +163,27 @@ func TestEvidenceOverlayDoesNotStealApprovalAndPlainKeepsGuard(t *testing.T) {
 		t.Fatalf("plain overlay command lied: %q, %v", got, ok)
 	}
 }
+
+// TestRecordedWarningKeepsKeyHints: a turn's warning leads the footer but the
+// key hints stay beside it rather than vanishing until the next turn.
+func TestRecordedWarningKeepsKeyHints(t *testing.T) {
+	m := newTestModelWithHiddenLogs()
+	m.width = 160
+	m.recordedWarning = "1 call needs a look · Alt+R for recorded calls"
+	if footer := ansi.Strip(m.helpHint()); !strings.Contains(footer, "Alt+R") || !strings.Contains(footer, "send") {
+		t.Fatalf("footer = %q, want the warning and the key hints", footer)
+	}
+}
+
+// TestExecutionWarningCountsEachCallOnce: a failed call is in both the
+// failures and the evidence, and a denial is evidence with a denied code.
+func TestExecutionWarningCountsEachCallOnce(t *testing.T) {
+	failures := []turn.ToolOutcome{{Tool: "read"}, {Tool: "shell"}}
+	evidence := []turn.ExecutionEvidence{{Tool: "read", Outcome: "failed"}, {Tool: "shell", Outcome: "failed", Code: "denied"}, {Tool: "edit", Outcome: "completed"}}
+	if got := executionWarning(failures, evidence); !strings.HasPrefix(got, "2 calls need a look (1 denied)") {
+		t.Fatalf("warning = %q", got)
+	}
+	if got := executionWarning(failures[:1], nil); !strings.HasPrefix(got, "1 call needs a look") {
+		t.Fatalf("failures-only warning = %q", got)
+	}
+}

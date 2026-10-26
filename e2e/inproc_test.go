@@ -124,6 +124,12 @@ func runInProcWhen(t *testing.T, home testHome, providerURL, prompt string, appr
 				if !ok {
 					return
 				}
+				// Enabling an optional tool asks in Manual; the scenarios here
+				// measure the tool's own approvals, so the enable is a yes.
+				if pending.Request.Tier == "tool_enable" {
+					pending.Decide(approval.Decision{Approved: true})
+					continue
+				}
 				mu.Lock()
 				approvals = append(approvals, pending.Request)
 				mu.Unlock()

@@ -60,7 +60,7 @@ func NewCaller(deps core.CallerDeps, logger ...*zap.Logger) *Caller {
 	caller := &Caller{logger: l, specs: []core.ToolSpec{}, native: map[string]nativeEntry{}, app: deps, filter: filter}
 
 	caller.release = system.LoadSystemTools(deps, caller, l)
-	tool_search.RegisterManager(caller, caller.manageTools, caller.native["create_tool"].spec.Parameters)
+	tool_search.RegisterManager(caller, deps.Approver, caller.manageTools, caller.native["create_tool"].spec.Parameters)
 	return caller
 }
 

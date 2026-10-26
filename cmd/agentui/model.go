@@ -601,7 +601,11 @@ func (m *model) decideSelectedItem(approved bool) (tea.Model, tea.Cmd) {
 	decision, text := decisionOf(approved, "approval granted: "+item.Pending.Tool, "approval denied: "+item.Pending.Tool)
 	m.approvalQueue.Decide(item.Pending.ID, decision)
 	m.approvals.Collapse()
-	m.chatLog.insertAboveRunning(item.Pending.Tool, message{role: "tool", text: text})
+	var diff *approval.FileDiff
+	if approved {
+		diff = item.Pending.Diff
+	}
+	m.chatLog.insertAboveRunning(item.Pending.Tool, message{role: "tool", text: text}, diff)
 	m.clampQueueCursor()
 	m.syncChatViewport(true)
 	return m, nil
@@ -652,6 +656,11 @@ func grantPattern(req approval.Request) (string, error) {
 	}
 	if !req.SubjectIsPathList && approval.Compound(req.Subject) {
 		return "", errors.New("a chained or piped command can't be always-allowed; approve once with y")
+	}
+	// A path is matched whole, so "always" grants that file: the command
+	// pattern ("README.md *") would never match it.
+	if paths := strings.Fields(req.Subject); req.SubjectIsPathList && len(paths) == 1 {
+		return paths[0], nil
 	}
 	pattern, ok := approval.DerivePattern(req.Subject)
 	if !ok {
@@ -969,13 +978,19 @@ func (m *model) helpHint() string {
 	if time.Since(m.quitArmed) < quitConfirmWindow {
 		return ui.Invokr.GradientText("press ctrl+c again to exit")
 	}
-	if m.recordedWarning != "" {
-		warning := m.recordedWarning
-		if ansi.StringWidth(warning) > m.mainWidth() {
-			warning = "! " + strings.TrimSpace(strings.SplitN(warning, " · ", 2)[0]) + " · Alt+R"
-		}
-		return ui.Invokr.Warn.Render(ansi.Truncate(warning, m.mainWidth(), "…"))
+	if m.recordedWarning == "" {
+		return m.keyHints()
 	}
+	// The warning leads, and the key hints keep whatever room is left rather
+	// than vanishing until the next turn.
+	warning := m.recordedWarning
+	if ansi.StringWidth(warning) > m.mainWidth() {
+		warning = "! " + strings.TrimSpace(strings.SplitN(warning, " · ", 2)[0]) + " · Alt+R"
+	}
+	return ansi.Truncate(ui.Invokr.Warn.Render(warning)+"  "+m.keyHints(), m.mainWidth(), "…")
+}
+
+func (m *model) keyHints() string {
 	if m.focusMode {
 		return focusHint(m.keys)
 	}
@@ -1011,14 +1026,18 @@ func (m *model) showRecorded() {
 // complete cleanly: errors, denials, failures, non-zero exits ("flagged") and
 // unfinished calls, counted together in plain words. Alt+R has the breakdown.
 func executionWarning(failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {
-	n, denied := len(failures), 0
+	// Each failed call is in both lists; the evidence is the fuller one.
+	n, denied := 0, 0
 	for _, item := range evidence {
 		if item.Outcome != "completed" {
 			n++
 		}
-		if item.Outcome == "denied" {
+		if item.Outcome == "denied" || item.Code == "denied" {
 			denied++
 		}
+	}
+	if len(evidence) == 0 {
+		n = len(failures)
 	}
 	if n == 0 {
 		return ""

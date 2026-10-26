@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"github.com/invokr-ai/invokr/capability/approval"
 	"slices"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ import (
 func managementCaller(t *testing.T, dir string) *Caller {
 	t.Helper()
 	c := &Caller{native: map[string]nativeEntry{}, logger: zap.NewNop(), app: core.CallerDeps{App: config.AppConfig{Memory: config.MemoryConfig{Dir: dir}}}}
-	tool_search.RegisterManager(c, c.manageTools, nil)
+	tool_search.RegisterManager(c, nil, c.manageTools, nil)
 	for _, name := range []string{"read", "edit", "apply_patch", "optional"} {
 		c.RegisterNative(core.ToolSpec{Name: name, Description: name + " description", Parameters: map[string]any{"type": "object"}}, func(context.Context, *core.ToolCall) (string, error) { return "executed", nil })
 	}
@@ -25,7 +26,7 @@ func managementCaller(t *testing.T, dir string) *Caller {
 }
 func managerCall(t *testing.T, c *Caller, id, args string) (string, error) {
 	t.Helper()
-	return c.HandleCall(core.WithSessionID(context.Background(), id), &core.ToolCall{Name: "tools", Arguments: json.RawMessage(args)})
+	return c.HandleCall(approved(core.WithSessionID(context.Background(), id)), &core.ToolCall{Name: "tools", Arguments: json.RawMessage(args)})
 }
 func TestManagerSessionStateAndAtomicChanges(t *testing.T) {
 	dir := t.TempDir()
@@ -260,5 +261,28 @@ func TestCoreToolPolicyIsCallerScoped(t *testing.T) {
 				t.Errorf("disable policy: %v", err)
 			}
 		})
+	}
+}
+
+// approved runs a call as a YOLO session would, so "tools enable" is approved.
+func approved(ctx context.Context) context.Context {
+	ctx, _ = approval.NewPolicy(approval.YOLO, false).Begin(ctx, approval.Request{})
+	return ctx
+}
+
+// TestManagerEnableAsksInManual: the model cannot widen its own toolset in a
+// Manual session without the user's yes; Auto lets it through.
+func TestManagerEnableAsksInManual(t *testing.T) {
+	for mode, wantErr := range map[approval.Mode]bool{approval.Manual: true, approval.Auto: false} {
+		c := managementCaller(t, t.TempDir())
+		if err := c.StartToolSession("one"); err != nil {
+			t.Fatal(err)
+		}
+		ctx, done := approval.NewPolicy(mode, false).Begin(core.WithSessionID(context.Background(), "one"), approval.Request{})
+		_, err := c.HandleCall(ctx, &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"enable","names":["optional"]}`)})
+		done()
+		if (err != nil) != wantErr {
+			t.Fatalf("%s: enable err = %v, want error %v", mode, err, wantErr)
+		}
 	}
 }

@@ -630,3 +630,17 @@ func TestAllowTests(t *testing.T) {
 		t.Fatalf("DenyReason for a test run = %q", reason)
 	}
 }
+
+// An edit's "always" grants the file itself, which must store and match.
+func TestStoreMatchesExactPathGrant(t *testing.T) {
+	store := newTestStore(t)
+	g := testGrant(t, "README.md")
+	g.Tool = "edit"
+	mustAdd(t, store, g)
+	if _, ok := store.Match(Request{Tool: "edit", Subject: "README.md", SubjectIsPathList: true}); !ok {
+		t.Fatal("exact path grant did not match its file")
+	}
+	if _, ok := store.Match(Request{Tool: "edit", Subject: "README.md.bak", SubjectIsPathList: true}); ok {
+		t.Fatal("exact path grant matched another file")
+	}
+}

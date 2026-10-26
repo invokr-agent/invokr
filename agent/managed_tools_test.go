@@ -26,7 +26,7 @@ func TestManagedExecutionUsesTargetQuotaAndPolicy(t *testing.T) {
 	}
 	p := &TurnProcessor{sessionID: "s1", syntax: syntax.NewTaggedJSONSyntax(), tools: caller, logger: zap.NewNop(), quotas: map[string]int{"probe": 1}}
 	invoke := func(args string) (string, string) {
-		out, _, outcome := p.executeTool(context.Background(), 0, "id", "native tool call", &core.ToolCall{Name: "tools", Arguments: json.RawMessage(args)})
+		out, _, outcome := p.executeTool(approved(context.Background()), 0, "id", "native tool call", &core.ToolCall{Name: "tools", Arguments: json.RawMessage(args)})
 		if outcome != nil {
 			return out, outcome.Tool
 		}
@@ -66,7 +66,7 @@ func TestManagedToolsPreserveNativeBytesAndHistory(t *testing.T) {
 	if !strings.Contains(string(before), `"name":"apply_patch"`) {
 		t.Fatal("patch missing from native core")
 	}
-	ctx := core.WithSessionID(context.Background(), "s1")
+	ctx := approved(core.WithSessionID(context.Background(), "s1"))
 	for _, args := range []string{`{"action":"list"}`, `{"action":"search","query":"code_interpreter"}`, `{"action":"enable","names":["code_interpreter"]}`, `{"action":"disable","names":["code_interpreter"]}`} {
 		if _, err := caller.HandleCall(ctx, &core.ToolCall{Name: "tools", Arguments: json.RawMessage(args)}); err != nil {
 			t.Fatal(err)
@@ -151,7 +151,7 @@ func TestCompactionAppendsAuthoritativeToolState(t *testing.T) {
 	if err := caller.StartToolSession("s"); err != nil {
 		t.Fatal(err)
 	}
-	_, err := caller.HandleCall(core.WithSessionID(context.Background(), "s"), &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"enable","names":["code_interpreter"]}`)})
+	_, err := caller.HandleCall(approved(core.WithSessionID(context.Background(), "s")), &core.ToolCall{Name: "tools", Arguments: json.RawMessage(`{"action":"enable","names":["code_interpreter"]}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,4 +169,10 @@ func TestCompactionAppendsAuthoritativeToolState(t *testing.T) {
 			t.Fatal("no-op compaction appended state")
 		}
 	}
+}
+
+// approved runs a call as a YOLO session would, so "tools enable" is approved.
+func approved(ctx context.Context) context.Context {
+	ctx, _ = approval.NewPolicy(approval.YOLO, false).Begin(ctx, approval.Request{})
+	return ctx
 }
