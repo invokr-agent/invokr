@@ -60,7 +60,6 @@ type Event struct {
 // (test-bench issue #20). The user message and recalled memory blocks are
 // deliberately absent: they are per-turn and unbounded.
 type SystemPromptPayload struct {
-	// Text is the system message verbatim.
 	Text string `json:"text"`
 	// Chars is len(Text), so a reader can size the prompt without measuring.
 	Chars int `json:"chars"`
@@ -183,8 +182,6 @@ func Notice(ctx context.Context, d Dispatcher, sessionID, parentSessionID, text 
 	emit(ctx, d, Event{Type: EventNotice, SessionID: sessionID, ParentSessionID: parentSessionID, Notice: &NoticePayload{Text: text}})
 }
 
-// emit stamps event with the current time and dispatches it; a nil dispatcher
-// is a no-op.
 func emit(ctx context.Context, d Dispatcher, event Event) {
 	if d == nil {
 		return

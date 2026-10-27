@@ -21,7 +21,6 @@ type toolboxCredential struct {
 	Source string `json:"source"`
 }
 
-// validateCredentials rejects sources invokr cannot resolve.
 func validateCredentials(creds map[string]toolboxCredential) error {
 	for name, cred := range creds {
 		if cred.Source != "gh" {

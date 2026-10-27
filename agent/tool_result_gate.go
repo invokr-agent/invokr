@@ -146,7 +146,6 @@ func spillStub(full, ref string, budgetTokens int) string {
 		budgetTokens, budgetTokens*4, avgLineBytes(full), pageLines, head, omitted, tail)
 }
 
-// avgLineBytes is the mean line length of s, at least 1.
 func avgLineBytes(s string) int {
 	return max(len(s)/max(lineCount(s), 1), 1)
 }

@@ -180,7 +180,6 @@ func TestSessionLabelFallsBackToPreview(t *testing.T) {
 	}
 }
 
-// walkCommands visits every command in the tree, hidden ones included.
 func walkCommands(root *cobra.Command, visit func(*cobra.Command)) {
 	visit(root)
 	for _, child := range root.Commands() {

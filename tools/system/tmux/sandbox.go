@@ -102,7 +102,6 @@ func sandboxOpenPlan(tmuxPath string, plan preparedTmux, tmpDir string) sandbox.
 	return sandbox.DedupPlan(sb)
 }
 
-// paneShell is the shell tmux gives a pane.
 func paneShell() string { return cmp.Or(os.Getenv("SHELL"), "/bin/sh") }
 
 // awaitSession polls until the sandboxed server has published the session, so

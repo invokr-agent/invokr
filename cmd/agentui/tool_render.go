@@ -37,8 +37,6 @@ func rendererFor(name string) blockRenderer {
 	return cmp.Or(toolRenderers[name], blockRenderer(genericRenderer{}))
 }
 
-// renderSettledBlock renders a finished (done/failed) tool block through the
-// registry, honoring the block's fold state.
 func renderSettledBlock(m message, width int) string {
 	r := rendererFor(m.toolName)
 	if m.expanded {
@@ -237,13 +235,10 @@ func tailLines(text string, n int) ([]string, int) {
 	return lines[len(lines)-n:], len(lines) - n
 }
 
-// foldIndicator is the collapsed block's "there is more" marker.
 func foldIndicator(hidden, width int) string {
 	return "    " + ui.Invokr.Muted.Render(ansi.Truncate("▸ "+moreLines(hidden), max(1, width-4), "…"))
 }
 
-// withOutputBlock appends an indented, muted output block under a tool line.
-// maxLines caps it (0 = uncapped); each line is truncated to the pane width.
 func withOutputBlock(line, output string, width, maxLines int) string {
 	if output = strings.TrimRight(output, "\n"); output == "" {
 		return line
@@ -268,7 +263,6 @@ func cappedLines(text string, width, maxLines int, style func(string) string) []
 	return lines
 }
 
-// moreLines is a fold's hidden-line count: "1 more line", "3 more lines".
 func moreLines(n int) string {
 	if n == 1 {
 		return "1 more line"

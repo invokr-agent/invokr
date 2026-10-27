@@ -111,8 +111,6 @@ func (m *model) notifyPendingCmd() tea.Cmd {
 	return m.notify.approvalsPending(prev, m.lastPending)
 }
 
-// quitCmd flushes the title marker before quitting so the terminal is left as
-// it was found.
 func (m *model) quitCmd() tea.Cmd {
 	if seq := m.notify.exitSeq(); seq != "" {
 		return tea.Sequence(rawSeq(seq), tea.Quit)

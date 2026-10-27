@@ -183,7 +183,6 @@ func SetSetupFields(path, baseURL, model string, memory bool) error {
 	})
 }
 
-// SetWorkspaceReads patches workspace.reads into the raw config file.
 func SetWorkspaceReads(path, reads string) error {
 	return editRawConfig(path, true, func(raw map[string]any) error {
 		childMap(raw, "workspace")["reads"] = reads

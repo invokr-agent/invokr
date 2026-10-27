@@ -48,8 +48,6 @@ func (s chatSummarizer) Summarize(ctx context.Context, input summary.StructuredS
 	return summary.ParseMemorySummary(raw)
 }
 
-// activeModel resolves the model for a summarization call, preferring the live
-// provider selection over the configured default.
 func (s chatSummarizer) activeModel() string {
 	if s.models == nil {
 		return s.model

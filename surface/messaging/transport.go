@@ -2,7 +2,6 @@ package messaging
 
 import "context"
 
-// Inbound is a single message received from any transport.
 type Inbound struct {
 	ChatID string // opaque per-transport chat identifier
 	Sender string // display name or number; used only for logging
@@ -24,7 +23,6 @@ type Transport interface {
 	// The channel is closed when ctx is cancelled or a fatal transport error occurs.
 	Listen(ctx context.Context) (<-chan Inbound, error)
 
-	// Send delivers text to the given chat.
 	Send(ctx context.Context, chatID string, text string) error
 
 	// AskApproval presents an approval request to the given chat and waits

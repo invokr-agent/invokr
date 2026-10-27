@@ -72,8 +72,6 @@ func versionBadge(stamp, update string) string {
 	return stamp + " · " + ui.Invokr.Muted.Render("run invokr update "+update)
 }
 
-// buildVersion is the badge text, including the update hint when the checker
-// reports a newer release than this build.
 func buildVersion() string {
 	return versionBadge(versionStamp(), version.LatestVersion())
 }
@@ -539,8 +537,6 @@ func approvalDetailPage(req approval.Request, offset, width int) []string {
 	return lines
 }
 
-// cappedDiffPreview is the first approvalDetailHeight rows of a proposed
-// diff, with a hint to page through the rest in the details view.
 func cappedDiffPreview(diff []string, width int) []string {
 	if len(diff) <= approvalDetailHeight {
 		return diff

@@ -18,10 +18,8 @@ import (
 type Profile struct {
 	Name string `json:"-" yaml:"-"`
 	// Provider names a router provider id; requires a configured router table.
-	Provider *string `json:"provider" yaml:"provider"`
-	// Model overrides the model id.
-	Model *string `json:"model" yaml:"model"`
-	// Temperature overrides the sampling temperature.
+	Provider    *string  `json:"provider" yaml:"provider"`
+	Model       *string  `json:"model" yaml:"model"`
 	Temperature *float64 `json:"temperature" yaml:"temperature"`
 	// SystemPrompt is the markdown body. Empty keeps the base prompt.
 	SystemPrompt string `json:"system_prompt" yaml:"-"`
@@ -31,7 +29,6 @@ type Profile struct {
 	Mode *string `json:"mode" yaml:"mode"`
 }
 
-// ProfilesDir is where Markdown and JSON profiles live inside an Invokr home.
 func ProfilesDir(homeDir string) string { return filepath.Join(homeDir, constants.ProfilesDirName) }
 
 // LoadProfile reads a Markdown or JSON profile. Markdown wins on a name collision.

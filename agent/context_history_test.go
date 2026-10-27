@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// exchange is one assistant tool call plus its result.
 func exchange(id, tool, args, result string) []inference.Message {
 	return []inference.Message{
 		inference.AssistantMessage("", inference.ToolCall{ID: id, Name: tool, Arguments: args}),

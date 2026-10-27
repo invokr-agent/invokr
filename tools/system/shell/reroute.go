@@ -281,7 +281,6 @@ func gitFlags(req *gitReadArgs, flags []string) bool {
 	return map[string]bool{"status": bare, "branch": bare, "log": oneline, "diff": true, "show": true}[req.Op]
 }
 
-// rmFile maps `rm FILE`: one file, no flags, deleted through edit.
 func rmFile(args []string, path pather) (string, any, bool) {
 	if len(args) != 1 {
 		return "", nil, false

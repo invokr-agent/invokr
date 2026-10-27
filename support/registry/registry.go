@@ -18,13 +18,11 @@ func NewMap[T any](defs map[string]T) *Map[T] {
 	return &Map[T]{defs: maps.Clone(defs)}
 }
 
-// Get returns the definition registered under name, if any.
 func (m *Map[T]) Get(name string) (T, bool) {
 	d, ok := m.defs[name]
 	return d, ok
 }
 
-// Names returns all registered names, sorted, in an independent slice.
 func (m *Map[T]) Names() []string {
 	return slices.Sorted(maps.Keys(m.defs))
 }

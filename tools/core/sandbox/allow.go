@@ -8,5 +8,4 @@ import "os"
 // already the boundary) uses to say host execution is acceptable here.
 const AllowUnsandboxedEnv = "INVOKR_TOOLBOX_ALLOW_UNSANDBOXED"
 
-// AllowUnsandboxed reports whether that opt-out is set.
 func AllowUnsandboxed() bool { return os.Getenv(AllowUnsandboxedEnv) == "1" }

@@ -222,7 +222,6 @@ func (w *tailWriter) String() string {
 	return string(w.buf)
 }
 
-// parseDaemonResponse decodes the newline-delimited JSON response from the daemon.
 func parseDaemonResponse(toolName, raw string) (string, error) {
 	var result toolboxResult
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {

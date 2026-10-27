@@ -10,7 +10,6 @@ import (
 	"github.com/invokr-ai/invokr/support/testutil/providertest"
 )
 
-// patchCall scripts one explicit apply_patch tool call.
 func patchCall(id, patch string) providertest.CompletionStep {
 	return providertest.NativeToolCallStep(id, "apply_patch", map[string]any{"patch": patch})
 }

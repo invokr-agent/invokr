@@ -113,13 +113,10 @@ func (r renderer) when(at time.Time) string {
 	return tuikit.Age(at, time.Now())
 }
 
-// addJSONFlag registers the --json flag every listing command shares; emit
-// reads it.
 func addJSONFlag(cmd *cobra.Command) {
 	cmd.Flags().Bool("json", false, "Emit machine-readable JSON instead of a table")
 }
 
-// emit encodes v as JSON under --json, and otherwise calls table.
 func emit(cmd *cobra.Command, v any, table func() error) error {
 	if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
 		return json.NewEncoder(cmd.OutOrStdout()).Encode(v)

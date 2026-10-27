@@ -264,8 +264,6 @@ func (p Policy) ResolveWrite(path string) (string, error) {
 	return resolved, nil
 }
 
-// underRoot reports whether an already-cleaned absolute path is root itself or
-// sits beneath it.
 func underRoot(path, root string) bool {
 	return path == root || strings.HasPrefix(path, root+string(os.PathSeparator))
 }
@@ -292,7 +290,6 @@ func relInsideAny(roots []string, abs, fallback string) string {
 	return fallback
 }
 
-// ReadOnlyRoot names the read-only root containing path, if any.
 func (p Policy) ReadOnlyRoot(path string) (string, bool) {
 	path = cleanAbsPath(path)
 	if i := slices.IndexFunc(p.readonly, func(root string) bool { return underRoot(path, root) }); i >= 0 {
@@ -301,11 +298,8 @@ func (p Policy) ReadOnlyRoot(path string) (string, bool) {
 	return "", false
 }
 
-// ReadOnlyRoots returns the configured read-only roots.
 func (p Policy) ReadOnlyRoots() []string { return slices.Clone(p.readonly) }
 
-// WritableRoots returns the roots a tool may write to: Roots() minus the
-// read-only ones.
 func (p Policy) WritableRoots() []string {
 	return slices.DeleteFunc(slices.Clone(p.roots), func(root string) bool { _, ok := p.ReadOnlyRoot(root); return ok })
 }

@@ -17,7 +17,6 @@ type ParsedAssistantOutput struct {
 	// ToolCall is non-nil when the assistant requested a tool.
 	ToolCall *core.ToolCall
 
-	// Raw is the original assistant text.
 	Raw string
 }
 
@@ -25,10 +24,8 @@ type PromptSyntax interface {
 	// Name returns a stable identifier, for example "tagged-json".
 	Name() string
 
-	// RenderResponseInstructions returns syntax-specific response rules.
 	RenderResponseInstructions(input ResponseInstructionsInput) string
 
-	// RenderToolExample formats a tool-call example in this syntax.
 	RenderToolExample(example string) string
 
 	// ParseAssistantOutput parses raw model output into either a final reply
@@ -39,6 +36,5 @@ type PromptSyntax interface {
 	// should be appended to the conversation.
 	RenderToolResult(result string) inference.Message
 
-	// StopSequences returns model stop strings suitable for this syntax.
 	StopSequences() []string
 }

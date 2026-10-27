@@ -41,8 +41,6 @@ type Record struct {
 // identity and stated preferences, which should never silently evaporate).
 func (c Config) IsExempt(kind string) bool { return slices.Contains(c.ExemptKinds, kind) }
 
-// referenceTime is the anchor for age: the last recall, falling back to the
-// last update when the record has never been recalled.
 func referenceTime(rec Record) time.Time {
 	if !rec.LastRecalledAt.IsZero() {
 		return rec.LastRecalledAt
@@ -72,8 +70,6 @@ func Retention(rec Record, now time.Time, cfg Config) float64 {
 	return strength * math.Exp(-ln2*ageDays/cfg.HalfLifeDays)
 }
 
-// ShouldForget reports whether rec has decayed below the archive threshold.
-// Exempt kinds are never forgotten.
 func ShouldForget(rec Record, now time.Time, cfg Config) bool {
 	if cfg.IsExempt(rec.Kind) {
 		return false

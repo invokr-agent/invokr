@@ -133,7 +133,6 @@ func (m *pickerModel) setTab(tab int) {
 	m.sessions = sessionsByID(sessions)
 }
 
-// tabSessions is the slice the active tab shows.
 func (m pickerModel) tabSessions() []sessionstore.SessionInfo {
 	if m.tab == tabAll {
 		return m.all

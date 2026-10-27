@@ -38,8 +38,6 @@ func InlinePython(call *core.ToolCall) bool {
 	return inline
 }
 
-// inlineArgs reports python arguments that take the code from the call:
-// -c, "-" or no script at all (stdin); -m runs a module, -V only a version.
 func inlineArgs(words []string) bool {
 	if slices.Contains(words, "-m") || slices.ContainsFunc(words, func(w string) bool { return w == "-V" || w == "--version" }) {
 		return false

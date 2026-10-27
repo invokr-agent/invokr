@@ -28,10 +28,8 @@ func OpenStore(app config.AppConfig) (*sql.DB, *Store, error) {
 	return db, NewStore(db), nil
 }
 
-// ErrDuplicateName is returned when a job with the same name already exists.
 var ErrDuplicateName = errors.New("duplicate job name")
 
-// Job represents a scheduled job record.
 type Job struct {
 	ID             string     `json:"id"`
 	Name           string     `json:"name"`
@@ -43,12 +41,10 @@ type Job struct {
 	LastStatus     *string    `json:"last_status"`
 }
 
-// Store provides persistence for scheduled jobs.
 type Store struct {
 	db *sql.DB
 }
 
-// NewStore returns a Store backed by db.
 func NewStore(db *sql.DB) *Store { return &Store{db: db} }
 
 // scanner abstracts *sql.Row and *sql.Rows for scanJob.
@@ -171,7 +167,6 @@ func (s *Store) Delete(ctx context.Context, id string) error {
 	return s.exec(ctx, "delete job", `DELETE FROM jobs WHERE id = ?`, id)
 }
 
-// DeleteAll removes all jobs.
 func (s *Store) DeleteAll(ctx context.Context) error {
 	return s.exec(ctx, "delete all jobs", `DELETE FROM jobs`)
 }
@@ -182,8 +177,6 @@ func (s *Store) RecordRun(ctx context.Context, id, status string) error {
 	return s.exec(ctx, "record run", `UPDATE jobs SET last_run_at = ?, last_status = ? WHERE id = ?`, now, status, id)
 }
 
-// exec runs a statement that returns no rows, wrapping any failure as
-// "<label>: <err>".
 func (s *Store) exec(ctx context.Context, label, query string, args ...any) error {
 	if _, err := s.db.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("%s: %w", label, err)

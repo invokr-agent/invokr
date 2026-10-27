@@ -36,8 +36,6 @@ func NewJobsCmd(app *config.AppConfig) *cobra.Command {
 	return root
 }
 
-// withJobsStore opens the jobs DB, hands the store to fn, and closes the DB
-// afterwards — the preamble every jobs subcommand shares.
 func withJobsStore(cmd *cobra.Command, app *config.AppConfig, fn func(context.Context, *jobs.Store) error) error {
 	db, store, err := jobs.OpenStore(*app)
 	if err != nil {

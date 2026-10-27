@@ -89,7 +89,6 @@ func (p *Policy) OutsideReads() bool {
 	return p.outside
 }
 
-// OutsideReadsAllowed reports the session switch for the call in ctx.
 func OutsideReadsAllowed(ctx context.Context) bool {
 	s, ok := ctx.Value(callKey{}).(*callState)
 	return ok && s.policy.OutsideReads()

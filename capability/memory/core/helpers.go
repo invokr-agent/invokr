@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// SortHitsByScore stably sorts hits in descending order of Score.
 func SortHitsByScore(hits []Hit) {
 	slices.SortStableFunc(hits, func(a, b Hit) int { return cmp.Compare(b.Score, a.Score) })
 }

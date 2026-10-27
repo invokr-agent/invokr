@@ -85,7 +85,7 @@ func countCompactions(t *testing.T, summaryBytes, readBytes, paths int) (int, []
 	return compactions, at
 }
 
-// TestReadPinCompactionRate reports the compaction count on two workloads.
+// The compaction count is compared across two read-pin workloads.
 func TestReadPinCompactionRate(t *testing.T) {
 	const summaryBytes = 600
 	// paths=20 revisits each path every 20 turns. paths=200 reads each path

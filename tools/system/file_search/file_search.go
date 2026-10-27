@@ -199,8 +199,6 @@ func resolveGitScope(ctx context.Context, root, gitScope string) (statuses map[s
 	return statuses, changed, scoped, nil
 }
 
-// normalizeEnum defaults a blank enum argument and rejects any value outside
-// the allowed set, naming the field in the error.
 func normalizeEnum(field string, value string, allowed ...string) (string, error) {
 	value = strutil.FirstNonEmptyTrimmed(value, allowed[0])
 	if !slices.Contains(allowed, value) {

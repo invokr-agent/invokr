@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewToolboxCmd searches and installs tools from the toolbox hub repository.
 func NewToolboxCmd(app *config.AppConfig) *cobra.Command {
 	root := &cobra.Command{Use: "toolbox", Short: "Install toolbox tools"}
 	root.AddCommand(&cobra.Command{

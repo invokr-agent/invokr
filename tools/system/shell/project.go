@@ -25,8 +25,6 @@ var projectMarkers = []projectMarker{
 	{"pyproject.toml", "python", []string{"python3", "pytest"}}, {"setup.py", "python", []string{"python3", "pytest"}},
 }
 
-// MissingProjectCommands returns the commands the detected project type needs
-// that are absent from the allowlist, in marker order, deduplicated.
 func MissingProjectCommands(root string, allowed []string) []string {
 	var missing []string
 	for _, m := range detectedMarkers(root) {

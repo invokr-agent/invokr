@@ -45,8 +45,6 @@ func (p retentionPlan) trimTo(messages []inference.Message, future *summaryFutur
 	return p, nil
 }
 
-// planRetention computes the compaction boundary: floor, then budgeted growth,
-// then the pairing snap.
 func planRetention(messages []inference.Message, tailBudget int64, scale float64, writes func(string) bool) retentionPlan {
 	prefixEnd := min(2, len(messages))
 	start := max(prefixEnd, len(messages)-minRetainedMessages)
@@ -76,9 +74,6 @@ func snappedPlan(messages []inference.Message, prefixEnd, start int, writes func
 	}
 }
 
-// growTailToBudget widens the tail backwards while its calibrated token
-// estimate stays under tailBudget and its length under maxRetainedMessages.
-// A zero budget (window size unknown) keeps the flat floor.
 func growTailToBudget(messages []inference.Message, start, prefixEnd int, budget int64, scale float64) int {
 	for start > prefixEnd && budget > 0 &&
 		len(messages)-start < maxRetainedMessages &&

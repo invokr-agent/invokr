@@ -30,9 +30,6 @@ const maxToolCallContinuations = 1
 
 const toolCallContinuePrompt = "Your %s tool call was cut off by the output limit. Your previous message holds its arguments JSON up to the exact cut. Reply with ONLY the remaining characters of that JSON — do not repeat what is already there, no code fences, no commentary — so that previous message + reply form one valid JSON object."
 
-// truncatedToolCall reports whether output is a continuation candidate: the
-// generation hit the output limit midway through its only tool call's
-// arguments.
 func truncatedToolCall(output completionOutput) bool {
 	return output.finishReason == inference.FinishLength &&
 		len(output.toolCalls) == 1 &&

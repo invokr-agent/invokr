@@ -383,8 +383,6 @@ func notInstalled(missing []string) string {
 	return " (not installed: " + strings.Join(missing, ", ") + ")"
 }
 
-// installHints names each missing server's own install command, falling back to
-// the bare command name when invokr has no hint for it.
 func installHints(missing []string) []string {
 	return toolcore.MapSlice(missing, func(command string) string {
 		if hint, ok := languageServerHints[command]; ok {

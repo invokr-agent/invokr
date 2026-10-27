@@ -29,7 +29,6 @@ type execFakeSession struct {
 	servedModel string
 }
 
-// resumedText flattens the replayed transcript for assertions.
 func (s *execFakeSession) resumedText() string {
 	parts := make([]string, 0, len(s.resumed))
 	for _, item := range s.resumed {

@@ -4,7 +4,6 @@ package mathutil
 
 import "math"
 
-// Clamp01 clamps value to the [0, 1] range.
 func Clamp01(value float64) float64 {
 	if value < 0 {
 		return 0
@@ -23,8 +22,6 @@ func ClampInt(v, def, limit int) int {
 	return min(v, limit)
 }
 
-// Norm returns the Euclidean norm of vector, or 0 when the vector is empty
-// or all-zero.
 func Norm(vector []float32) float64 {
 	var sum float64
 	for _, value := range vector {

@@ -57,8 +57,6 @@ func (b *contextBudget) plan(messages []inference.Message, scale float64, forced
 	return plan
 }
 
-// RequestCompaction forces compaction on the next Prepare regardless of the
-// current token threshold.
 func (b *contextBudget) RequestCompaction() {
 	if b == nil {
 		return
@@ -198,8 +196,6 @@ func (b *contextBudget) contextWindowTokens() int64 {
 	return cmp.Or(b.providerContext.ContextWindowTokens(), b.windowSize)
 }
 
-// summaryPrefetched reports whether a background summary usable by this plan
-// exists. It waits for an in-flight prefetch; a failed one counts as absent.
 func (b *contextBudget) summaryPrefetched(ctx context.Context, messages []inference.Message, plan retentionPlan) bool {
 	trimmed, future := b.prefetched(messages, plan)
 	return future != nil && coversEnough(messages, trimmed, plan) && future.wait(ctx) == nil
@@ -302,9 +298,6 @@ func (b *contextBudget) summarizeMessages(ctx context.Context, messages []infere
 	return compacted, nil
 }
 
-// resolveSummary takes a usable prefetched summary, with the plan trimmed to
-// its segment; when there is none, or it failed, it summarizes the plan's whole
-// middle now.
 func (b *contextBudget) resolveSummary(ctx context.Context, summarizer conversationSummarizer, messages []inference.Message, plan retentionPlan) (string, retentionPlan, error) {
 	if trimmed, future := b.prefetched(messages, plan); future != nil && coversEnough(messages, trimmed, plan) && future.wait(ctx) == nil {
 		return future.summary, trimmed, nil

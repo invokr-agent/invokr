@@ -38,7 +38,6 @@ func (w *TruncatingWriters) StdoutString() string { return w.stdout.String() }
 
 func (w *TruncatingWriters) StderrString() string { return w.stderr.String() }
 
-// Truncated reports whether any output was dropped because the budget ran out.
 func (w *TruncatingWriters) Truncated() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()

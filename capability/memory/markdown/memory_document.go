@@ -70,8 +70,6 @@ func (m *Document) ReplaceByID(ctx context.Context, id, newContent string) (bool
 	})
 }
 
-// RemoveByID removes the entry addressed by its stable id, reporting whether
-// one matched.
 func (m *Document) RemoveByID(ctx context.Context, id string) (bool, error) {
 	return m.mutateByID(ctx, id, func(entries []string, i int) []string {
 		return append(entries[:i], entries[i+1:]...)

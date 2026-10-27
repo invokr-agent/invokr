@@ -45,7 +45,6 @@ type chatWorker struct {
 	closed      bool
 }
 
-// NewRouter wires up transports and returns a Router ready to Serve.
 func NewRouter(services runtime.Services, app config.AppConfig, store *Store, transports []Transport) *Router {
 	return &Router{services: services, app: app, store: store, transports: transports}
 }

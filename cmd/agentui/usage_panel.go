@@ -225,7 +225,6 @@ func usageHeaderLine(group usageGroup, window int64) string {
 		padLeft(usagePercent(group.Tokens, window), 7)
 }
 
-// usagePercent formats a group or row's share of the window.
 func usagePercent(tokens, window int64) string {
 	if window <= 0 {
 		return "0%"
@@ -329,13 +328,11 @@ func usageRowLine(row usageRow, largest int64, style lipgloss.Style, selected bo
 	return line
 }
 
-// usageFreeLine closes the legend with the room the window still has.
 func usageFreeLine(free, window int64) string {
 	return ui.Invokr.Muted.Render("□ " + padRight("free", 22) + padLeft(humanize.Comma(free), 9) +
 		padLeft(usagePercent(free, window), 7))
 }
 
-// usageTotalsLine reports used over window and the compaction trigger.
 func usageTotalsLine(used, window int64, compactPercent int) string {
 	if window <= 0 {
 		return "window size unknown"
@@ -449,8 +446,6 @@ func usagePlainText(usage turn.TokenUsage, breakdown turn.ContextBreakdown, grou
 	return strings.Join(lines, "\n")
 }
 
-// openUsagePanel builds the panel from a breakdown and shows it, starting the
-// cursor on the largest row overall.
 func (m *model) openUsagePanel(usage turn.TokenUsage, breakdown turn.ContextBreakdown, compactPercent int) {
 	groups := usageGroups(breakdown)
 	_, start := usageLargest(groups)
@@ -512,7 +507,6 @@ func (m *model) updateUsagePanelKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// moveUsageCursor steps the cursor over the rows, keeping it inside them.
 func (m *model) moveUsageCursor(step int) {
 	p := &m.usagePanel
 	if _, _, ok := usageRowAt(p.Groups, p.Selected+step); ok {

@@ -309,8 +309,6 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// updateBackgroundColor rebuilds the palette for the terminal's actual
-// background, so the UI reads on light and dark themes alike.
 func (m *model) updateBackgroundColor(msg tea.BackgroundColorMsg) (tea.Model, tea.Cmd) {
 	ui.Invokr = ui.NewTheme(msg.IsDark())
 	m.applyTheme()
@@ -698,8 +696,6 @@ func (m *model) clampQueueCursor() {
 	m.approvals.Clamp(m.approvalQueue.Len())
 }
 
-// pendingApprovals is how many requests the queue is showing, zero when there
-// is no queue at all.
 func (m *model) pendingApprovals() int {
 	if m.approvalQueue == nil {
 		return 0
@@ -1009,7 +1005,6 @@ func (m *model) keyHints() string {
 	return strings.TrimSpace(m.help.View(m.keys))
 }
 
-// saveInterrupted keeps the stopped prompt in the session for a resume.
 func (m *model) saveInterrupted() {
 	if id, ok := m.session.(turn.IdentifiedSession); ok && m.recordInterrupted != nil {
 		m.recordInterrupted(id.SessionID(), m.lastPrompt)
@@ -1240,8 +1235,6 @@ type servedModelReporter interface {
 	ServedModel() string
 }
 
-// currentModel is the model a session will use next, or "" when the session
-// does not expose one.
 func currentModel(session turn.Session) string {
 	if sw, ok := session.(modelSwitcher); ok {
 		return sw.Model()
@@ -1408,7 +1401,6 @@ func followViewport(v *viewport.Model, width, height int, content string, forceB
 	}
 }
 
-// yoloFrame reports whether every call in this session runs unprompted.
 func (m *model) yoloFrame() bool { return m.policy.Mode() == approval.YOLO }
 
 // frameInset is what the YOLO frame costs the layout: a column on each side

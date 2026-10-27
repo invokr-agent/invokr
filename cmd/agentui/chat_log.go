@@ -279,8 +279,6 @@ func (c *chatLog) renderMessage(i, width int, spinnerFrame string) string {
 	return mb.String()
 }
 
-// foldable reports whether a message is a settled tool block the user can
-// expand and collapse.
 func (m message) foldable() bool {
 	return m.role == "reasoning" || m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
 }
@@ -327,7 +325,6 @@ func (c *chatLog) observedEvidence(start uint64) []turn.ExecutionEvidence {
 	return observed
 }
 
-// markFocused appends the transcript-focus cursor to a block's header line.
 func markFocused(rendered string) string {
 	lines := strings.SplitN(rendered, "\n", 2)
 	lines[0] += " " + ui.Invokr.Warn.Bold(true).Render("◀")

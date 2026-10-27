@@ -23,8 +23,6 @@ func FirstNonEmpty(values ...string) string {
 	return ""
 }
 
-// FirstNonEmptyTrimmed behaves like FirstNonEmpty but returns the chosen value
-// with surrounding whitespace trimmed.
 func FirstNonEmptyTrimmed(values ...string) string {
 	return strings.TrimSpace(FirstNonEmpty(values...))
 }
@@ -42,7 +40,6 @@ func TruncateUTF8(s string, max int) string {
 	return cut
 }
 
-// HashHex returns the hex-encoded SHA-256 digest of s.
 func HashHex(s string) string {
 	sum := sha256.Sum256([]byte(s))
 	return hex.EncodeToString(sum[:])

@@ -59,8 +59,6 @@ func cloneURL(hub string) string {
 	return hub
 }
 
-// clonePath is the cache directory for a hub entry, derived from the entry
-// with path-hostile characters flattened.
 func (s *Service) clonePath(hub string) string {
 	sanitized := regexp.MustCompile(`[^\w.-]+`).ReplaceAllString(hub, "__")
 	return filepath.Join(s.cacheDir, sanitized)

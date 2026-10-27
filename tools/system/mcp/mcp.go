@@ -445,7 +445,6 @@ func evictClient(key string, failed transport) {
 	}
 }
 
-// ShutdownClients terminates all persistent MCP subprocesses.
 func ShutdownClients() {
 	clientRegistry.Lock()
 	all := clientRegistry.clients

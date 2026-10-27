@@ -579,8 +579,6 @@ func (m TieredManager) orchestrator() *memoryrecall.Orchestrator {
 
 func (m TieredManager) dispatch(ctx context.Context, ev events.Event) { m.events.Dispatch(ctx, ev) }
 
-// audit emits one audit event naming the action, its outcome and the records it
-// touched.
 func (m TieredManager) audit(ctx context.Context, action, outcome string, details map[string]any) {
 	m.dispatch(ctx, events.Event{Type: events.EventAudit,
 		Audit: &events.AuditPayload{Action: action, Outcome: outcome, Details: details}})

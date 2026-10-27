@@ -386,8 +386,6 @@ func TestSummarizeMessagesListsReadFiles(t *testing.T) {
 	}
 }
 
-// isElisionStub matches both stub forms: the bare marker and the size-carrying
-// one used once a result is at least a kilobyte.
 func isElisionStub(content string) bool {
 	return content == elidedToolOutput || strings.HasSuffix(content, "of output elided to fit context]")
 }

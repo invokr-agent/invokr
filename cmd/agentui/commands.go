@@ -128,8 +128,6 @@ func renderCommandHelp(width int) string {
 // carry the heading the rows sit under, so it keeps the rule the overlay drops.
 func plainCommandHelp() string { return sectionRule("COMMANDS", 0) + "\n" + renderCommandHelp(0) }
 
-// renderUsage paints a command's usage string the way /tools paints a tool:
-// the name itself in the brand gradient, its arguments in the primary accent.
 func renderCommandUsage(usage string) string {
 	name, args, _ := strings.Cut(usage, " ")
 	out := ui.Invokr.Accent.Render(name)
@@ -261,8 +259,6 @@ func (m *model) retryLast() tea.Cmd {
 // approvalModes is the cycle shift+tab walks, and the set /approvals accepts.
 var approvalModes = []approval.Mode{approval.Manual, approval.Auto, approval.Plan}
 
-// cycleApprovalMode is the shift+tab shortcut: the same switch /approvals makes,
-// without leaving the keyboard.
 func (m *model) cycleApprovalMode() {
 	next := (slices.Index(approvalModes, m.policy.Mode()) + 1) % len(approvalModes)
 	m.setApprovalMode([]string{string(approvalModes[next])})

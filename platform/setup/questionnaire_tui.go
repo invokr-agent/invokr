@@ -20,7 +20,6 @@ import (
 	"github.com/invokr-ai/invokr/constants"
 )
 
-// ErrCancelled reports that the user aborted the questionnaire.
 var ErrCancelled = errors.New("setup cancelled")
 
 // modelListTimeout bounds the GET /v1/models probe. Setup should not hang on a
@@ -165,7 +164,6 @@ func newForm(in io.Reader, out io.Writer, accessible bool, groups ...*huh.Group)
 	return form.WithAccessible(true).WithTheme(huh.ThemeFunc(huh.ThemeBase))
 }
 
-// boolAnswer maps an existing boolean answer to a scripted default line.
 func boolAnswer(value bool) string {
 	if value {
 		return "yes"

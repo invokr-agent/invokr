@@ -66,7 +66,6 @@ func NewRouterClient(spec RouterSpec, timeout time.Duration, maxRetries int) *Cl
 	return client
 }
 
-// SetStallTimeout applies a new stall bound to subsequent requests.
 func (c *Client) SetStallTimeout(d time.Duration) {
 	c.StallTimeout = d
 	c.rebuild()
@@ -281,7 +280,6 @@ func isOpenRouter(root string) bool {
 	return err == nil && strings.HasSuffix(u.Hostname(), "openrouter.ai")
 }
 
-// isOllama recognises Ollama by its version endpoint; failures read as "no".
 func (c *Client) isOllama(ctx context.Context, root string) bool {
 	var version struct {
 		Version string `json:"version"`

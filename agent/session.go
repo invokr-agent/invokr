@@ -233,7 +233,6 @@ func resumedAssistantText(item turn.TranscriptMessage) string {
 	return text
 }
 
-// Usage returns a read-only copy of current session token accounting.
 func (s *Session) Usage() turn.TokenUsage {
 	s.runner.applyProviderContext()
 	s.runner.mu.RLock()
@@ -274,7 +273,6 @@ func (s *Session) Model() string {
 	return ""
 }
 
-// ListModels fetches available model IDs from the provider; nil,nil when unsupported.
 func (s *Session) ListModels(ctx context.Context) ([]string, error) {
 	lister, ok := s.runner.modelGateway.(listModelsProvider)
 	if !ok {

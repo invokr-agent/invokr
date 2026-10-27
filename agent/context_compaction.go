@@ -40,8 +40,6 @@ type summaryFuture struct {
 	err          error
 }
 
-// wait blocks until the prefetch finishes or ctx ends, and returns whichever
-// error that produced.
 func (f *summaryFuture) wait(ctx context.Context) error {
 	select {
 	case <-f.done:

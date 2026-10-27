@@ -22,7 +22,6 @@ type Location struct {
 	EndColumn int    `json:"end_column,omitempty"`
 }
 
-// Symbol is one declaration reported by the server.
 type Symbol struct {
 	Name      string   `json:"name"`
 	Kind      string   `json:"kind"`
@@ -30,7 +29,6 @@ type Symbol struct {
 	Location  Location `json:"location"`
 }
 
-// Diagnostic is one problem the server currently sees in a file.
 type Diagnostic struct {
 	Severity string   `json:"severity"`
 	Message  string   `json:"message"`

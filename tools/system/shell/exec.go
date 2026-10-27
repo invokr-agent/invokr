@@ -26,7 +26,6 @@ import (
 // allowlisted lines run on the host as the argv-only tool did, and routed
 // project code (interpreters, workspace scripts) needs the operator opt-out.
 
-// sandboxExecReady reports whether routed execution can happen at all.
 func sandboxExecReady() bool { return sandbox.Available() || sandbox.AllowUnsandboxed() }
 
 // sandboxInterpreters names the interpreters the model reaches for to run code
@@ -88,7 +87,6 @@ func resolveScriptPath(root string, wsp workspace.Policy, dir string) (string, e
 	return wsp.Resolve(filepath.Join(base, root))
 }
 
-// bashPath is the interpreter every line runs under.
 func bashPath() (string, error) {
 	path, err := exec.LookPath("bash")
 	if err != nil {
@@ -241,8 +239,6 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 // Plan mode, and for read-only git probes.
 func (p preparedShellCommand) readOnlyGit() bool { return p.mode == approval.Plan || p.gitReadOnly }
 
-// sealReadOnly mounts sources read-only and sealed, and drops any writable
-// mount that overlaps them.
 func sealReadOnly(sb sandbox.Plan, sources []string) sandbox.Plan {
 	sb.Sealed, sb.RO = append(sb.Sealed, sources...), append(sb.RO, sources...)
 	sb.RW = slices.DeleteFunc(sb.RW, func(path string) bool {

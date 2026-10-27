@@ -14,8 +14,6 @@ import (
 // rendered as the best-effort answer.
 const markupOnlyReply = "<tool_call>\n<function=read_file>\n<parameter=path>README.md</parameter>\n</function>\n</tool_call>"
 
-// assertNoToolMarkup fails when a final answer carries any textual tool-call
-// opener the model may fall back to.
 func assertNoToolMarkup(t *testing.T, answer string) {
 	t.Helper()
 	for _, marker := range []string{"<tool_call", "<|tool_call", "<function=", "<parameter="} {

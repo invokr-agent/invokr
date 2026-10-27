@@ -88,7 +88,6 @@ type SessionInfo struct {
 // recorded cwd belongs to no directory, so it only ever shows in an "all" view.
 func (s SessionInfo) InCwd(root string) bool { return s.Cwd != "" && s.Cwd == root }
 
-// FilterByCwd keeps only the sessions belonging to root, preserving order.
 func FilterByCwd(sessions []SessionInfo, root string) []SessionInfo {
 	return slices.DeleteFunc(append([]SessionInfo{}, sessions...), func(info SessionInfo) bool { return !info.InCwd(root) })
 }
@@ -131,7 +130,6 @@ func (s *Store) Append(ctx context.Context, sessionID string, role string, text 
 	return s.AppendTurn(ctx, sessionID, role, text, ToolRecord{})
 }
 
-// AppendTurn appends a message together with the turn's tool ledger.
 func (s *Store) AppendTurn(ctx context.Context, sessionID string, role string, text string, record ToolRecord) (Message, error) {
 	return s.append(ctx, sessionID, role, text, record, false)
 }
@@ -320,7 +318,6 @@ func (s *Store) titlePath(sessionID string) string {
 	return filepath.Join(s.dir, filepath.Base(strings.TrimSpace(sessionID))+".title")
 }
 
-// Title returns the stored label, or "" when none has been written.
 func (s *Store) Title(sessionID string) string {
 	data, err := os.ReadFile(s.titlePath(sessionID))
 	if err != nil {

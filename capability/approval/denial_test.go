@@ -77,7 +77,6 @@ func TestDenialSurvivesFileRoundTrip(t *testing.T) {
 	}
 }
 
-// denial returns a standing denial for pattern, the mirror of testGrant.
 func denial(t *testing.T, pattern string) Grant {
 	t.Helper()
 	g := testGrant(t, pattern)

@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// RunOptions tunes how Run records and reports a job run.
 type RunOptions struct {
 	// FailOnToolError records an error status and returns an error when the
 	// run completed but had tool failures.
@@ -60,9 +59,6 @@ func RecordStatus(store *Store, jobID, status string, logger *zap.Logger) {
 	}
 }
 
-// drainApprovals drains the approval broker's request channel, deciding each
-// pending request by the job's tier policy. It returns a stop function that
-// cancels the goroutine.
 func drainApprovals(broker *approval.Broker, policy approval.TierPolicy) func() {
 	return approval.Drain(broker, func(req approval.Request) approval.Decision {
 		if policy.Approves(req) {

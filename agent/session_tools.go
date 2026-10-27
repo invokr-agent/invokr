@@ -517,8 +517,6 @@ func (p *TurnProcessor) dispatchToolEvent(ctx context.Context, eventType events.
 	})
 }
 
-// dispatchReasoning puts one turn's reasoning text on the events bus (exec
-// --json, etc.), when non-empty.
 func (p *TurnProcessor) dispatchReasoning(ctx context.Context, turn int, reasoning string) {
 	if p == nil || p.events == nil || reasoning == "" {
 		return

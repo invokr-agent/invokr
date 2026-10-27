@@ -69,7 +69,6 @@ func makeRunnerWithSwitchableGateway(gw *switchableGateway) *Runner {
 	}
 }
 
-// TestGatewaySetModelRoundtrip verifies the gateway's SetModel/Model accessors directly.
 func TestGatewaySetModelRoundtrip(t *testing.T) {
 	provider := &scriptedProvider{}
 	gw := &OpenAIModelGateway{
@@ -90,7 +89,6 @@ func TestGatewaySetModelRoundtrip(t *testing.T) {
 	}
 }
 
-// TestSessionModelReturnsInitialModel verifies Session.Model() returns the configured value.
 func TestSessionModelReturnsInitialModel(t *testing.T) {
 	gw := &switchableGateway{
 		currentModel: "initial-model",

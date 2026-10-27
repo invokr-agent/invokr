@@ -80,7 +80,6 @@ func CloseDB(db *sql.DB) error {
 	return db.Close()
 }
 
-// CheckOpen reports a store whose database was never opened.
 func CheckOpen(db *sql.DB, store string) error {
 	if db == nil {
 		return fmt.Errorf("%s: nil store", store)
@@ -330,7 +329,6 @@ func updateVector(ctx context.Context, tx *sql.Tx, id string, vector []float32, 
 	return nil
 }
 
-// upsertVector writes one record's vector row, replacing any existing one.
 func upsertVector(ctx context.Context, q sqx.Queryable, id string, dims int, blob []byte, norm float64, now string) error {
 	return sqx.Write(ctx).WithQueryable(q).Insert("memory_vectors").
 		Columns("record_uuid", "vector_json", "vector_blob", "vector_dims", "vector_norm", "created_at", "updated_at").
@@ -541,8 +539,6 @@ func (s *Memory) RecentMemoryEvents(ctx context.Context, sessionID string, limit
 	return events, nil
 }
 
-// sessionFilter appends the session_id predicate to query when sessionID names
-// a session, returning the query and its leading bind arguments.
 func sessionFilter(query, sessionID string) (string, []any) {
 	if sessionID = strings.TrimSpace(sessionID); sessionID == "" {
 		return query, nil
@@ -664,8 +660,6 @@ func applyRecordFilters[T any](builder sqx.SelectBuilder[T], alias string, filte
 	return builder
 }
 
-// unsafeMetadataRune reports a rune that may not be interpolated into a
-// metadata JSON path.
 func unsafeMetadataRune(r rune) bool {
 	return r != '_' && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9')
 }

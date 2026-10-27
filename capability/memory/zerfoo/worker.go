@@ -83,7 +83,6 @@ type Worker struct {
 	genMu     sync.Mutex
 }
 
-// NewWorker builds a Worker that loads real zerfoo models on demand.
 func NewWorker(cfg config.ZerfooMemoryConfig) *Worker {
 	return NewWorkerWithLoaders(cfg, defaultLoaders())
 }
@@ -228,7 +227,6 @@ func (w *Worker) Embed(ctx context.Context, texts []string) ([][]float32, error)
 	return w.EmbedDocuments(ctx, texts)
 }
 
-// EmbedDocuments embeds memory chunks/passages as documents.
 func (w *Worker) EmbedDocuments(ctx context.Context, texts []string) ([][]float32, error) {
 	return w.embedTexts(ctx, texts, false)
 }

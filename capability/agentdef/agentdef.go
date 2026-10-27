@@ -16,7 +16,6 @@ import (
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// Definition is a parsed and validated agent definition.
 type Definition struct {
 	Name          string   // from frontmatter
 	Description   string   // from frontmatter
@@ -28,15 +27,12 @@ type Definition struct {
 	sourcePath    string   // file the definition was loaded from (for error reporting)
 }
 
-// Registry holds loaded definitions, keyed by name.
 type Registry interface {
-	// Get returns a Definition by name, or (zero, false) if not found.
 	Get(name string) (Definition, bool)
 	// Names returns all registered definition names, sorted.
 	Names() []string
 }
 
-// EmptyRegistry returns a Registry with no definitions.
 func EmptyRegistry() Registry { return registry.NewMap[Definition](nil) }
 
 // NewRegistryFromDir scans dir for *.md files, parses each, and returns a

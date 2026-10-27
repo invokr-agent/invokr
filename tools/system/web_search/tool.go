@@ -249,8 +249,6 @@ func containsSensitiveTerm(lowerQuery string, values []string) bool {
 	})
 }
 
-// ConfiguredProviders lists the selected providers that can actually be
-// called, in the configured order.
 func ConfiguredProviders(cfg config.WebSearchConfig) []string {
 	return slices.DeleteFunc(slices.Clone(cfg.Providers), func(name string) bool { return !providerConfigured(name, cfg) })
 }

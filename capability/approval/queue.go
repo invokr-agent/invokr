@@ -87,8 +87,6 @@ func (q *ApprovalQueue) SetStandingGrants(store *Store) {
 	q.mu.Unlock()
 }
 
-// Snapshot returns a copy of the current queue contents (safe to read without
-// holding the lock). The returned slice is a fresh allocation; mutation is safe.
 func (q *ApprovalQueue) Snapshot() []QueueItem {
 	q.mu.Lock()
 	out := append([]QueueItem(nil), q.items...)
@@ -96,7 +94,6 @@ func (q *ApprovalQueue) Snapshot() []QueueItem {
 	return out
 }
 
-// Len returns the current queue length (under lock; O(1)).
 func (q *ApprovalQueue) Len() int {
 	q.mu.Lock()
 	n := len(q.items)

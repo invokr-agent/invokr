@@ -104,7 +104,6 @@ func wrappedGH(words []string) bool {
 	return false
 }
 
-// isGH matches gh by basename, so /usr/bin/gh counts.
 func isGH(word string) bool { return filepath.Base(word) == "gh" }
 
 // callWords is the literal words of a call, paths left alone.
