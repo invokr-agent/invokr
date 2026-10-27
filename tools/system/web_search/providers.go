@@ -237,7 +237,6 @@ func mappedDecoder(name string, mappings map[string]string) func([]byte) ([]prov
 	}
 }
 
-// firstMappedString resolves the first non-empty of "|"-separated paths.
 func firstMappedString(root gjson.Result, paths string) string {
 	for _, path := range strings.Split(paths, "|") {
 		if value := getMappedString(root, path); value != "" {
@@ -295,8 +294,7 @@ func trimJSONPath(path string) string {
 
 func braveFreshness(days int) string { return recencyBucket(days, "pd", "pw", "pm", "py") }
 
-// recencyBucket maps a freshness window in days onto a provider's
-// day/week/month/year vocabulary.
+// recencyBucket maps a days window onto a provider's freshness tokens.
 func recencyBucket(days int, day, week, month, year string) string {
 	switch {
 	case days <= 1:

@@ -202,7 +202,6 @@ func (b *Builder) recordSystemPrompt(ctx context.Context, sessionID, system stri
 		SessionID: sessionID, System: payload})
 }
 
-// dispatchPrompt emits one prompt-lifecycle event for the payload's request.
 func (b *Builder) dispatchPrompt(ctx context.Context, kind events.EventType, payload *events.PromptPayload) {
 	b.events.Dispatch(ctx, events.Event{Type: kind, Timestamp: time.Now(), SessionID: payload.Request.SessionID,
 		Prompt: payload})

@@ -11,8 +11,6 @@ import (
 	"github.com/invokr-ai/invokr/support/strutil"
 )
 
-// MarshalResult JSON-encodes a tool result, wrapping any encode error with a
-// message identifying the tool: "encode <toolName> result: %w".
 func MarshalResult(toolName string, v any) (string, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
@@ -21,8 +19,6 @@ func MarshalResult(toolName string, v any) (string, error) {
 	return string(data), nil
 }
 
-// Outcome maps an error to the audit outcome string: "failed" when err is
-// non-nil, "completed" otherwise.
 func Outcome(err error) string {
 	if err != nil {
 		return "failed"
@@ -139,13 +135,10 @@ func StringSet(values []string) map[string]struct{} {
 	return set
 }
 
-// AuditDetails emits an audit event for tool with the given outcome and detail
-// map, using the tool name for both Action and Tool.
 func AuditDetails(ctx context.Context, dispatcher events.Dispatcher, tool, outcome string, details map[string]any, err error) {
 	DispatchAudit(ctx, dispatcher, &events.AuditPayload{Action: tool, Tool: tool, Outcome: outcome, Details: details}, err)
 }
 
-// MapSlice returns the result of applying f to each element of in.
 func MapSlice[T, R any](in []T, f func(T) R) []R {
 	out := make([]R, 0, len(in))
 	for _, item := range in {

@@ -74,13 +74,10 @@ var reasoningScales = map[ReasoningKind]reasoningScale{
 // ReasoningEfforts is the union of every scale, the order levels are listed in.
 var ReasoningEfforts = reasoningScales[ReasoningLlamaCpp].levels
 
-// Levels lists the levels the kind accepts; nil for an unknown kind.
 func (k ReasoningKind) Levels() []string { return reasoningScales[k].levels }
 
-// Accepts reports whether level is on the kind's scale.
 func (k ReasoningKind) Accepts(level string) bool { return slices.Contains(k.Levels(), level) }
 
-// Extra returns the request field carrying level for this kind.
 func (k ReasoningKind) Extra(level string) (key string, value any) {
 	scale := reasoningScales[k]
 	if scale.wrap != "" {

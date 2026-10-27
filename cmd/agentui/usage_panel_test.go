@@ -328,7 +328,6 @@ func TestUsageFoldKeepsASmallGroupWhole(t *testing.T) {
 	}
 }
 
-// labels lists the rows a fold left behind, for the failures above.
 func labels(rows []usageRow) []string {
 	out := make([]string, len(rows))
 	for index, row := range rows {

@@ -91,8 +91,6 @@ const partialRetentionHeadroom = 1024
 
 const degenerateRetryNudge = "The task is not finished. Think briefly, then continue by calling a tool."
 
-// reasoningExhausted reports a completion whose generation hit the output
-// limit without producing a tool call.
 func reasoningExhausted(output completionOutput) bool {
 	return output.finishReason == inference.FinishLength && len(output.toolCalls) == 0
 }
@@ -114,8 +112,6 @@ const maxTruncatedStreamRetries = 2
 // truncatedStreamBackoff is the wait before the first re-issue; it doubles.
 var truncatedStreamBackoff = time.Second
 
-// truncatedStream reports a completion that carries content but neither a
-// finish reason nor usage.
 func truncatedStream(output completionOutput) bool {
 	return len(output.content) > 0 && output.finishReason == "" && !output.usage.Available
 }
@@ -137,7 +133,6 @@ func (g *OpenAIModelGateway) Begin(ctx context.Context, req BeginModelRequest) (
 	return modelTurnOf(g.complete(ctx, messages, req.SessionID, false, false, 0))
 }
 
-// modelTurnOf wraps a completed request as a ModelTurn, propagating failures.
 func modelTurnOf(completion completionOutput, messages []inference.Message, err error) (ModelTurn, error) {
 	if err != nil {
 		return ModelTurn{}, err
@@ -176,19 +171,14 @@ func (g *OpenAIModelGateway) SetModel(name string) {
 	g.mu.Unlock()
 }
 
-// Model returns the currently configured model name.
 func (g *OpenAIModelGateway) Model() string { g.mu.RLock(); defer g.mu.RUnlock(); return g.model }
 
-// ServedModel returns the model name the provider reported on its last
-// response, empty until one arrives or when the provider reports none.
 func (g *OpenAIModelGateway) ServedModel() string {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
 	return g.servedModel
 }
 
-// ListModels returns available model IDs from the underlying provider, or
-// nil,nil when the provider does not support model listing.
 func (g *OpenAIModelGateway) ListModels(ctx context.Context) ([]string, error) {
 	lister, ok := g.provider.(listModelsProvider)
 	if !ok {

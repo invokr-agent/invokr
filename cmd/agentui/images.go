@@ -92,7 +92,6 @@ func (m *model) updateImagePasted(msg imagePastedMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// send routes a turn with attached images through SendImages.
 func (m *model) send(ctx context.Context, text string, images []inference.ContentBlock) (turn.AgentResponse, error) {
 	if len(images) == 0 {
 		return m.session.Send(ctx, text)

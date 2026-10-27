@@ -9,7 +9,6 @@ type approvalPanel struct {
 	detailOffset int
 }
 
-// Up moves the cursor to the previous item, collapsing any expanded details.
 func (p *approvalPanel) Up() {
 	if p.cursor > 0 {
 		p.cursor--
@@ -17,8 +16,6 @@ func (p *approvalPanel) Up() {
 	}
 }
 
-// Down moves the cursor to the next item (n is the current queue length),
-// collapsing any expanded details.
 func (p *approvalPanel) Down(n int) {
 	if p.cursor < n-1 {
 		p.cursor++
@@ -26,7 +23,6 @@ func (p *approvalPanel) Down(n int) {
 	}
 }
 
-// Toggle flips whether the selected item's details are expanded.
 func (p *approvalPanel) Toggle() { p.expanded, p.detailOffset = !p.expanded, 0 }
 
 func (p *approvalPanel) Collapse() { p.expanded, p.detailOffset = false, 0 }
@@ -44,7 +40,6 @@ func (p *approvalPanel) ScrollToBottom(total int) {
 // empty. Call after the underlying queue shrinks (decisions, denials).
 func (p *approvalPanel) Clamp(n int) { p.cursor = max(0, min(p.cursor, n-1)) }
 
-// Reset returns the panel to its initial state (cursor at 0, collapsed).
 func (p *approvalPanel) Reset() {
 	p.cursor = 0
 	p.Collapse()

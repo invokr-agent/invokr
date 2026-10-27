@@ -30,8 +30,6 @@ const x04GateBlockTitle = "## Relevant Memory"
 // with a single simple-term query that matches the seeded project fact.
 const x04GateProbe = `{"recall": true, "queries": ["codename"]}`
 
-// cacheStep is one scripted reply that reports OpenAI-style usage with a
-// cache-served prompt share.
 func cacheStep(message string) providertest.CompletionStep {
 	step := providertest.ReplyStep(message)
 	step.Usage = &providertest.StepUsage{PromptTokens: 1000, CompletionTokens: 100, CachedTokens: 800}

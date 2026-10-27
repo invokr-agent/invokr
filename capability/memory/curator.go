@@ -122,7 +122,6 @@ func (c *curator) Close() error {
 	return nil
 }
 
-// runJob dispatches one unit of background work.
 func (c *curator) runJob(job summaryJob) error {
 	// Detached context: the turn's ctx may be canceled once the turn ends, but
 	// this background work must still complete.
@@ -160,7 +159,6 @@ func (c *curator) queueTitle(sessionID string) {
 	c.enqueue(summaryJob{sessionID: sessionID, title: true})
 }
 
-// titleSession generates and stores the label for one session.
 func (c *curator) titleSession(ctx context.Context, store *sessionstore.Store, gen titler, id string) error {
 	messages, err := store.Load(ctx, id)
 	if err != nil {

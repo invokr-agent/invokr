@@ -56,7 +56,6 @@ func (s *Service) InstallAll(ctx context.Context) ([]string, []error) {
 	return names, errs
 }
 
-// Remove deletes an installed skill directory by name.
 func (s *Service) Remove(name string) error {
 	if name == "" || name != filepath.Base(name) || strings.HasPrefix(name, ".") {
 		return fmt.Errorf("invalid skill name %q", name)

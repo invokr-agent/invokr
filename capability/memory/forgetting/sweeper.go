@@ -33,7 +33,6 @@ type Sweeper struct {
 	now   func() time.Time
 }
 
-// NewSweeper builds a sweeper over store with cfg. now defaults to time.Now.
 func NewSweeper(store Store, cfg Config) *Sweeper {
 	return &Sweeper{store: store, cfg: cfg, now: time.Now}
 }

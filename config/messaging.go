@@ -1,6 +1,5 @@
 package config
 
-// MessagingConfig holds configuration for chat transport backends.
 type MessagingConfig struct {
 	Telegram TelegramConfig `json:"telegram"`
 	Signal   SignalConfig   `json:"signal,omitempty"`

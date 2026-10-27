@@ -341,7 +341,6 @@ func ShutdownServers() {
 	}
 }
 
-// hideHolder drops the holder session from list output.
 func hideHolder(out string) string {
 	kept := []string{}
 	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {

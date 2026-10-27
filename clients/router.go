@@ -129,8 +129,7 @@ type routerDriver struct {
 	// leaves the model to each request.
 	activeModel string
 
-	mu sync.Mutex
-	// cfg is the configuration currently applied to the router.
+	mu      sync.Mutex
 	cfg     routercfg.Config
 	derived map[string]string
 }

@@ -133,7 +133,6 @@ func (m *Manager) client(ctx context.Context, server ServerConfig) (*Client, err
 	return started, nil
 }
 
-// Close shuts down every running server.
 func (m *Manager) Close() {
 	m.mu.Lock()
 	running := m.clients

@@ -518,7 +518,6 @@ func TestTruncatedStreamRetryBacksOff(t *testing.T) {
 	}
 }
 
-// noTruncatedStreamBackoff drops the wait between re-issues for one test.
 func noTruncatedStreamBackoff(t *testing.T) {
 	t.Helper()
 	orig := truncatedStreamBackoff

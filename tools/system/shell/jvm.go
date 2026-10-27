@@ -145,8 +145,6 @@ func jvmEnv(isJVM bool, registry string, env []string) []string {
 	return append(env, "JAVA_TOOL_OPTIONS="+option)
 }
 
-// gradleUserHome names the directory gradle keeps its caches and native
-// libraries in: $GRADLE_USER_HOME, else ~/.gradle.
 func gradleUserHome() string {
 	if home := config.Env("GRADLE_USER_HOME"); home != "" {
 		return home

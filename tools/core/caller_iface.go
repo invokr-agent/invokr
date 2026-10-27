@@ -24,7 +24,6 @@ type ToolCaller interface {
 	RegisterNative(ToolSpec, NativeHandler)
 }
 
-// ApproverFrom returns the approver of a registrar that exposes one, or nil.
 func ApproverFrom(c NativeRegistrar) approval.Approver {
 	if r, ok := c.(interface{ Approver() approval.Approver }); ok {
 		return r.Approver()

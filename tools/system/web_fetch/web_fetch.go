@@ -55,7 +55,6 @@ type fetchService struct {
 	deny     func(netip.Addr) bool
 }
 
-// denies classifies one resolved address, honoring the test seam.
 func (s *fetchService) denies(ip netip.Addr) bool {
 	if s.deny != nil {
 		return s.deny(ip)
@@ -194,8 +193,6 @@ func (s *fetchService) audit(ctx context.Context, resp toolResponse, err error) 
 	}, err)
 }
 
-// failureCode classifies a transport failure: a dial the guard refused is a
-// blocked host, anything else is a plain fetch failure.
 func failureCode(err error) string {
 	var blocked *blockedAddrError
 	if errors.As(err, &blocked) {

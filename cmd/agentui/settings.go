@@ -254,7 +254,6 @@ func (m *model) settingsView(bg string) string {
 	return m.tabbedModal(bg, settingsTitles, accents, p.tab, m.settingsWidth(), body)
 }
 
-// tabbedModal centers a tabbed panel sized to body over bg.
 func (m *model) tabbedModal(bg string, titles []string, accents []color.Color, tab, width int, body string) string {
 	panel := ui.Invokr.Palette.TabbedPanel(titles, accents, tab, width, min(m.height-2, lipgloss.Height(body)+4), body)
 	layers := lipgloss.NewCompositor(

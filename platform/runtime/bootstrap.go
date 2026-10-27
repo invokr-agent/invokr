@@ -379,8 +379,6 @@ type toolLayerDeps struct {
 	backgroundContext context.Context
 }
 
-// commandService builds the runtime-facing slash-command backend. Extracted from
-// Bootstrap to keep it within the function-length budget.
 func (d *toolLayerDeps) commandService(sessionID string, mem memory.Manager, newChatSession ChatSessionFunc) *CommandService {
 	return &CommandService{
 		app: d.app, tools: d.caller, skills: d.skills, agents: d.agentReg, memory: mem,
@@ -408,8 +406,6 @@ func (d *toolLayerDeps) buildToolLayer(approver *approval.Broker) (*tools.Caller
 	return caller, promptSyntax
 }
 
-// loadAgentRegistry loads agent definitions from dir, logging a warning and
-// falling back to an empty registry on error.
 func loadAgentRegistry(dir string, l *zap.Logger) agentdef.Registry {
 	reg, err := agentdef.NewRegistryFromDir(dir)
 	if err != nil {

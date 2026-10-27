@@ -23,7 +23,6 @@ func readCrontab() (string, error) {
 	return string(out), nil
 }
 
-// writeCrontab replaces the current user's crontab with content.
 func writeCrontab(content string) error {
 	c := exec.Command("crontab", "-")
 	c.Stdin = bytes.NewReader([]byte(content))
@@ -63,14 +62,12 @@ func temporaryExecutableWarning(binaryPath string) string {
 	return fmt.Sprintf("WARNING: executable %s is temporary; install Invokr before scheduling persistent jobs", binaryPath)
 }
 
-// Strip removes the crontab entry for job id.
 func Strip(id string) error {
 	return stripCrontab(func(content string) string {
 		return StripCrontabEntries(content, id)
 	})
 }
 
-// StripAll removes every invokr-job crontab entry.
 func StripAll() error { return stripCrontab(StripAllInvokrEntries) }
 
 func stripCrontab(strip func(string) string) error {

@@ -15,8 +15,6 @@ import (
 // it, esc returns to the prompt. A mouse click on a block's header line
 // toggles it directly, using MemoList's visible row lookup.
 
-// focusedMsg is the message index the transcript-focus cursor sits on, or -1
-// when focus mode is off.
 func (m *model) focusedMsg() int {
 	if !m.focusMode {
 		return -1
@@ -70,8 +68,6 @@ func (m *model) enterFocusMode() {
 	m.scrollFocusedIntoView()
 }
 
-// moveFocus steps the cursor to the next/previous foldable block, staying put
-// at either end.
 func (m *model) moveFocus(delta int) {
 	for i := m.focusMsg + delta; i >= 0 && i < len(m.chatLog.messages); i += delta {
 		if m.chatLog.messages[i].foldable() {
@@ -91,8 +87,6 @@ func (m *model) toggleFold(msgIdx int) {
 	}
 }
 
-// scrollFocusedIntoView keeps the focused block on screen after a move or a
-// toggle changed the layout.
 func (m *model) scrollFocusedIntoView() {
 	if m.focusMsg >= 0 && m.focusMsg < len(m.chatLog.messages) {
 		m.chat.EnsureVisible(messageItemID(m.chatLog.messages[m.focusMsg].id))
@@ -129,7 +123,6 @@ func (m *model) clickFold(y int) bool {
 	return false
 }
 
-// focusHint is the footer's key legend while transcript focus is on.
 func focusHint(keys keyMap) string {
 	return ui.Invokr.Warn.Render("BROWSE DETAILS") + "  " + ui.Invokr.Muted.Render("↑/↓ select · enter/space expand/collapse · esc/"+keys.FocusTranscript.Help().Key+" back to prompt")
 }

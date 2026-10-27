@@ -278,7 +278,6 @@ func (c *Client) Send(ctx context.Context, chatID string, text string) error {
 	return nil
 }
 
-// SetTyping starts or stops Signal's typing indicator.
 func (c *Client) SetTyping(ctx context.Context, chatID string, active bool) error {
 	params := map[string]any{"recipient": []string{chatID}}
 	if !active {
@@ -322,7 +321,6 @@ func (c *Client) dispatchRPCResponse(id int64, line []byte) {
 	}
 }
 
-// rpcFrame encodes one newline-delimited JSON-RPC request.
 func rpcFrame(id int64, method string, params any) ([]byte, error) {
 	raw, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": params})
 	if err != nil {

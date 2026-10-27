@@ -14,7 +14,6 @@ import (
 	"github.com/invokr-ai/invokr/surface/messaging"
 )
 
-// fakeTelegramServer stands up a minimal Telegram Bot API mock.
 type fakeTelegramServer struct {
 	srv          *httptest.Server
 	updateCalls  atomic.Int32
@@ -107,7 +106,7 @@ func newClientAllowAll(t *testing.T, token string, allowedIDs []int64, allowAll 
 	return c
 }
 
-// T1: single message from allowed chat.
+// One message arrives from an allowed chat.
 func TestListen_AllowedChat(t *testing.T) {
 	f := newFakeServer(t, "tok")
 	f.updates = []tgUpdate{{
@@ -134,7 +133,6 @@ func TestListen_AllowedChat(t *testing.T) {
 	}
 }
 
-// T2: message from disallowed chat — nothing received.
 func TestListen_DisallowedChat(t *testing.T) {
 	f := newFakeServer(t, "tok2")
 	f.updates = []tgUpdate{{
@@ -200,7 +198,6 @@ func TestListen_AllowAllAdmits(t *testing.T) {
 	}
 }
 
-// T3: send short text — one sendMessage call.
 func TestSend_ShortText(t *testing.T) {
 	f := newFakeServer(t, "tok3")
 	c := newClient(t, "tok3", nil, f)
@@ -225,7 +222,6 @@ func TestSend_LongText(t *testing.T) {
 	}
 }
 
-// T5: approval approve flow.
 func TestAskApproval_Approve(t *testing.T) {
 	f := newFakeServer(t, "tok5")
 	c := newClient(t, "tok5", []int64{111}, f)
@@ -251,7 +247,6 @@ func TestAskApproval_Approve(t *testing.T) {
 	}
 }
 
-// T6: approval deny flow.
 func TestAskApproval_Deny(t *testing.T) {
 	f := newFakeServer(t, "tok6")
 	c := newClient(t, "tok6", []int64{111}, f)
@@ -298,7 +293,6 @@ func TestAskApproval_CallbackFromDisallowedChatIgnored(t *testing.T) {
 	}
 }
 
-// T7: approval timeout.
 func TestAskApproval_Timeout(t *testing.T) {
 	f := newFakeServer(t, "tok7")
 	c := newClient(t, "tok7", nil, f)
@@ -391,7 +385,6 @@ func TestListen_AbortOn401(t *testing.T) {
 	}
 }
 
-// T10: empty token.
 func TestNew_EmptyToken(t *testing.T) {
 	_, err := New("", nil, false)
 	if err == nil {

@@ -177,8 +177,6 @@ func storeKeyInteractively(cmd *cobra.Command, providerType string) error {
 	return nil
 }
 
-// resolveProviderModel picks the model a new profile starts with, asking when
-// there is no sensible default to offer.
 func resolveProviderModel(providerType string) (string, error) {
 	if model := defaultProviderModels[providerType]; model != "" {
 		return model, nil
@@ -188,8 +186,6 @@ func resolveProviderModel(providerType string) (string, error) {
 		Description("Written to the profile; change it any time in the config.").Value(&model), &model)
 }
 
-// runPromptField runs one huh field as a single-question form and returns the
-// trimmed answer it wrote into value.
 func runPromptField(field huh.Field, value *string) (string, error) {
 	if err := huh.NewForm(huh.NewGroup(field)).Run(); err != nil {
 		return "", err

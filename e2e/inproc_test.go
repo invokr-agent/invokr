@@ -45,7 +45,6 @@ type inProcResult struct {
 	Services  runtime.Services
 }
 
-// hasNotice reports whether any notice event contained substring text.
 func (r inProcResult) hasNotice(text string) bool {
 	for _, notice := range r.Notices {
 		if strings.Contains(notice, text) {
@@ -55,8 +54,6 @@ func (r inProcResult) hasNotice(text string) bool {
 	return false
 }
 
-// completedKinds returns the tool_failures kinds keyed by tool, mirroring the
-// exec ledger's authoritative outcome ledger.
 func (r inProcResult) failureKinds() []struct{ Tool, Kind string } {
 	var out []struct{ Tool, Kind string }
 	for _, f := range r.Resp.ToolFailures {

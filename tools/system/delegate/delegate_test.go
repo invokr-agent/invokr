@@ -198,7 +198,6 @@ func TestRunDelegatesRecordsInputOutputInParentMemory(t *testing.T) {
 	}
 }
 
-// fakeAgentRegistry is a minimal agentdef.Registry for delegate tests.
 type fakeAgentRegistry struct {
 	names []string
 }

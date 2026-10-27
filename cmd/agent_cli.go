@@ -141,8 +141,6 @@ func resumeAwareArgs(resumeID *string) cobra.PositionalArgs {
 	}
 }
 
-// resumeIDFromArgs resolves the session ID for a bare --resume: the positional
-// form if one was given, otherwise the sentinel meaning "show the picker".
 func resumeIDFromArgs(resumeID string, args []string) string {
 	if resumeID == resumePickSentinel && len(args) == 1 {
 		return args[0]

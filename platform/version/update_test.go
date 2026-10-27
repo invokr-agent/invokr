@@ -17,14 +17,12 @@ import (
 var pristineVersion = Version
 var restoreOnce sync.Once
 
-// okTag answers with a releases list holding one stable release, tag.
 func okTag(tag string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]Release{{TagName: tag}})
 	}
 }
 
-// answerWith answers with status and body.
 func answerWith(status int, body string) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(status); _, _ = w.Write([]byte(body)) }
 }
@@ -129,7 +127,7 @@ func TestDevBuildMakesNoRequest(t *testing.T) {
 	}
 }
 
-// TestEnvOptOutMakesNoRequest: INVOKR_NO_UPDATE_CHECK turns the check off.
+// INVOKR_NO_UPDATE_CHECK turns the update check off.
 func TestEnvOptOutMakesNoRequest(t *testing.T) {
 	_ = os.Setenv(noUpdateCheckEnv, "1")
 	t.Cleanup(func() { _ = os.Unsetenv(noUpdateCheckEnv) })
@@ -201,7 +199,7 @@ func TestTTLScheduling(t *testing.T) {
 	}
 }
 
-// TestConcurrentStartsOneFetch: concurrent callers claim one fetch at most.
+// Concurrent callers claim one fetch at most.
 func TestConcurrentStartsOneFetch(t *testing.T) {
 	setVersion("v0.1.0")
 	resetCache()

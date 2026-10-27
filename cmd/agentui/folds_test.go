@@ -38,7 +38,7 @@ func TestFoldToggleExpandsFullOutput(t *testing.T) {
 		t.Fatalf("collapsed block has no fold indicator:\n%s", collapsed)
 	}
 
-	if !m.updateFocusKey(testModifiedKey('x', tea.ModAlt)) { // alt+x
+	if !m.updateFocusKey(testModifiedKey('x', tea.ModAlt)) {
 		t.Fatal("alt+x not consumed")
 	}
 	if !m.focusMode {

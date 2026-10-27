@@ -239,7 +239,6 @@ func (c *Client) References(ctx context.Context, path string, line, column int) 
 	return c.locations(found), nil
 }
 
-// Symbols lists the symbols declared in one document.
 func (c *Client) Symbols(ctx context.Context, path string) ([]Symbol, error) {
 	docURI, err := c.sync(ctx, path)
 	if err != nil {

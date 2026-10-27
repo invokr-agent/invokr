@@ -21,8 +21,6 @@ const (
 	MemoryTruncationMarker = "[…memory truncated]"
 )
 
-// FenceRecalledMemory escapes any literal close fence in content and wraps it
-// in the recalled-memory fences.
 func FenceRecalledMemory(content string) string {
 	content = strings.ReplaceAll(content, RecalledMemoryCloseFence, recalledMemoryBrokenFence)
 	return RecalledMemoryOpenFence + "\n" + content + "\n" + RecalledMemoryCloseFence

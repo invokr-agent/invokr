@@ -30,7 +30,6 @@ const (
 	gitOutputLimit = 2 << 20
 )
 
-// RegisterGitTools registers git_read and git_write.
 func RegisterGitTools(c core.NativeRegistrar, deps core.CallerDeps, wsp workspace.Policy) {
 	root := wsp.Root
 	if root == "" {
@@ -48,7 +47,6 @@ func gitText(ctx context.Context, root string, args ...string) (string, error) {
 	return gitTextSpec(ctx, shell.GitProcessSpec, root, nil, args...)
 }
 
-// gitProbe is gitText with the repository mounted read-only.
 func gitProbe(ctx context.Context, root string, args ...string) (string, error) {
 	return gitTextSpec(ctx, shell.GitReadOnlyProcessSpec, root, nil, args...)
 }
@@ -78,7 +76,6 @@ func gitTextSpec(ctx context.Context, specFor func(context.Context, string, []st
 	return strings.TrimSpace(res.Stdout), nil
 }
 
-// firstArg names the subcommand for error context, skipping --no-pager.
 func firstArg(args []string) string {
 	if i := slices.IndexFunc(args, func(a string) bool { return !strings.HasPrefix(a, "-") }); i >= 0 {
 		return args[i]

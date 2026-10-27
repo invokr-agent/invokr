@@ -40,7 +40,6 @@ func (c *completion) active() bool { return len(c.items) > 0 }
 
 func (c *completion) dismiss() { c.items, c.cursor, c.token = nil, 0, "" }
 
-// refresh recomputes the suggestion list for the current input value.
 func (c *completion) refresh(value string) {
 	token := trailingToken(value)
 	switch {
@@ -64,8 +63,6 @@ func (c *completion) refresh(value string) {
 	}
 }
 
-// selected returns the input value with the trailing token replaced by the
-// highlighted suggestion.
 func (c *completion) selected(value string) string {
 	if !c.active() {
 		return value
@@ -140,8 +137,6 @@ func (c *completion) view() string {
 	return b.String()
 }
 
-// commandSummary is the one-line description shown beside a slash suggestion.
-// File suggestions have none, and neither does an unknown command.
 func commandSummary(item string) string {
 	name, slash := strings.CutPrefix(item, "/")
 	if spec := findCommand(name); slash && spec != nil {
@@ -150,8 +145,6 @@ func commandSummary(item string) string {
 	return ""
 }
 
-// trailingToken returns the last whitespace-separated token of value, or "" if
-// the value ends in whitespace (nothing is being typed).
 func trailingToken(value string) string {
 	if value == "" || strings.ContainsAny(value[len(value)-1:], " \t\n") {
 		return ""

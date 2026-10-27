@@ -255,8 +255,6 @@ func TestStoreMatchesPathListSubjectsPerPath(t *testing.T) {
 	}
 }
 
-// TestStoreMatchIgnoresGrantsForLaterExcludedTools covers the case where a tool
-// is excluded after a grant for it already exists on disk.
 func TestStoreMatchIgnoresGrantsForLaterExcludedTools(t *testing.T) {
 	store := newTestStore(t)
 	mustAdd(t, store, testGrant(t, "git status*"))

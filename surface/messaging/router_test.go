@@ -16,7 +16,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// fakeTransport is an in-memory Transport for testing.
 type fakeTransport struct {
 	name       string
 	allow      func(chatID string) bool // nil = deny everyone (fail closed)
@@ -88,7 +87,6 @@ func newFakeTransport(name string) *fakeTransport {
 	}
 }
 
-// fakeSession is a minimal turn.IdentifiedSession for testing.
 type fakeSession struct {
 	id      string
 	replies []string
@@ -219,7 +217,6 @@ func TestRouter_AllowAllAdmits(t *testing.T) {
 	assertSent(t, ft, "hello", 2*time.Second)
 }
 
-// R8: no transports returns error.
 func TestRouter_NoTransports(t *testing.T) {
 	store := newTestStore(t)
 	services := runtime.Services{

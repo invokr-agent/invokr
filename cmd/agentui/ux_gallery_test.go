@@ -261,8 +261,6 @@ var galleryScenes = []struct {
 	}},
 }
 
-// answered raises the requests, decides them with key, and leaves the result
-// in the transcript the way the running tool block shows it.
 func (g *gallery) answered(first approval.Request, key string, more ...approval.Request) {
 	g.events(toolEvent(events.EventToolStarted, "1", first.Tool, `{"command":"`+strings.ReplaceAll(first.Subject, `"`, `\"`)+`"}`, "", ""))
 	g.ask(append([]approval.Request{first}, more...)...)

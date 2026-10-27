@@ -537,7 +537,6 @@ func TestNotFoundNoResemblanceRefusesToDumpLargeFile(t *testing.T) {
 	}
 }
 
-// A successful edit is untouched by any of the above.
 func TestSuccessfulEditUnaffectedByResupply(t *testing.T) {
 	got, n, err := replaceIn("alpha\nbeta\ngamma\n", "beta", "BETA", false, "\n")
 	if err != nil || n != 1 || got != "alpha\nBETA\ngamma\n" {

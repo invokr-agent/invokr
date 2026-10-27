@@ -13,7 +13,6 @@ import (
 	"github.com/invokr-ai/invokr/surface/messaging"
 )
 
-// pipeDialer creates a net.Pipe()-backed dialer. Returns client conn and server conn.
 func pipeDialer() (func(string, string) (net.Conn, error), net.Conn) {
 	server, client := net.Pipe()
 	dialer := func(_, _ string) (net.Conn, error) {
@@ -40,13 +39,11 @@ func writeNotification(conn net.Conn, source, message string) {
 	_, _ = conn.Write(append(raw, '\n'))
 }
 
-// writeRPCResponse sends a JSON-RPC success response for the given id.
 func writeRPCResponse(conn net.Conn, id float64) {
 	resp := fmt.Sprintf(`{"jsonrpc":"2.0","id":%d,"result":{}}`, int64(id)) + "\n"
 	_, _ = conn.Write([]byte(resp))
 }
 
-// consumeSubscribe reads the subscribeReceive call and sends an ack.
 func consumeSubscribe(conn net.Conn) {
 	scanner := bufio.NewScanner(conn)
 	scanner.Scan() // read subscribeReceive
@@ -82,7 +79,6 @@ func newTestClientAllowAll(t *testing.T, allowed []string, allowAll bool) (*Clie
 	return c, server
 }
 
-// S1: subscribeReceive sent on New.
 func TestNew_SubscribeSent(t *testing.T) {
 	dialer, server := pipeDialer()
 	defer func() { _ = server.Close() }()
@@ -140,7 +136,6 @@ func TestNew_PreservesNotificationBeforeSubscribeAck(t *testing.T) {
 	}
 }
 
-// S2: inbound from allowed number.
 func TestListen_AllowedNumber(t *testing.T) {
 	c, server := newTestClient(t, []string{"+12025551234"})
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -275,7 +270,6 @@ func TestSetTyping_StartAndStop(t *testing.T) {
 	}
 }
 
-// S5: AskApproval YES.
 func TestAskApproval_YES(t *testing.T) {
 	c, server := newTestClient(t, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -365,7 +359,6 @@ func TestApprovalRepliesRouteByRequestID(t *testing.T) {
 	}
 }
 
-// S6: AskApproval NO.
 func TestAskApproval_NO(t *testing.T) {
 	c, server := newTestClient(t, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -395,7 +388,6 @@ func TestAskApproval_NO(t *testing.T) {
 	}
 }
 
-// S7: AskApproval context cancel.
 func TestAskApproval_Cancel(t *testing.T) {
 	c, server := newTestClient(t, nil)
 	defer func() { _ = server.Close() }()

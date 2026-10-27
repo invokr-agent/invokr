@@ -13,7 +13,6 @@ import (
 	"github.com/invokr-ai/invokr/tools/core/sandbox"
 )
 
-// shellCall scripts one explicit shell tool call.
 func shellCall(id, command string, args ...string) providertest.CompletionStep {
 	payload := map[string]any{"command": command}
 	if len(args) > 0 {

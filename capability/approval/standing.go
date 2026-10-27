@@ -110,8 +110,6 @@ func (s *Store) Exclude(tools ...string) {
 	}
 }
 
-// SetWorkspace records the current workspace root used to evaluate
-// workspace-scoped grants.
 func (s *Store) SetWorkspace(dir string) {
 	s.mu.Lock()
 	s.workspace = dir

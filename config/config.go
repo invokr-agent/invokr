@@ -87,7 +87,6 @@ func (c LSPConfig) withEnv() LSPConfig {
 	return c
 }
 
-// UIConfig holds appearance settings the terminal UI reads at startup.
 type UIConfig struct {
 	// SyntaxTheme names the chroma stylesheet fenced code is highlighted with.
 	// Empty picks one to match the terminal background. The names are chroma's
@@ -147,7 +146,6 @@ func (c RouterConfig) Enabled() bool { return len(c.Profiles) > 0 }
 // diagnostics.
 func (c RouterConfig) ProfileIDs() []string { return slices.Sorted(maps.Keys(c.Profiles)) }
 
-// RouterProviderConfig is one provider definition.
 type RouterProviderConfig struct {
 	// Type selects the driver: "openai-compatible" is served in-process,
 	// anything else ("anthropic", "openai", "bedrock") is a provider process.
@@ -408,12 +406,10 @@ const (
 	DefaultZerfooEmbeddingDims      = 896
 )
 
-// EmbeddingRef returns the local path if set, otherwise the model ID.
 func (c ZerfooMemoryConfig) EmbeddingRef() string {
 	return cmp.Or(strings.TrimSpace(c.EmbeddingPath), strings.TrimSpace(c.EmbeddingModel))
 }
 
-// SummarizationRef returns the local path if set, otherwise the model ID.
 func (c ZerfooMemoryConfig) SummarizationRef() string {
 	return cmp.Or(strings.TrimSpace(c.SummarizationPath), strings.TrimSpace(c.SummarizationModel))
 }
@@ -430,7 +426,7 @@ type WorkspaceConfig struct {
 	Reads string `json:"reads,omitempty" env:"INVOKR_WORKSPACE_READS"`
 }
 
-// Values of WorkspaceConfig.Reads.
+// Accepted values of Reads.
 const (
 	ReadsWorkspace = "workspace"
 	ReadsAsk       = "ask"
@@ -503,7 +499,6 @@ type SkillsConfig struct {
 	HubCacheDir string `json:"hub_cache_dir,omitempty" env:"INVOKR_SKILLS_HUB_CACHE_DIR"`
 }
 
-// AgentsConfig configures the directory of custom subagent definition files.
 type AgentsConfig struct {
 	Dir string `json:"dir,omitempty"`
 }
@@ -905,10 +900,6 @@ func orSlice[T any](values, fallback []T) []T {
 	return values
 }
 
-// InvokrHomeDir returns the resolved Invokr home directory (e.g. ~/.invokr),
-// honoring the INVOKR_HOME override. Exported for callers outside the config
-// package that need to fill in defaults relative to the same home, such as the
-// toolbox loader.
 func InvokrHomeDir() string {
 	if dir := Env("INVOKR_HOME"); dir != "" {
 		return dir
@@ -935,7 +926,6 @@ func UserInvokrHomeDir() (string, error) {
 	return filepath.Join(home, constants.InvokrHomeDirName), nil
 }
 
-// Env reads an environment variable with surrounding whitespace trimmed.
 func Env(key string) string { return strings.TrimSpace(os.Getenv(key)) }
 
 func envParse[T any](key string, fallback T, parse func(string) (T, error)) T {

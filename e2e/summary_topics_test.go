@@ -122,7 +122,6 @@ func recallRecords(t *testing.T, manager memoryRecaller, query string) []memcore
 	return records
 }
 
-// fileTreeContains reports whether any file under root contains needle.
 func fileTreeContains(root, needle string) bool {
 	found := false
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {

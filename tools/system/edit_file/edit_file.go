@@ -196,8 +196,6 @@ func runDelete(ctx context.Context, dispatcher events.Dispatcher, plan preparedE
 	return finishEdit(ctx, dispatcher, plan, "completed", resp)
 }
 
-// finishEdit encodes the result and records the audit outcome of a call that
-// did what it was asked to.
 func finishEdit(ctx context.Context, dispatcher events.Dispatcher, plan preparedEdit, outcome string, resp editResponse) (string, error) {
 	data, err := core.MarshalResult("edit", resp)
 	if err != nil {
@@ -278,7 +276,6 @@ func editOpsFor(args editArgs, display string) ([]editOp, error) {
 	return args.Edits, nil
 }
 
-// toEOL rewrites every line ending in s to eol.
 func toEOL(s, eol string) string {
 	lf := strings.ReplaceAll(s, "\r\n", "\n")
 	if eol == "\n" {
@@ -470,8 +467,6 @@ func keepTrailingCR(content string, spans [][2]int) [][2]int {
 	return spans
 }
 
-// locate returns the byte spans of old in content. A nil norm means exact
-// substring search; otherwise lines are compared after norm.
 func locate(content, old string, norm func(string) string) [][2]int {
 	if norm == nil {
 		return locateExact(content, old)

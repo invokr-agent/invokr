@@ -265,7 +265,6 @@ func commandLine(args shellArgs) string {
 	return line
 }
 
-// quoteArg single-quotes an argument for bash unless it is plainly safe.
 func quoteArg(arg string) string {
 	if arg != "" && !strings.ContainsAny(arg, " \t\n'\"\\$`|&;<>()*?[]{}!#~") {
 		return arg
@@ -273,8 +272,6 @@ func quoteArg(arg string) string {
 	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
 }
 
-// shellLimits clamps the call's timeout and output budget to the tool's caps,
-// falling back to the defaults when the model named neither.
 func shellLimits(args shellArgs) (int, int) {
 	return mathutil.ClampInt(args.TimeoutMS, constants.ShellDefaultTimeoutMS, constants.ShellMaxTimeoutMS),
 		mathutil.ClampInt(args.MaxOutputBytes, constants.ShellDefaultMaxOutputBytes, constants.ShellMaxOutputBytes)

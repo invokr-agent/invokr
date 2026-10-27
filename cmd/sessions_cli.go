@@ -157,8 +157,6 @@ func newSessionsShowCmd(services ServicesProvider) *cobra.Command {
 	return cmd
 }
 
-// withSessionStore resolves the services and hands the workspace's session
-// store to fn — the preamble every sessions subcommand shares.
 func withSessionStore(services ServicesProvider, fn func(*sessionstore.Store) error) error {
 	s, err := services()
 	if err != nil {
