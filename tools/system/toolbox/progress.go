@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // progressLineCap bounds the partial line held between writes, so a plugin

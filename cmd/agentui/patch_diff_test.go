@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 const testPatch = "*** Begin Patch\n*** Update File: a.go\n@@\n-old\n+new\n*** End Patch"

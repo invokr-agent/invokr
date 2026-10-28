@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/runtime"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func systemPrompt(t *testing.T, provider *providertest.Server) string {

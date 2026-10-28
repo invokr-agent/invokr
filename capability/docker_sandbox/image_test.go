@@ -37,7 +37,7 @@ func TestStageBuildContextStagesBinaryAndDockerfile(t *testing.T) {
 			t.Fatalf("Dockerfile missing %q:\n%s", want, content)
 		}
 	}
-	if strings.Contains(content, "github.com/invokr-ai/invokr") {
+	if strings.Contains(content, "github.com/invokr-agent/invokr") {
 		t.Fatalf("Dockerfile still references module path:\n%s", content)
 	}
 }

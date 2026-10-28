@@ -2,11 +2,11 @@ package recall
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/policy"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/policy"
 )
 
 type PinnedSource interface {

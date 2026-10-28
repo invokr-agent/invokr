@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	turnpkg "github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/tools/core"
+	turnpkg "github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/tools/core"
 	"go.uber.org/zap"
 )
 

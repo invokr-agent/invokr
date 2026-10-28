@@ -7,12 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/invokr-ai/invokr/capability/skills/hub"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/skills/hub"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // HubRepo is the repository `invokr toolbox install` and the /tools Install tab read from.
-const HubRepo = "invokr-ai/toolbox"
+const HubRepo = "invokr-agent/toolbox"
 
 // HubApprovals are the policy.approval values offered at install time.
 var HubApprovals = []string{"always_ask", "ask_once", "ask", "auto"}

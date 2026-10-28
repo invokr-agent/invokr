@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/platform/events"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/platform/events"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 )
 
 // systemPrompts returns the recorded system-prompt payloads, which is what a

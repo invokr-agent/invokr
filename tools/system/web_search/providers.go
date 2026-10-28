@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/strutil"
 
 	"github.com/tidwall/gjson"
 )
@@ -153,7 +153,7 @@ func NewBraveProvider(cfg SearchProviderConfig, client *http.Client) *jsonSearch
 			q.Set("freshness", braveFreshness(req.RecencyDays))
 		}
 		u.RawQuery = q.Encode()
-		return newProviderRequest(ctx, http.MethodGet, u.String(), nil, map[string]string{keyHeader: apiKey, "Accept": "application/json", "User-Agent": "github.com/invokr-ai/invokr"})
+		return newProviderRequest(ctx, http.MethodGet, u.String(), nil, map[string]string{keyHeader: apiKey, "Accept": "application/json", "User-Agent": "github.com/invokr-agent/invokr"})
 	}
 	p.decode = mappedDecoder("brave", map[string]string{"results": "$.web.results", "title": "$.title", "url": "$.url", "snippet": "$.description", "published_at": "$.age|$.page_age", "score": "$.score"})
 	return p

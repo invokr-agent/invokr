@@ -3,13 +3,13 @@ package skill_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/skill"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/skill"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/capability/skills"
 )
 
 type fakeSkillManager struct {

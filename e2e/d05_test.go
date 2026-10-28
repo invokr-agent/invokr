@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/memory"
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	memzerfoo "github.com/invokr-ai/invokr/capability/memory/zerfoo"
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/capability/memory"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	memzerfoo "github.com/invokr-agent/invokr/capability/memory/zerfoo"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 func TestLiveD05_ModelBackedMemory(t *testing.T) {

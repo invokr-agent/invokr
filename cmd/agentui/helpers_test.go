@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 func newModel(ctx context.Context, session turn.Session, toolEvents *toolEventQueue, approvalQueue *approval.ApprovalQueue, logs LogSource, logView bool, promptHistory turn.PromptHistory, initialHistory []string) *model {

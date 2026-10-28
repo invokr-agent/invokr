@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 )
 
 func TestModelWritableAliasCannotSwapUserToolMount(t *testing.T) {

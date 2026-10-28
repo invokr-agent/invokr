@@ -1,7 +1,7 @@
 package tools
 
 import (
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 	"testing"
 )
 

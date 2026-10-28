@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestX01_RetiredSpellingsFail covers plan case X01.5: a retired command

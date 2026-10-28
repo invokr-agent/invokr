@@ -10,9 +10,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/markdown"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/memory/markdown"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func TestD04_RetrievalIndexLifecycle(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func patchCall(id, patch string) providertest.CompletionStep {

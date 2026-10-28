@@ -18,8 +18,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	"charm.land/huh/v2"
 
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/constants"
 	"github.com/rivt-ai/go-inference-router"
 )
 

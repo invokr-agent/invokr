@@ -6,8 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/jobs"
-	sqlitepkg "github.com/invokr-ai/invokr/capability/memory/sqlite"
+	"github.com/invokr-agent/invokr/capability/jobs"
+	sqlitepkg "github.com/invokr-agent/invokr/capability/memory/sqlite"
 )
 
 func newTestStore(t *testing.T) *jobs.Store {

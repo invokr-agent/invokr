@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/cmd/agentui"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/cmd/agentui"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/runtime"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

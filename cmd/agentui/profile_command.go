@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 // promptSwitcher is the session capability /profile needs to swap the base

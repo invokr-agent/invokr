@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // twoShellStep returns a single assistant response that issues two shell tool

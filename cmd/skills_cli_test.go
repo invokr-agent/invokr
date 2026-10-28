@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func newSkillsTestConfig(t *testing.T, hubs ...string) *config.AppConfig {

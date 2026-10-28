@@ -3,10 +3,10 @@ package skill
 import (
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/capability/skills"
 )
 
 type loadSkillArgs struct {

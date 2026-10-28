@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/memory/markdown"
-	"github.com/invokr-ai/invokr/platform/runtime"
-	"github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/memory/markdown"
+	"github.com/invokr-agent/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // x04RecallMarker is the fact seeded into project memory; the recall gate's

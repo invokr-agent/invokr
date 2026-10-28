@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 // grantUsageLine is the row /help prints for the command; grantsUsage is the

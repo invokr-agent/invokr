@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

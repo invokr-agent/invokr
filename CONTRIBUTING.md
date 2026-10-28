@@ -28,7 +28,7 @@ are held to it.
 You need Go 1.26+.
 
 ```bash
-git clone https://github.com/invokr-ai/invokr && cd invokr
+git clone https://github.com/invokr-agent/invokr && cd invokr
 make install        # builds with version info, copies to ~/.local/bin
 go build -o invokr . && ./invokr   # or run it in place
 ```

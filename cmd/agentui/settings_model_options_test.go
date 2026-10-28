@@ -7,8 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 type optionSession struct {

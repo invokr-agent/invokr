@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/invokr-ai/invokr/support/migrate"
+	"github.com/invokr-agent/invokr/support/migrate"
 
 	_ "modernc.org/sqlite"
 )

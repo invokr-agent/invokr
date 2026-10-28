@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // git_write op=push sends the workspace's current branch to its remote after

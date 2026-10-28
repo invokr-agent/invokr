@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/constants"
 
 	"go.uber.org/zap"
 )

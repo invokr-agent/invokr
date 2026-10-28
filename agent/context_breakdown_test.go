@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/agentprompt"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/agentprompt"
+	"github.com/invokr-agent/invokr/platform/turn"
 
 	inference "github.com/rivt-ai/go-inference-router"
 )

@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 	"io"
 	"net/http"
 	"net/url"

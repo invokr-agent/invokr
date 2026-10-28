@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func TestDeleteSessionPurgesRecordsAndEventsForThatSessionOnly(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 )
 
 // TestNativeToolsOmitGenericGuidance keeps the deferred catalog in the bench

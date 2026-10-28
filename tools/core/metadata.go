@@ -1,6 +1,6 @@
 package core
 
-import "github.com/invokr-ai/invokr/constants"
+import "github.com/invokr-agent/invokr/constants"
 
 func NativeMetadata(namespace string, tiers []string, approval string, capabilities ToolCapabilities) ToolMetadata {
 	return ToolMetadata{Namespace: namespace, Source: "native", Policy: ToolPolicy{Tiers: append([]string(nil), tiers...), Approval: approval}, Capabilities: capabilities, AlwaysVisible: true}

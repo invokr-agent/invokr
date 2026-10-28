@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/surface/messaging"
+	"github.com/invokr-agent/invokr/surface/messaging"
 )
 
 func pipeDialer() (func(string, string) (net.Conn, error), net.Conn) {

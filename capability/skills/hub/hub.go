@@ -13,8 +13,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/config"
 )
 
 const skillFilename = "SKILL.md"

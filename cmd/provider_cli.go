@@ -11,9 +11,9 @@ import (
 	"charm.land/huh/v2"
 	"github.com/charmbracelet/x/term"
 
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
 
 	"github.com/spf13/cobra"
 )

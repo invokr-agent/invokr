@@ -9,16 +9,16 @@ import (
 	"strings"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 
 	humanize "github.com/dustin/go-humanize"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/surface/ui"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/tool_search"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/surface/ui"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/tool_search"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"

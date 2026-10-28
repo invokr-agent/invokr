@@ -20,7 +20,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/invokr-ai/invokr/platform/version"
+	"github.com/invokr-agent/invokr/platform/version"
 )
 
 const binName = "invokr"
@@ -28,8 +28,8 @@ const binName = "invokr"
 // Package vars so tests can point the installer at a local server and a
 // throwaway binary.
 var (
-	apiBase      = "https://api.github.com/repos/invokr-ai/invokr"
-	downloadBase = "https://github.com/invokr-ai/invokr/releases/download"
+	apiBase      = "https://api.github.com/repos/invokr-agent/invokr"
+	downloadBase = "https://github.com/invokr-agent/invokr/releases/download"
 	client       = http.DefaultClient
 	executable   = os.Executable
 )

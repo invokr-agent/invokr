@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // read_file's window defaults, mirrored so the tests exercise the real

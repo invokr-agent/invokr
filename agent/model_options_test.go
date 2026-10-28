@@ -6,9 +6,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/syntax"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/capability/syntax"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"
 )

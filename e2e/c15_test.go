@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestC15_Delegate drives a parent turn that delegates a subtask; the same

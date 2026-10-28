@@ -6,9 +6,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 func operation(spec core.ToolSpec, call *core.ToolCall) approval.Request {

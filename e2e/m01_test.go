@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestM01_ElisionFallbackReduces covers plan case M01.3: when summarization

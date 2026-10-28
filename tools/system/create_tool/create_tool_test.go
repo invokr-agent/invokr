@@ -6,9 +6,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/toolbox"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/toolbox"
 )
 
 func TestCreateToolSchemaRequiresCapabilities(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
-	turnpkg "github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/config"
+	turnpkg "github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 func testCaps() map[string]core.ToolCapabilities {

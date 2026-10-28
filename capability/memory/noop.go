@@ -2,7 +2,7 @@ package memory
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/core"
 )
 
 // NoopManager is a Manager that never reads or writes persistent memory.

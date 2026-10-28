@@ -3,7 +3,7 @@ package policy
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 func TestDefaultRecallPolicyUsesConstants(t *testing.T) {

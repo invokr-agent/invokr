@@ -1,7 +1,7 @@
 package syntax
 
 import (
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	inference "github.com/rivt-ai/go-inference-router"
 )

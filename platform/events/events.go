@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 type EventType string

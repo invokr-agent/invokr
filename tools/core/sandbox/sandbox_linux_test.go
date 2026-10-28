@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 func TestDedupExistingPathsFiltersMissingAndDuplicates(t *testing.T) {

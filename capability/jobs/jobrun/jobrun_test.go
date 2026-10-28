@@ -6,11 +6,11 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/invokr-ai/invokr/capability/jobs"
-	"github.com/invokr-ai/invokr/capability/jobs/jobrun"
-	sqlitepkg "github.com/invokr-ai/invokr/capability/memory/sqlite"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/jobs"
+	"github.com/invokr-agent/invokr/capability/jobs/jobrun"
+	sqlitepkg "github.com/invokr-agent/invokr/capability/memory/sqlite"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 	"go.uber.org/zap"
 )
 

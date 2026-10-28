@@ -3,10 +3,10 @@ package recallgate
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 	"strings"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // promptHeader instructs the probe model to act as a memory-recall router and

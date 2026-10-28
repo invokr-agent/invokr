@@ -7,10 +7,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/capability/jobs"
-	sqlitepkg "github.com/invokr-ai/invokr/capability/memory/sqlite"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/jobs"
+	sqlitepkg "github.com/invokr-agent/invokr/capability/memory/sqlite"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 type fakeSession struct {

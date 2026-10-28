@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // newProgressWriter builds the stderr tee in isolation, so the cases below

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 
 	"go.uber.org/zap"
 	"golang.org/x/sync/singleflight"

@@ -23,7 +23,7 @@ func TestBuildReportMapsOutcomes(t *testing.T) {
 }
 
 func TestBuildReportFailsMissingAndPackageResults(t *testing.T) {
-	input := `{"Action":"fail","Package":"github.com/invokr-ai/invokr/e2e","Output":"build failed\n"}`
+	input := `{"Action":"fail","Package":"github.com/invokr-agent/invokr/e2e","Output":"build failed\n"}`
 	report, failed, err := buildReportFor(strings.NewReader(input), []string{"C01"})
 	if err != nil {
 		t.Fatal(err)

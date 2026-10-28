@@ -3,7 +3,7 @@
 # matching release asset from GitHub Releases, verifies its checksum, and
 # installs the binary to ~/.local/bin.
 #
-#   curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/invokr-agent/invokr/main/install.sh | sh
 #
 # Env overrides:
 #   INVOKR_INSTALL_REPO      owner/repo to pull releases from (required if
@@ -12,7 +12,7 @@
 #   INVOKR_INSTALL_DIR       install directory, default: $HOME/.local/bin
 set -eu
 
-REPO="${INVOKR_INSTALL_REPO:-invokr-ai/invokr}"
+REPO="${INVOKR_INSTALL_REPO:-invokr-agent/invokr}"
 VERSION="${INVOKR_INSTALL_VERSION:-latest}"
 INSTALL_DIR="${INVOKR_INSTALL_DIR:-$HOME/.local/bin}"
 BIN_NAME="invokr"

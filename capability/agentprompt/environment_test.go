@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 func writeFile(t *testing.T, path, content string) {

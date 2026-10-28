@@ -4,9 +4,9 @@ import (
 	"math"
 	"slices"
 
-	"github.com/invokr-ai/invokr/config"
-	turnpkg "github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/config"
+	turnpkg "github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // turnBudget replaces the runner's static turn counter with a weighted budget.

@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 // ToolCaller is the interface agent sessions use to get tool specs and execute

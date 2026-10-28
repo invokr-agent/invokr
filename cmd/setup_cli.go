@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/setup"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/setup"
 
 	"github.com/spf13/cobra"
 )

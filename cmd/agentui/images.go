@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 	inference "github.com/rivt-ai/go-inference-router"
 )
 

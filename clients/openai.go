@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 	inference "github.com/rivt-ai/go-inference-router"
 	"github.com/rivt-ai/go-inference-router/provider/openaicompat"
 )

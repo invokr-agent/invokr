@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 func loadTestFile(path string) (AppConfig, error) { return loadFile(path, "", false) }

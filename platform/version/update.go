@@ -16,7 +16,7 @@ import (
 const (
 	// The list, not /releases/latest: that one never returns a pre-release,
 	// so the edge channel could not see its builds through it.
-	defaultReleaseURL = "https://api.github.com/repos/invokr-ai/invokr/releases?per_page=50"
+	defaultReleaseURL = "https://api.github.com/repos/invokr-agent/invokr/releases?per_page=50"
 	fetchTimeout      = 10 * time.Second
 	// cacheTTL is how long a fetched answer is reused before another lookup runs.
 	// noUpdateCheckEnv turns the lookup off when set to any non-empty value.

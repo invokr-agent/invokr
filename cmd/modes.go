@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
 	"github.com/spf13/cobra"
 )
 

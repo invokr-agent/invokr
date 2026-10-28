@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/core"
 )
 
 // vectorSource adapts an embedder + vector store into the recall.LexicalSource

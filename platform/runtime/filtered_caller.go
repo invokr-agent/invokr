@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // filteredCaller wraps a ToolCaller and restricts it to an allowlist of tool

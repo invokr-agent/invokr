@@ -16,8 +16,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 const (
@@ -346,7 +346,7 @@ func invokrBinary(t *testing.T) string {
 			return
 		}
 		e2eBuild.dir = dir
-		e2eBuild.path = filepath.Join(dir, "github.com/invokr-ai/invokr")
+		e2eBuild.path = filepath.Join(dir, "github.com/invokr-agent/invokr")
 
 		ctx, cancel := context.WithTimeout(context.Background(), invokrE2EBuildTimeout)
 		defer cancel()

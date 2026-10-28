@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 )
 
 // gradleFixtureEnv names a Kotlin/Gradle project to build for real inside the

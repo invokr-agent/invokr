@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 func TestAddGrantRejectsNonFiniteHours(t *testing.T) {

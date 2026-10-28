@@ -1,6 +1,6 @@
 package policy
 
-import "github.com/invokr-ai/invokr/constants"
+import "github.com/invokr-agent/invokr/constants"
 
 type Tier struct {
 	Enabled, PromptEnabled, RecallToolEnabled                         bool

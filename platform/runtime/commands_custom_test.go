@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	"go.uber.org/zap"
 )

@@ -4,7 +4,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 
 	"github.com/zerfoo/zerfoo/model/huggingface"
 )

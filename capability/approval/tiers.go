@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 // TierPolicy is the unattended approval rule exec and scheduled jobs share:

@@ -1,4 +1,4 @@
-module github.com/invokr-ai/invokr
+module github.com/invokr-agent/invokr
 
 go 1.26.3
 

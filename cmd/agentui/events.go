@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 type toolEventQueue struct {

@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/mathutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 )
 
 // PromptHeader instructs the summarization model to produce a faithful, concise,

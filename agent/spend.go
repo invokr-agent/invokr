@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/invokr-ai/invokr/config"
-	turnpkg "github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/config"
+	turnpkg "github.com/invokr-agent/invokr/platform/turn"
 
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"

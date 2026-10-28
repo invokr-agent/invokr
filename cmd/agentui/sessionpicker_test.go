@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	tea "charm.land/bubbletea/v2"
 

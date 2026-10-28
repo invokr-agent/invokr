@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	appruntime "github.com/invokr-ai/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	appruntime "github.com/invokr-agent/invokr/platform/runtime"
 
 	"github.com/spf13/cobra"
 )

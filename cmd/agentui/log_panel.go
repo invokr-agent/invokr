@@ -4,7 +4,7 @@ import (
 	"image/color"
 	"strings"
 
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"

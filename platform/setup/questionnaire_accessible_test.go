@@ -12,7 +12,7 @@ import (
 
 	"charm.land/huh/v2"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 // huh v2.0.3 gives every accessible field its own bufio.Scanner over the

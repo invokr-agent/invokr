@@ -5,9 +5,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/capability/skills/hub"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/capability/skills/hub"
+	"github.com/invokr-agent/invokr/config"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

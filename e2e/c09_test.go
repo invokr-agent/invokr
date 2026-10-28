@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
-	systmux "github.com/invokr-ai/invokr/tools/system/tmux"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
+	systmux "github.com/invokr-agent/invokr/tools/system/tmux"
 )
 
 // TestC09_TmuxToolLifecycle exercises the tmux tool's full lifecycle in-process:

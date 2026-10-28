@@ -3,7 +3,7 @@ package agentui
 import (
 	"strings"
 
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	"github.com/antonikliment/tuikit"
 	"github.com/antonikliment/tuikit/markdown"

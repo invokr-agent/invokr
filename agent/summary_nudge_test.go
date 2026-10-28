@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 const demoCallWithPath = `<|tool_call>{"name":"demo","arguments":{"path":"notes/todo.md"}}<|tool_call|>`

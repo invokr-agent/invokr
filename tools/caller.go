@@ -10,13 +10,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/support/strutil"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/integrations"
-	"github.com/invokr-ai/invokr/tools/system"
-	"github.com/invokr-ai/invokr/tools/system/tool_search"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/integrations"
+	"github.com/invokr-agent/invokr/tools/system"
+	"github.com/invokr-agent/invokr/tools/system/tool_search"
 
 	"go.uber.org/zap"
 )

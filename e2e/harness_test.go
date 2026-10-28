@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/cmd/execwire"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/setup"
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/cmd/execwire"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/setup"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 
 	_ "modernc.org/sqlite"
 )

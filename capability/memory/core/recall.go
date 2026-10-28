@@ -1,6 +1,6 @@
 package core
 
-import "github.com/invokr-ai/invokr/config"
+import "github.com/invokr-agent/invokr/config"
 
 type Hit struct {
 	Record     Record  `json:"record"`

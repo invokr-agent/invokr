@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	"github.com/invokr-ai/invokr/clients"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/clients"
 )
 
 // ChatSummarizer is the slice of the main chat provider the memory manager uses

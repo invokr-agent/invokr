@@ -3,8 +3,8 @@ package core
 import (
 	"context"
 	"errors"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/support/testutil"
 	"strings"
 	"testing"
 )

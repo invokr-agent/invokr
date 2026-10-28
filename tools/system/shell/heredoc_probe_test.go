@@ -3,7 +3,7 @@ package shell
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 // Probe: the real heredoc shapes that were refused in the round-6 bench rows.

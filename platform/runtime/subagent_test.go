@@ -7,14 +7,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/agentdef"
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/capability/syntax"
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/agentdef"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/capability/syntax"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	"go.uber.org/zap"
 )

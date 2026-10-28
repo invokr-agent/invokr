@@ -6,14 +6,14 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 	"io"
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/jobs"
-	"github.com/invokr-ai/invokr/capability/jobs/jobrun"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/jobs"
+	"github.com/invokr-agent/invokr/capability/jobs/jobrun"
+	"github.com/invokr-agent/invokr/config"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

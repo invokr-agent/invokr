@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func TestResolveRejectsNewFileThroughOutsideSymlink(t *testing.T) {

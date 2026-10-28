@@ -25,9 +25,9 @@ builds:
         goarch: arm64
     ldflags: &ldflags
       - -s -w
-      - -X github.com/invokr-ai/invokr/platform/version.Version={{.Version}}
-      - -X github.com/invokr-ai/invokr/platform/version.Commit={{.ShortCommit}}
-      - -X github.com/invokr-ai/invokr/platform/version.Date={{.Date}}
+      - -X github.com/invokr-agent/invokr/platform/version.Version={{.Version}}
+      - -X github.com/invokr-agent/invokr/platform/version.Commit={{.ShortCommit}}
+      - -X github.com/invokr-agent/invokr/platform/version.Date={{.Date}}
 
   # linux/arm64 needs CGO: github.com/zerfoo/zerfoo's (and its ztensor dep's)
   # optional CUDA support resolves dlopen/dlsym via a //go:linkname into

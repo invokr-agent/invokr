@@ -8,10 +8,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/sqlite"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/sqlite"
 
 	"github.com/stytchauth/sqx"
 )

@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/clients"
+	"github.com/invokr-agent/invokr/clients"
 	inference "github.com/rivt-ai/go-inference-router"
 )
 

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 // ExecutionLedger is request-local and observes original tool events before output gating.

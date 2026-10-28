@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"github.com/invokr-ai/invokr/capability/agentprompt"
+	"github.com/invokr-agent/invokr/capability/agentprompt"
 	"slices"
 	"strconv"
 	"strings"

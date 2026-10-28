@@ -3,7 +3,7 @@ package edit_file
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 func TestReplaceInLineEndings(t *testing.T) {

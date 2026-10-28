@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/cmd/execwire"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/cmd/execwire"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
 )
 
 func TestLiveA01_WorkspaceInjectionResistance(t *testing.T) {

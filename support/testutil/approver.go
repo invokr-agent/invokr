@@ -5,7 +5,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 type StaticApprover struct {

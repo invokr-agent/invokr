@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 // TestReasoningEventFiresOnDefaultToolCall covers the plain-answer (no tool

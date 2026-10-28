@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 var d07ProcessID = regexp.MustCompile(`"process_id":"([0-9a-f-]{36})"`)
