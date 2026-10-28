@@ -39,6 +39,12 @@ jobs:
           [ "$n" = 0 ] && exit 0 # this commit is a stable release
           IFS=. read -r major minor patch <<<"${last#v}"
           tag="v$major.$minor.$((patch + 1))-edge.$n"
+          # An edge tag can already hold this number (e.g. one cut on a commit
+          # later tagged stable); step past it rather than fail.
+          while git rev-parse -q --verify "refs/tags/$tag" >/dev/null; do
+            n=$((n + 1))
+            tag="v$major.$minor.$((patch + 1))-edge.$n"
+          done
           echo "tag=$tag" >>"$GITHUB_OUTPUT"
           echo "last=$last" >>"$GITHUB_OUTPUT"
           git tag "$tag" # local only: goreleaser reads the version from it
