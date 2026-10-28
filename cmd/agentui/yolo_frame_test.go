@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/surface/ui"
 )
 
 // TestYoloFrameIsTheApprovalYellow: the frame is the approval yellow through a

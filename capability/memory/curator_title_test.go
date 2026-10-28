@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
 )
 
 // fakeTitler satisfies both memorySummarizer and titler.

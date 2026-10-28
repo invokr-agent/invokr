@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 )
 
 // A sandbox plan keeps the host network namespace exactly when the line is

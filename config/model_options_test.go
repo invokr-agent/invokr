@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 func TestModelOptionValidation(t *testing.T) {

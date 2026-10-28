@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,15 +16,15 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/fsutil"
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	"github.com/invokr-ai/invokr/tools/system/shell"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/mathutil"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/system/shell"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 const tmuxToolName = "tmux"

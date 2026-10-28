@@ -7,11 +7,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 	"mvdan.cc/sh/v3/syntax"
 )
 

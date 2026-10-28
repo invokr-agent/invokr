@@ -11,11 +11,11 @@ import (
 	"charm.land/huh/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/antonikliment/tuikit/markdown"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/setup"
-	"github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/support/fsutil"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/setup"
+	"github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/surface/ui"
 )
 
 // The settings panel gathers the per-setting slash commands into one tabbed

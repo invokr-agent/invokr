@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 func reasoningEvent(text string) events.Event {

@@ -9,9 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 func TestEvidenceOverlayUsesQueuedCallsFromCurrentTurnOnly(t *testing.T) {

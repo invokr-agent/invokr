@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 func allowSet(names ...string) map[string]struct{} {

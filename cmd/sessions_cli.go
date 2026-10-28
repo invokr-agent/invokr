@@ -6,7 +6,7 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/invokr-ai/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
 
 	"github.com/spf13/cobra"
 )

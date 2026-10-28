@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type approverFunc func(context.Context, approval.Request) (approval.Decision, error)

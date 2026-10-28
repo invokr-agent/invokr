@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 func TestShellPipelineStatusCannotHideFailure(t *testing.T) {

@@ -11,7 +11,7 @@ import (
 	"github.com/sergi/go-diff/diffmatchpatch"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 )
 
 // Edit diffs render through tuikit's DiffView (chroma highlighting, intraline

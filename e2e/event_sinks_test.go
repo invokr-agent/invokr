@@ -9,9 +9,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/runtime"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestEventSinks characterizes which event types the product actually surfaces.

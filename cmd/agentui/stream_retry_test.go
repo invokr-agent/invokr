@@ -3,7 +3,7 @@ package agentui
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 // TestStreamRetryDropsPartialReply: a reply cut short and re-issued must not

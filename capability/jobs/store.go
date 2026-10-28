@@ -13,8 +13,8 @@ import (
 
 	"github.com/google/uuid"
 
-	sqliteinternal "github.com/invokr-ai/invokr/capability/memory/sqlite"
-	"github.com/invokr-ai/invokr/config"
+	sqliteinternal "github.com/invokr-agent/invokr/capability/memory/sqlite"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // OpenStore opens (creating if needed) the shared memory.db and returns a

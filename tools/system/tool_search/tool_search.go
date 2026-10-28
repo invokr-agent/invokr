@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // RunShape is the manager call that runs an enabled optional tool.

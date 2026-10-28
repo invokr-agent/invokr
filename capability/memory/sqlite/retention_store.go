@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/forgetting"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/forgetting"
 )
 
 // statusArchived is the cold-storage state for forgotten runtime records. Like

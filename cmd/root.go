@@ -7,12 +7,12 @@ import (
 	"io"
 	"slices"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/logging"
-	"github.com/invokr-ai/invokr/platform/version"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/logging"
+	"github.com/invokr-agent/invokr/platform/version"
 	"os"
 
-	appruntime "github.com/invokr-ai/invokr/platform/runtime"
+	appruntime "github.com/invokr-agent/invokr/platform/runtime"
 
 	"github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // With workspace.reads=ask a read beyond the workspace queues an approval;

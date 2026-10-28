@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/testutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/approval"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 type captureRegistrar struct {

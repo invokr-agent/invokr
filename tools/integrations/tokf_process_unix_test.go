@@ -4,7 +4,7 @@ package integrations
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"os"
 	"path/filepath"
 	"testing"
@@ -28,7 +28,7 @@ wait
 
 	filter := &TokfResultFilter{
 		bin:       fakeTokf,
-		helperBin: "/tmp/github.com/invokr-ai/invokr",
+		helperBin: "/tmp/github.com/invokr-agent/invokr",
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

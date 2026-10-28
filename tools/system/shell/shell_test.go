@@ -4,19 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/invokr-ai/invokr/tools"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/shell"
+	"github.com/invokr-agent/invokr/tools"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/shell"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/testutil"
 )
 
 func hasSpec(specs []core.ToolSpec, name string) bool {

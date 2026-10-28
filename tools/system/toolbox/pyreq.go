@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // pinnedRequirementRe matches "name==version" with an optional environment

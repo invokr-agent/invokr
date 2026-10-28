@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"testing"
 )
 

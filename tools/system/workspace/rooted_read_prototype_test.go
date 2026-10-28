@@ -14,7 +14,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func prototypeRoot(t *testing.T, dir string) *os.Root {

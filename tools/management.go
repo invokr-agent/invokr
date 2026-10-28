@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/shell"
-	"github.com/invokr-ai/invokr/tools/system/tool_search"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/shell"
+	"github.com/invokr-agent/invokr/tools/system/tool_search"
 )
 
 func (c *Caller) coreTools() []string {

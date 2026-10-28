@@ -10,13 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/syntax"
+	"github.com/invokr-agent/invokr/capability/syntax"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 )
 
 const defaultBudgetChars = 6000

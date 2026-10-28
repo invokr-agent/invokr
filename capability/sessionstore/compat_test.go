@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 // legacyMessage is the pre-tool_calls on-disk shape, kept verbatim so the

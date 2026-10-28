@@ -6,7 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 func TestCapToolResultUnderCapPassthrough(t *testing.T) {

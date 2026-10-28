@@ -5,13 +5,13 @@ package agentdef
 import (
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/registry"
+	"github.com/invokr-agent/invokr/support/registry"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
-	"github.com/invokr-ai/invokr/support/frontmatter"
+	"github.com/invokr-agent/invokr/support/frontmatter"
 )
 
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)

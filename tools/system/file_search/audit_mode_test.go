@@ -2,8 +2,8 @@ package file_search_test
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/tools/core"
 	"path/filepath"
 	"testing"
 )

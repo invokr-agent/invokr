@@ -1,8 +1,8 @@
 package tool_search
 
 import (
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/tools/core"
 	"slices"
 	"testing"
 )

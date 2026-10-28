@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // seedStandingDenial writes one persisted standing denial to the home's grants

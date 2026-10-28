@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/syntax"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/tools"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/syntax"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/tools"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	"go.uber.org/zap"
 )

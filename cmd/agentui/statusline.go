@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/agentprompt"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/capability/agentprompt"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	"charm.land/lipgloss/v2"
 )

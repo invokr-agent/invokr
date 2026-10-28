@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type fakeEmbed struct {

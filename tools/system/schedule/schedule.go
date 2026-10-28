@@ -11,10 +11,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/capability/jobs"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/jobs"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 const unattendedNote = "Note: schedule creates deny-only unattended jobs. Approval-gated tools (for example shell) will be denied; list reports the denial in last_status. Use the jobs CLI for privileged jobs."

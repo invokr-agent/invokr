@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func TestC08_CodeInterpreter(t *testing.T) {

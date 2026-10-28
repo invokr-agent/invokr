@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 func TestApprovalQueue_AccumulatesMultipleRequests(t *testing.T) {

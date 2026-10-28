@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 func TestInlinePython(t *testing.T) {

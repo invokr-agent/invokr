@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 	"os"
 	"path/filepath"
 	"reflect"

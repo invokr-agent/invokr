@@ -10,8 +10,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/frontmatter"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/frontmatter"
 )
 
 // Profile is a partial run configuration loaded from JSON or Markdown.

@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 // This file implements *standing grants*: a persistent, scoped, expiring

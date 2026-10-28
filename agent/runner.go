@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	turnpkg "github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	turnpkg "github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"

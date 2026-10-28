@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	"github.com/charmbracelet/x/ansi"
 )

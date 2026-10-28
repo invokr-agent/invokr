@@ -6,7 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,10 +14,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	"github.com/invokr-ai/invokr/tools/system/shell"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/system/shell"
 )
 
 // sandboxTmp is where the sandbox mounts the shared tmp dir, so the socket and

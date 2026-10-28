@@ -26,8 +26,8 @@ import (
 
 	zf "github.com/zerfoo/zerfoo"
 
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // queryPrefix is the LFM2.5-Embedding instruction applied to query text so that

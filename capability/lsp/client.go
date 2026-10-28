@@ -13,7 +13,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 	"io"
 	"os"
 	"os/exec"

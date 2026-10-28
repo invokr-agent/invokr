@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type fakePromptSession struct {

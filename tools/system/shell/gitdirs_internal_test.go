@@ -7,9 +7,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	workspacepolicy "github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
+	workspacepolicy "github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 // A linked worktree's .git is a pointer file, and what it names lives outside

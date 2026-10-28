@@ -8,9 +8,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/support/strutil"
-	"github.com/invokr-ai/invokr/surface/ui"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/surface/ui"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 
 	"github.com/charmbracelet/x/ansi"
 )

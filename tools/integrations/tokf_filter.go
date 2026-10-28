@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/invokr-ai/invokr/support/strutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/tools/core"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
 
 	"go.uber.org/zap"
 )
@@ -48,14 +48,14 @@ func NewTokfResultFilter(cfg config.ToolboxConfig, logger *zap.Logger) *TokfResu
 
 	helperBin, err := os.Executable()
 	if err != nil || strings.TrimSpace(helperBin) == "" {
-		helperBin = "github.com/invokr-ai/invokr"
+		helperBin = "github.com/invokr-agent/invokr"
 	}
 
 	return &TokfResultFilter{bin: strutil.FirstNonEmpty(cfg.TokfBin, constants.DefaultTokfBin), home: cfg.TokfHome, helperBin: helperBin, logger: logger}
 }
 
 func (f *TokfResultFilter) FilterToolResult(ctx context.Context, meta core.ToolResultMeta, input string) (string, error) {
-	args := []string{"run", strutil.FirstNonEmpty(f.helperBin, "github.com/invokr-ai/invokr"), "tokf-filter-stdin", "--tool", meta.ToolName, "--source", meta.Source}
+	args := []string{"run", strutil.FirstNonEmpty(f.helperBin, "github.com/invokr-agent/invokr"), "tokf-filter-stdin", "--tool", meta.ToolName, "--source", meta.Source}
 	if strings.TrimSpace(meta.Runtime) != "" {
 		args = append(args, "--runtime", meta.Runtime)
 	}

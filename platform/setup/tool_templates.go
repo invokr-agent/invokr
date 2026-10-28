@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 //go:embed tool-presets/*.json

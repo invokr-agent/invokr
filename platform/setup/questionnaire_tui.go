@@ -14,10 +14,10 @@ import (
 
 	"charm.land/huh/v2"
 
-	"github.com/invokr-ai/invokr/capability/skills/hub"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/skills/hub"
+	"github.com/invokr-agent/invokr/config"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 var ErrCancelled = errors.New("setup cancelled")

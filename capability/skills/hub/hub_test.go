@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func skillMD(name, description string) string {
@@ -54,7 +54,7 @@ func newTestService(t *testing.T, hubs ...string) *Service {
 }
 
 func TestCloneURLShorthand(t *testing.T) {
-	if got := cloneURL("invokr-ai/skills-hub"); got != "https://github.com/invokr-ai/skills-hub.git" {
+	if got := cloneURL("invokr-agent/skills-hub"); got != "https://github.com/invokr-agent/skills-hub.git" {
 		t.Fatalf("shorthand: got %q", got)
 	}
 	full := "https://example.com/x/y.git"

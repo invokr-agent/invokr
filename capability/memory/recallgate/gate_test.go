@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type fakeCompleter struct {

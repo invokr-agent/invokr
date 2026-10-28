@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // bellFlag reports tmux's per-window bell flag, which flips to 1 when the

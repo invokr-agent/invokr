@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 // TestServePlainApprovalsHonorsStandingGrants covers piped mode: a standing

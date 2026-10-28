@@ -6,7 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // TestBuildChatTransports_RefusesEmptyTelegramAllowlist verifies chat serve

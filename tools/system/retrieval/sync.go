@@ -22,12 +22,12 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/strutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/approval"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	"go.uber.org/zap"
 )

@@ -3,15 +3,15 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 	"github.com/spf13/cobra"
 	"io"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/invokr-ai/invokr/surface/ui"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/surface/ui"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 
 	"charm.land/lipgloss/v2"
 	"github.com/antonikliment/tuikit"

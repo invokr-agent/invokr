@@ -1,7 +1,7 @@
 package agentui
 
 import (
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 	"strings"
 	"testing"
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/docker_sandbox"
+	"github.com/invokr-agent/invokr/capability/docker_sandbox"
 )
 
 func TestBuildDockerArgs(t *testing.T) {

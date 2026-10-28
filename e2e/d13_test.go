@@ -15,10 +15,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/testutil"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestD13_ToolboxManifestExtensions is the oracle for the four manifest-driven

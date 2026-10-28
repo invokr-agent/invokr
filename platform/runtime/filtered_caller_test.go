@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // stubCaller is a minimal ToolCaller for filtered_caller tests.

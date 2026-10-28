@@ -8,7 +8,7 @@ import (
 
 	"mvdan.cc/sh/v3/syntax"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 var pythonExe = regexp.MustCompile(`^python(\d+(\.\d+)?)?$`)

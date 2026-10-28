@@ -9,7 +9,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 
 	"github.com/spf13/cobra"
 )

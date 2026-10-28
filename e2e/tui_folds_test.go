@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // A settled shell block collapses to its output tail plus a fold indicator;

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func TestR09_CorruptSQLiteFailsIntegrityCheck(t *testing.T) {

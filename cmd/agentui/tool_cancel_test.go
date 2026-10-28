@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 )
 
 // TestCancelledToolBlockSettles guards issue #300: a cancelled tool call must

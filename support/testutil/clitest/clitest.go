@@ -195,7 +195,7 @@ func Binary(t testing.TB) string {
 			buildState.err = err
 			return
 		}
-		buildState.path = filepath.Join(dir, "github.com/invokr-ai/invokr")
+		buildState.path = filepath.Join(dir, "github.com/invokr-agent/invokr")
 
 		ctx, cancel := context.WithTimeout(context.Background(), defaultBuildTimeout)
 		defer cancel()

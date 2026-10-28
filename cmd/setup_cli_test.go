@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/logging"
-	"github.com/invokr-ai/invokr/platform/setup"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/logging"
+	"github.com/invokr-agent/invokr/platform/setup"
 
 	"github.com/stretchr/testify/require"
 )

@@ -4,8 +4,8 @@ import (
 	"cmp"
 	"strings"
 
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 // reasoningSession is the slice of agent.Session the /reasoning command and

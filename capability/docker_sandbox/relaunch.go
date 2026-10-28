@@ -17,7 +17,7 @@ import (
 
 	"github.com/charmbracelet/x/term"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // containerInvokrHome is where the host's invokr home dir is mounted inside

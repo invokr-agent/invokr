@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/jobs"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/capability/jobs"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	"charm.land/lipgloss/v2"
 )

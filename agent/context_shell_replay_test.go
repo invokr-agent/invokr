@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 	"go.uber.org/zap"
 	"sync"
 	"testing"

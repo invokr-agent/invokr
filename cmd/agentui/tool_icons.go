@@ -8,8 +8,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/surface/ui"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/surface/ui"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"

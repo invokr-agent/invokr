@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 type AppConfig struct {

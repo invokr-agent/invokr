@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"charm.land/huh/v2"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type modelOptionsSession interface {

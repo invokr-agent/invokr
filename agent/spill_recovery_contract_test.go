@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/read_file"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/read_file"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 func TestSpillRecoveryExampleInvokesRegisteredRead(t *testing.T) {

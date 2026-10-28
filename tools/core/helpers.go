@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/strutil"
 )
 
 func MarshalResult(toolName string, v any) (string, error) {

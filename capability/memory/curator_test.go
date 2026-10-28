@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
 )
 
 // blockingQueueSummarizer parks every Summarize call until release is closed,

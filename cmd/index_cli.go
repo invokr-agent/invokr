@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/runtime"
-	"github.com/invokr-ai/invokr/tools/system/retrieval"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/tools/system/retrieval"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 
 	"github.com/spf13/cobra"
 )

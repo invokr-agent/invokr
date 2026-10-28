@@ -10,9 +10,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 func newRepo(t *testing.T) string {

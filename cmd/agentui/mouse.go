@@ -4,7 +4,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"

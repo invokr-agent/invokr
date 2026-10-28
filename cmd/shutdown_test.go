@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	appruntime "github.com/invokr-ai/invokr/platform/runtime"
+	appruntime "github.com/invokr-agent/invokr/platform/runtime"
 )
 
 // stubShutdownSpinner replaces the spinner for the duration of a test and

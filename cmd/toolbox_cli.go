@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"charm.land/huh/v2"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/system/toolbox"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools/system/toolbox"
 	"github.com/spf13/cobra"
 )
 

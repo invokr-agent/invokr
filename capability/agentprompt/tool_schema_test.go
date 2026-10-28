@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/syntax"
-	"github.com/invokr-ai/invokr/constants"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/syntax"
+	"github.com/invokr-agent/invokr/constants"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 )
 
 // The tagged-JSON tool listing has no separate function-definition channel, so

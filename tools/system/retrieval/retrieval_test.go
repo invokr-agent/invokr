@@ -12,17 +12,17 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/capability/memory"
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/strutil"
-	"github.com/invokr-ai/invokr/support/testutil"
-	"github.com/invokr-ai/invokr/tools"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/retrieval"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/memory"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/tools"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/retrieval"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 // fakeMemory is a storing memory.Manager double. It mirrors the sqlite store's

@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	memcore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	memcore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestSummaryTopicsAreDiscarded pins a dead end in the memory summarizer.

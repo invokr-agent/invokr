@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/approval"
 )
 
 func TestPreparedFactsOverrideAdvertisedReadOnly(t *testing.T) {

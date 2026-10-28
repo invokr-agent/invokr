@@ -9,10 +9,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/invokr-ai/invokr/surface/ui"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/tool_search"
-	"github.com/invokr-ai/invokr/tools/system/toolbox"
+	"github.com/invokr-agent/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/tool_search"
+	"github.com/invokr-agent/invokr/tools/system/toolbox"
 )
 
 type dialogSession struct {

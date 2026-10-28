@@ -4,18 +4,18 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/markdown"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/markdown"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func runtimeConfigFromEnv(t *testing.T) config.AppConfig {

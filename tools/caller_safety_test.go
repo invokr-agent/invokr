@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 type emptyResultFilter struct{}

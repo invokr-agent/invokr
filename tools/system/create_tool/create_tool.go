@@ -15,12 +15,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/toolbox"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/toolbox"
 )
 
 var toolNameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{1,63}$`)

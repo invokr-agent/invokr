@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // TestT09_PlainModeAutoDeniesApproval covers plan case T09: with stdin piped

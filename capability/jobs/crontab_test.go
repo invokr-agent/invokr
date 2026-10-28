@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/jobs"
+	"github.com/invokr-agent/invokr/capability/jobs"
 )
 
 func TestMarkerComment(t *testing.T) {

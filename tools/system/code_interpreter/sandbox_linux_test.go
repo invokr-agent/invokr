@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 // runSandboxedCode runs code through the process backend and returns the

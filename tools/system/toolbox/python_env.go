@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/fsutil"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 )
 
 var venvMuMap sync.Map // map[string]*sync.Mutex — one mutex per venv dir

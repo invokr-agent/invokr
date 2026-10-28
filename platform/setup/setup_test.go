@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 func TestEnsureAtCreatesHomeAndDefaultConfig(t *testing.T) {

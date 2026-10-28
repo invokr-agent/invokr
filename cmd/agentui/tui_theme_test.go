@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 )
 
 // The palette is read across both grounds: NewTheme picks one set per terminal,

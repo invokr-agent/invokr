@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/testutil/clitest"
+	"github.com/invokr-agent/invokr/support/testutil/clitest"
 )
 
 func TestR10_MalformedConfigFailsNamed(t *testing.T) {

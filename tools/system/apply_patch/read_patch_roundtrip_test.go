@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // The read → patch round trip, with no model in the loop.

@@ -6,11 +6,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/invokr-ai/invokr/capability/memory"
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/memory"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/mathutil"
+	"github.com/invokr-agent/invokr/tools/core"
 	"strings"
 )
 

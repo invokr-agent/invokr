@@ -1,6 +1,6 @@
 // Package fsutil provides small filesystem helpers shared across the tools
 // and internal/memory trees. It must stay a leaf package (no imports of
-// github.com/invokr-ai/invokr/tools/* or github.com/invokr-ai/invokr/capability/memory/*) so both sides can
+// github.com/invokr-agent/invokr/tools/* or github.com/invokr-agent/invokr/capability/memory/*) so both sides can
 // depend on it without creating an import cycle.
 package fsutil
 

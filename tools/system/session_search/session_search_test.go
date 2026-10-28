@@ -3,8 +3,8 @@ package session_search
 import (
 	"context"
 	"encoding/json"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/tools/core"
 	"os"
 	"path/filepath"
 	"strings"

@@ -2,7 +2,7 @@ package agentui
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/events"
 	"strings"
 	"testing"
 	"time"

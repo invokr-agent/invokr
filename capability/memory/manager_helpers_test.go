@@ -1,8 +1,8 @@
 package memory
 
 import (
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
 
 	"go.uber.org/zap"
 )

@@ -3,16 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/invokr-ai/invokr/platform/version"
+	"github.com/invokr-agent/invokr/platform/version"
 	"io"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/invokr-ai/invokr/capability/docker_sandbox"
-	"github.com/invokr-ai/invokr/cmd"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/setup"
+	"github.com/invokr-agent/invokr/capability/docker_sandbox"
+	"github.com/invokr-agent/invokr/cmd"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/setup"
 )
 
 func main() {

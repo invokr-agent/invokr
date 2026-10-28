@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/textarea"

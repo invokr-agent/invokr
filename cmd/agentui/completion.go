@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/invokr-ai/invokr/surface/ui"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/file_search"
+	"github.com/invokr-agent/invokr/surface/ui"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/file_search"
 
 	tea "charm.land/bubbletea/v2"
 )

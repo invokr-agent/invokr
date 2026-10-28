@@ -3,7 +3,7 @@ package apply_patch
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 // A patch approval must carry a Subject: it is the only field standing grants

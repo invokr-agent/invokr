@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func TestStdioCancelBlockedWrite(t *testing.T) {

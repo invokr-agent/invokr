@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/huh/v2/spinner"
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 // shutdownSpinnerDelay is how long cleanup may take before we say anything.

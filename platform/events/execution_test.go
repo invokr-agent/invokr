@@ -2,7 +2,7 @@ package events
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 	"testing"
 )
 

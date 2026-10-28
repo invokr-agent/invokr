@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/agentprompt"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/agentprompt"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // assertNoOrphanedToolCalls fails when a request carries a tool result whose

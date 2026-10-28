@@ -29,7 +29,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"golang.org/x/sys/unix"
 )
 

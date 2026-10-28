@@ -1,7 +1,7 @@
 package agentprompt
 
 import (
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 // Environment is the harness's own view of where it is running. It is a

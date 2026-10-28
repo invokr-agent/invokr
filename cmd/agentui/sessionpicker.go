@@ -8,12 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/surface/ui"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"

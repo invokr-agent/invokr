@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/invokr-ai/invokr/platform/events"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/shell"
+	"github.com/invokr-agent/invokr/platform/events"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/shell"
 )
 
 // noteToolSuggestion records a shell denial that a toolbox tool would resolve,

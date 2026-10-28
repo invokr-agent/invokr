@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/testutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/tools/core"
 
 	"go.uber.org/zap"
 )

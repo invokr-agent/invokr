@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/fsutil"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 // A /tmp path names the directory the shell tool mounts at /tmp, so a file one

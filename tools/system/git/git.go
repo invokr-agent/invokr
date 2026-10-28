@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/shell"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/shell"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 const (

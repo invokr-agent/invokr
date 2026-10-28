@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 // toolboxCredential is one manifest credentials entry. The value is resolved

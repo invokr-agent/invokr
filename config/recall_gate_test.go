@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
+	"github.com/invokr-agent/invokr/constants"
 )
 
 func TestRecallGateConfig_Defaults(t *testing.T) {

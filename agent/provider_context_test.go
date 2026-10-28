@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/clients"
+	"github.com/invokr-agent/invokr/clients"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"

@@ -8,9 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/setup"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/setup"
 )
 
 func openSettingsModel(t *testing.T) *model {

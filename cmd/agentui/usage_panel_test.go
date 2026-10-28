@@ -8,7 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 // TestUsageEighthsIsValidUTF8 covers the byte-slice bug: the eighth blocks are

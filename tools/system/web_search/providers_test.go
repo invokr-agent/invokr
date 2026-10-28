@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // fakeTransport records the outgoing request (and its body) and replies with a

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/invokr-ai/invokr/support/frontmatter"
+	"github.com/invokr-agent/invokr/support/frontmatter"
 )
 
 type frontMatter struct {

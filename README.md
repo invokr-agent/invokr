@@ -1,9 +1,9 @@
 <p align="center"><strong>Invokr</strong></p>
 <p align="center">A terminal agent built for local models.</p>
 
-[![Release](https://img.shields.io/github/v/release/invokr-ai/invokr?include_prereleases&sort=semver)](https://github.com/invokr-ai/invokr/releases/latest)
-[![CI](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/invokr-ai/invokr/actions/workflows/ci.yml)
-[![E2E](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml/badge.svg?branch=main&event=push)](https://github.com/invokr-ai/invokr/actions/workflows/e2e.yml)
+[![Release](https://img.shields.io/github/v/release/invokr-agent/invokr?include_prereleases&sort=semver)](https://github.com/invokr-agent/invokr/releases/latest)
+[![CI](https://github.com/invokr-agent/invokr/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/invokr-agent/invokr/actions/workflows/ci.yml)
+[![E2E](https://github.com/invokr-agent/invokr/actions/workflows/e2e.yml/badge.svg?branch=main&event=push)](https://github.com/invokr-agent/invokr/actions/workflows/e2e.yml)
 
 ![Invokr TUI: a prompt, a tiered shell approval, the answer, and the /usage panel](docs/assets/demo.gif)
 
@@ -20,7 +20,7 @@ execution paths when available. See [Platforms](#platforms) for fallback behavio
 ### Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/invokr-ai/invokr/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/invokr-agent/invokr/main/install.sh | sh
 ```
 
 The installer supports Linux and macOS. It selects the release for your OS and
@@ -28,7 +28,7 @@ architecture, verifies its checksum and installs to `~/.local/bin`. With Go 1.26
 you can also run:
 
 ```bash
-go install github.com/invokr-ai/invokr@latest
+go install github.com/invokr-agent/invokr@latest
 ```
 
 Building from source is covered in [CONTRIBUTING.md](CONTRIBUTING.md).

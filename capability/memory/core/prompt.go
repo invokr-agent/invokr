@@ -2,7 +2,7 @@ package core
 
 import (
 	"cmp"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 	"slices"
 	"strings"
 )

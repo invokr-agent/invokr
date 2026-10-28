@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // escapedLinkTargets returns the absolute targets of the symlinks directly

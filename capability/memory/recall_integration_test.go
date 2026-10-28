@@ -12,11 +12,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	memzerfoo "github.com/invokr-ai/invokr/capability/memory/zerfoo"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	memzerfoo "github.com/invokr-agent/invokr/capability/memory/zerfoo"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/testutil"
 )
 
 func TestIntegrationEndToEndRecall(t *testing.T) {

@@ -9,10 +9,10 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/surface/messaging"
-	"github.com/invokr-ai/invokr/surface/messaging/signal"
-	"github.com/invokr-ai/invokr/surface/messaging/telegram"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/surface/messaging"
+	"github.com/invokr-agent/invokr/surface/messaging/signal"
+	"github.com/invokr-agent/invokr/surface/messaging/telegram"
 )
 
 // NewChatCmd returns the "bot" command with its "serve" sub-command. It is

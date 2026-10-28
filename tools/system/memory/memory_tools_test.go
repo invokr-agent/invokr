@@ -3,13 +3,13 @@ package memory
 import (
 	"context"
 	"encoding/json"
-	memorymgr "github.com/invokr-ai/invokr/capability/memory"
-	memorycore "github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/tools/core"
+	memorymgr "github.com/invokr-agent/invokr/capability/memory"
+	memorycore "github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 type fakeMemoryManager struct {

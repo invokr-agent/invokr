@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/skills"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/skills"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 )
 
 func TestBuildSectionsSumToSystemLength(t *testing.T) {

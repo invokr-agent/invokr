@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 // servingSession is a session whose backend serves a model the configured name

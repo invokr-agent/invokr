@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func TestToolTemplatesSeedPreserveAndReset(t *testing.T) {

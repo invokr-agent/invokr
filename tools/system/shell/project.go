@@ -3,7 +3,7 @@ package shell
 import (
 	"fmt"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"os"
 	"path/filepath"
 	"slices"

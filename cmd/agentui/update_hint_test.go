@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/version"
+	"github.com/invokr-agent/invokr/platform/version"
 )
 
 // TestVersionBadgeUpdateHint checks the header badge composition: the hint

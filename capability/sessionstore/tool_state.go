@@ -3,7 +3,7 @@ package sessionstore
 import (
 	"strings"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 // ToolState is session metadata, not model-authored transcript content.

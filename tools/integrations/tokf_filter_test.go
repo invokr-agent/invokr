@@ -2,7 +2,7 @@ package integrations
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +34,7 @@ printf 'filtered output'
 	filter := &TokfResultFilter{
 		bin:       fakeTokf,
 		home:      homePath,
-		helperBin: "/tmp/github.com/invokr-ai/invokr",
+		helperBin: "/tmp/github.com/invokr-agent/invokr",
 	}
 
 	got, err := filter.FilterToolResult(context.Background(), core.ToolResultMeta{
@@ -54,7 +54,7 @@ printf 'filtered output'
 		t.Fatalf("read captured args: %v", err)
 	}
 	args := strings.Split(strings.TrimSpace(string(argsBytes)), "\n")
-	wantArgs := []string{"run", "/tmp/github.com/invokr-ai/invokr", "tokf-filter-stdin", "--tool", "read_file", "--source", "toolbox", "--runtime", "python"}
+	wantArgs := []string{"run", "/tmp/github.com/invokr-agent/invokr", "tokf-filter-stdin", "--tool", "read_file", "--source", "toolbox", "--runtime", "python"}
 	if strings.Join(args, "\x00") != strings.Join(wantArgs, "\x00") {
 		t.Fatalf("unexpected tokf args: got %#v want %#v", args, wantArgs)
 	}
@@ -85,7 +85,7 @@ func TestTokfResultFilterFallsBackToInputOnTokfFailure(t *testing.T) {
 
 	filter := &TokfResultFilter{
 		bin:       fakeTokf,
-		helperBin: "/tmp/github.com/invokr-ai/invokr",
+		helperBin: "/tmp/github.com/invokr-agent/invokr",
 	}
 
 	got, err := filter.FilterToolResult(context.Background(), core.ToolResultMeta{ToolName: "shell", Source: "toolbox"}, "raw result")

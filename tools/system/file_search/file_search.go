@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/support/mathutil"
-	"github.com/invokr-ai/invokr/support/strutil"
-	"github.com/invokr-ai/invokr/tools/core"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/support/mathutil"
+	"github.com/invokr-agent/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 const (

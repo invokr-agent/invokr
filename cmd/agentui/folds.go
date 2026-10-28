@@ -5,7 +5,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/invokr-ai/invokr/surface/ui"
+	"github.com/invokr-agent/invokr/surface/ui"
 )
 
 // Transcript folds: every settled tool block can collapse (its renderer's

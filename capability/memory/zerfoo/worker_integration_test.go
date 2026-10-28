@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/testutil"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/testutil"
 )
 
 func syntheticTranscript() summary.StructuredSummaryInput {

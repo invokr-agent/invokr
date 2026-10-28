@@ -2,7 +2,7 @@ package logging
 
 import (
 	"fmt"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 	"io"
 	"os"
 	"path/filepath"

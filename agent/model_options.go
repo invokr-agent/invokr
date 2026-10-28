@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"maps"
 
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func (g *OpenAIModelGateway) modelOptionSettings() config.AgentConfig {

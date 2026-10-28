@@ -7,7 +7,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/invokr-ai/invokr/platform/version"
+	"github.com/invokr-agent/invokr/platform/version"
 
 	"github.com/spf13/cobra"
 )

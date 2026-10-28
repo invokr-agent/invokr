@@ -121,7 +121,7 @@ func expectedCases(tier string) ([]string, error) {
 	if tier != "fake" && tier != "live" {
 		return nil, fmt.Errorf("unknown tier %q", tier)
 	}
-	out, err := exec.Command("go", "test", "-tags", "e2e", "-list", "^Test", "github.com/invokr-ai/invokr/e2e").Output()
+	out, err := exec.Command("go", "test", "-tags", "e2e", "-list", "^Test", "github.com/invokr-agent/invokr/e2e").Output()
 	if err != nil {
 		return nil, fmt.Errorf("discover e2e tests: %w", err)
 	}

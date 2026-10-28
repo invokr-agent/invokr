@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/turn"
 	"go.uber.org/zap"
 )
 

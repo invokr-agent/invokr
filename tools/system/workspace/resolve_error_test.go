@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 // A model probing absolute paths was never told where it actually was and

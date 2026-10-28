@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
-	"github.com/invokr-ai/invokr/tools/core/sandbox"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 )
 
 func shellCall(id, command string, args ...string) providertest.CompletionStep {

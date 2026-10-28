@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/capability/skills"
 )
 
 const urlFetchTimeout = 30 * time.Second

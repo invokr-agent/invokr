@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 // prefsFile is the TUI's own view preferences, kept beside the prompt history

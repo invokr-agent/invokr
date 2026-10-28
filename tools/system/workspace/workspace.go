@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 type Policy struct {

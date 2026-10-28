@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 func TestRerouteMapsPlainLinesToNativeTools(t *testing.T) {

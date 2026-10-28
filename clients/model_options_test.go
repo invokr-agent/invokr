@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 	inference "github.com/rivt-ai/go-inference-router"
 )
 

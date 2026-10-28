@@ -3,21 +3,21 @@ package memory
 import (
 	"context"
 	"errors"
-	"github.com/invokr-ai/invokr/capability/memory/core"
-	"github.com/invokr-ai/invokr/capability/memory/markdown"
-	"github.com/invokr-ai/invokr/capability/memory/sqlite"
-	"github.com/invokr-ai/invokr/capability/memory/summary"
-	"github.com/invokr-ai/invokr/capability/sessionstore"
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/memory/core"
+	"github.com/invokr-agent/invokr/capability/memory/markdown"
+	"github.com/invokr-agent/invokr/capability/memory/sqlite"
+	"github.com/invokr-agent/invokr/capability/memory/summary"
+	"github.com/invokr-agent/invokr/capability/sessionstore"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/config"
+	"github.com/invokr-agent/invokr/config"
 )
 
 func newTestSQLiteStore(t *testing.T) *sqlite.Memory {

@@ -8,8 +8,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/invokr-ai/invokr/constants"
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 func DefaultConfigDir() string { return InvokrHomeDir() }

@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/memory/history"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/memory/history"
+	"github.com/invokr-agent/invokr/platform/turn"
 
 	tea "charm.land/bubbletea/v2"
 )

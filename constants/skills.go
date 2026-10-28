@@ -4,7 +4,7 @@ const DefaultSkillsDir = "skills"
 
 // DefaultSkillsHub is the built-in skill hub: a GitHub repository holding
 // installable skills as skills/<name>/SKILL.md directories.
-const DefaultSkillsHub = "invokr-ai/skills-hub"
+const DefaultSkillsHub = "invokr-agent/skills-hub"
 
 // DefaultHubsDir is where hub repositories are shallow-cloned, under the
 // invokr home directory.

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/invokr-ai/invokr/capability/agentprompt"
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/capability/agentprompt"
+	"github.com/invokr-agent/invokr/support/strutil"
 
 	inference "github.com/rivt-ai/go-inference-router"
 )

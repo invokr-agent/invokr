@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/platform/runtime"
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/runtime"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 // writeGrants seeds the isolated home's grants file, the way pressing `g` on an

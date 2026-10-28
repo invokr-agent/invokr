@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/tools/system/workspace"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
 func TestShellIntentBecomesTheApprovalSummary(t *testing.T) {

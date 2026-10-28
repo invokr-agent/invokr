@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
 
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"

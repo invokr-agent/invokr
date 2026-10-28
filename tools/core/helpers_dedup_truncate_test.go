@@ -3,7 +3,7 @@ package core
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/strutil"
+	"github.com/invokr-agent/invokr/support/strutil"
 )
 
 func TestDedupPreserveOrder(t *testing.T) {

@@ -2,13 +2,13 @@ package core
 
 import (
 	"context"
-	"github.com/invokr-ai/invokr/capability/agentdef"
-	"github.com/invokr-ai/invokr/capability/approval"
-	"github.com/invokr-ai/invokr/capability/memory"
-	"github.com/invokr-ai/invokr/capability/skills"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/platform/turn"
+	"github.com/invokr-agent/invokr/capability/agentdef"
+	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/capability/memory"
+	"github.com/invokr-agent/invokr/capability/skills"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/platform/turn"
 )
 
 type EmbeddingProvider interface {

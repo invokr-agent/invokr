@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/invokr-ai/invokr/support/strutil"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/support/strutil"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 
 	"go.uber.org/zap"
 )

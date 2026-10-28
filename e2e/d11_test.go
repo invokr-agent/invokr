@@ -5,7 +5,7 @@ package e2e
 import (
 	"testing"
 
-	"github.com/invokr-ai/invokr/support/testutil/providertest"
+	"github.com/invokr-agent/invokr/support/testutil/providertest"
 )
 
 func TestD11_ConfigurationVariants(t *testing.T) {

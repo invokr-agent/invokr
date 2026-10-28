@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/invokr-ai/invokr/capability/syntax"
-	"github.com/invokr-ai/invokr/clients"
-	"github.com/invokr-ai/invokr/config"
-	"github.com/invokr-ai/invokr/platform/events"
-	"github.com/invokr-ai/invokr/tools"
+	"github.com/invokr-agent/invokr/capability/syntax"
+	"github.com/invokr-agent/invokr/clients"
+	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/tools"
 
 	inference "github.com/rivt-ai/go-inference-router"
 	"go.uber.org/zap"

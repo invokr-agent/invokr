@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/antonikliment/tuikit"
-	"github.com/invokr-ai/invokr/capability/skills/hub"
-	"github.com/invokr-ai/invokr/surface/ui"
-	toolcore "github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/capability/skills/hub"
+	"github.com/invokr-agent/invokr/surface/ui"
+	toolcore "github.com/invokr-agent/invokr/tools/core"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"

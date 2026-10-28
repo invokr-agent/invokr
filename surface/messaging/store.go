@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/invokr-ai/invokr/support/fsutil"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 // Store maps chat keys to agent session IDs, persisted as a JSON file.

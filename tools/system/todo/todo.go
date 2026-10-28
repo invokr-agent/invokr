@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/invokr-ai/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core"
 )
 
 const toolName = "todo"
