@@ -3,6 +3,7 @@ package agent
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"path"
 	"regexp"
@@ -318,13 +319,13 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 				exhaustion = reason
 				break
 			}
-			r.logger.Error("agent turn failed", zap.Int("turn", turn), zap.Duration("duration", time.Since(turnStarted)), zap.Error(err))
+			r.logTurnFailed(ctx, turn, turnStarted, err)
 			return r.failedResponse(state), err
 		}
 		r.afterModelTurn(&modelTurn, &state)
 		result, nextMessages, err := r.turnProcessor.Process(workCtx, turn, modelTurn)
 		if err = cmp.Or(ctx.Err(), err); err != nil {
-			r.logger.Error("agent turn failed", zap.Int("turn", turn), zap.Duration("duration", time.Since(turnStarted)), zap.Error(err))
+			r.logTurnFailed(ctx, turn, turnStarted, err)
 			return r.failedResponse(state), err
 		}
 		result.answer = r.answerOrFallback(result, turn, modelTurn.Completion)
@@ -351,6 +352,15 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 
 	state.messages = stripTrailingInternalNudge(state.messages)
 	return r.gracefulExhaustion(ctx, req, state, started, exhaustion)
+}
+
+// logTurnFailed keeps a caller's cancellation (e.g. /cancel) out of the error log.
+func (r *Runner) logTurnFailed(ctx context.Context, turn int, started time.Time, err error) {
+	log := r.logger.Error
+	if errors.Is(ctx.Err(), context.Canceled) {
+		log = r.logger.Info
+	}
+	log("agent turn failed", zap.Int("turn", turn), zap.Duration("duration", time.Since(started)), zap.Error(err))
 }
 
 func (r *Runner) recordTurn(state *runState, result *turnResult, modelTurn ModelTurn, next []inference.Message) {

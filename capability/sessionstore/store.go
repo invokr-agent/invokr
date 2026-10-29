@@ -452,3 +452,17 @@ func snippet(text string, token string) string {
 	}
 	return strings.TrimSpace(strutil.TruncateUTF8(text[start:], limit))
 }
+
+// Resume replays a stored transcript into session so it continues as the same session.
+func Resume(session turn.Session, stored []Message) ([]turn.TranscriptMessage, error) {
+	resumer, ok := session.(turn.TranscriptResumer)
+	if !ok {
+		return nil, fmt.Errorf("session does not support transcript resume")
+	}
+	transcript := make([]turn.TranscriptMessage, len(stored))
+	for i, m := range stored {
+		transcript[i] = turn.TranscriptMessage{Role: m.Role, Text: m.Text, Interrupted: m.Interrupted,
+			ToolCalls: m.ToolCalls, ToolCallCount: m.ToolCallCount, ExecutionEvidence: m.ExecutionEvidence}
+	}
+	return transcript, resumer.ResumeTranscript(transcript)
+}
