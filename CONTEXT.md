@@ -46,10 +46,10 @@ standing instructions. Delegating without naming one yields the generalist subag
 The set of tool-approval requests currently awaiting a user decision, reviewed and
 decided as a batch (per item or all at once) rather than one blocking prompt at a time.
 
-### Chat Transport
+### Relay
 
-An external messaging channel (Telegram, Signal) that relays user turns and approval
-decisions to a per-chat agent session.
+An external program (agent-relay, v0.1.0) that carries Telegram, Signal and Matrix
+messages to an `invokr acp` agent over stdio. invokr itself speaks none of them.
 
 ### Model Fallback
 

@@ -28,23 +28,9 @@ func (c ProviderConfig) String() string {
 		c.BaseURL, c.Model, maskSecret(c.APIKey), c.HTTPTimeout, c.StallTimeout, c.MaxRetries)
 }
 
-// String masks the bot token so %v/%+v logging can't leak it.
-func (c TelegramConfig) String() string {
-	return fmt.Sprintf("{token:%s allowed_chat_ids:%v allow_all:%t}",
-		maskSecret(c.Token), c.AllowedChatIDs, c.AllowAll)
-}
-
-// String keeps Signal logging consistent with the other transports; the
-// socket path and numbers are not secrets, but the shape stays uniform.
-func (c SignalConfig) String() string {
-	return fmt.Sprintf("{socket:%s allowed_numbers:%v allow_all:%t}",
-		c.Socket, c.AllowedNumbers, c.AllowAll)
-}
-
 // Redacted returns a copy safe for display by diagnostic commands.
 func (c AppConfig) Redacted() AppConfig {
 	c.Provider.APIKey = maskSecret(c.Provider.APIKey)
-	c.Messaging.Telegram.Token = maskSecret(c.Messaging.Telegram.Token)
 	// Provider definitions may each carry a key, so masking the top-level one
 	// is not enough once a router table is configured.
 	if len(c.Provider.Router.Providers) > 0 {

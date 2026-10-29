@@ -15,14 +15,14 @@ flowchart LR
         term["Terminal user"]
         script["Scripts / CI"]
         cron["OS crontab"]
-        chat["Telegram / Signal users"]
+        chat["Telegram / Signal / Matrix users (via agent-relay)"]
     end
 
     subgraph invokr["invokr-agent (one Go binary)"]
         tui["agent (TUI / plain)"]
         exec["exec / exec resume"]
         jobsrun["jobs run"]
-        serve["bot serve"]
+        serve["acp (ACP agent over stdio)"]
     end
 
     subgraph external["External systems"]
@@ -65,7 +65,7 @@ flowchart TD
     runtime --> tools["tools/ (Caller)\ntools/system/*"]
     runtime --> caps["capability/*\nmemory · approval · skills · syntax\nagentdef · jobs · sandbox · sessionstore"]
     runtime --> clients["clients/"]
-    runtime --> msg["surface/messaging"]
+    runtime --> msg["surface/acpagent"]
 
     agent --> clients
     agent --> caps
@@ -214,7 +214,7 @@ flowchart LR
     brok --> q["TUI: ApprovalQueue\na/d per item · A/D all · v details\n/mode manual · auto · plan"]
     brok --> ex["exec: policy from flags\ndeny | --allow tier | --allow-all"]
     brok --> jb["jobs: fixed allow/deny per job\n(schedule-tool jobs always deny)"]
-    brok --> ch["chat: Telegram buttons /\nSignal YES id · NO id (2 min → deny)"]
+    brok --> ch["acp: allow once / reject once\n(no reply → deny)"]
 
     q & ex & jb & ch --> dec["Decision"]
     dec -->|approved| run["Execute"]

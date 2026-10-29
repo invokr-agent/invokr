@@ -21,7 +21,7 @@ expanded TUI panel / chat prompt).
 | TUI | `ApprovalQueue` drains remaining asks into a visible batch; keys `a/d/A/D/v`; ctrl+c denies all. Shift+Tab or `/mode` chooses Manual/Auto/Plan. Policy runs before the queue, even for automatic tools. |
 | `exec` | `--mode auto|plan` uses the same policy and denies remaining asks. Legacy Manual flags remain `--allow <tier>` (repeatable) and `--allow-all`; do not combine them with mode flags. |
 | Jobs | Fixed per-job policy `allow`/`deny` recorded at creation; a goroutine drains and answers uniformly. Jobs created by the agent-facing `schedule` tool are always `deny`. |
-| Chat | The transport asks in-channel: Telegram inline buttons, Signal `YES <id>`/`NO <id>` replies; 2-minute timeout denies. |
+| Relay (ACP) | agent-relay asks over ACP with allow-once / reject-once options; a failed, cancelled or unanswered request denies. |
 
 The queue fails closed: enqueue after `Close()` denies immediately (never
 strands a blocked requester), and `Decide`/`DecideAll` are idempotent.

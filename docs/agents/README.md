@@ -28,8 +28,8 @@ scan code:
   model, turn budget, and tool allowlist.
 - **Docker/podman sandbox** (`capability/docker_sandbox/`) — the agent can self-re-exec
   inside a container before bootstrap.
-- **Chat transports** (`surface/messaging/`) — Telegram and Signal front ends
-  driven by `invokr bot serve`.
+- **ACP agent** (`surface/acpagent/`) — the agent over Agent Client Protocol on stdio
+  (`invokr acp`), driven by an editor or by agent-relay.
 - **Scheduled jobs** (`capability/jobs/`, `capability/jobs/jobrun/`) — a crontab-backed
   job store with an agent-facing `schedule` tool.
 - **Model selection** — startup availability check against `/v1/models` with a

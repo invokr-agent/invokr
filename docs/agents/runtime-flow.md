@@ -28,7 +28,7 @@ Runtime bootstrap builds:
 - custom agent-definition registry (`capability/agentdef`)
 - tool caller with native and toolbox tools (delegate wired to the agent registry)
 - tagged-JSON syntax
-- agent session (plus a chat-session factory for `bot serve`) and the
+- agent session (plus a chat-session factory for `acp`) and the
   slash-command backend (`CommandService`)
 
 ## User Message Flow

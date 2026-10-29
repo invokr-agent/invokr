@@ -28,7 +28,7 @@ func TestGroupCommandsResolve(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"bot", "serve"}, "serve"},
+		{[]string{"acp"}, "acp"},
 		{[]string{"provider", "set-key"}, "set-key"},
 		{[]string{"skills", "rm"}, "rm"},
 	} {
@@ -123,15 +123,15 @@ func TestGroupCommandsHaveDefaultAction(t *testing.T) {
 	}
 }
 
-// `bot serve` starts a long-running daemon that talks to the outside world, so
-// it is the one group that must not act on a bare invocation.
-func TestBotHasNoDefaultAction(t *testing.T) {
-	cmd, _, err := testRoot(t).Find([]string{"bot"})
+// `acp` is the one serve command that is a leaf: the group name is the daemon,
+// so a bare `invokr acp` does start it, and it has no sub-commands to guess.
+func TestACPIsALeafServeCommand(t *testing.T) {
+	cmd, _, err := testRoot(t).Find([]string{"acp"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cmd.RunE != nil || cmd.Run != nil {
-		t.Fatal("bare `invokr bot` must not start the daemon")
+	if cmd.RunE == nil {
+		t.Fatal("`invokr acp` must run the agent over stdio")
 	}
 }
 

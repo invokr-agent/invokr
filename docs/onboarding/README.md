@@ -36,7 +36,7 @@ vLLM, …) or a remote endpoint via `--base-url` / `INVOKR_BASE_URL` +
 | [10-config](10-config.md) | Config layering, env overrides, validation | `config/` |
 | [11-subagents](11-subagents.md) | delegate_task, agent definitions, tool filtering | `capability/agentdef/`, `tools/system/delegate/`, `platform/runtime/subagent.go` |
 | [13-jobs](13-jobs.md) | Scheduled jobs, crontab, the schedule tool | `capability/jobs/`, `tools/system/schedule/` |
-| [14-messaging](14-messaging.md) | Telegram/Signal transports, chat router | `surface/messaging/` |
+| [14-relay](14-relay.md) | agent-relay carries Telegram/Signal/Matrix to `invokr acp` | `surface/acpagent/` |
 | [15-testing](15-testing.md) | Test style, the fake provider, e2e tiers, lint budgets | `support/testutil/`, `e2e/` |
 | [16-diagrams](16-diagrams.md) | Mermaid diagrams: system context → layers → bootstrap → turn sequence → subsystem internals | everything |
 
