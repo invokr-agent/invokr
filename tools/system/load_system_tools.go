@@ -15,6 +15,7 @@ import (
 	"github.com/invokr-agent/invokr/tools/system/mcp"
 	"github.com/invokr-agent/invokr/tools/system/memory"
 	"github.com/invokr-agent/invokr/tools/system/read_file"
+	"github.com/invokr-agent/invokr/tools/system/request_access"
 	"github.com/invokr-agent/invokr/tools/system/retrieval"
 	"github.com/invokr-agent/invokr/tools/system/schedule"
 	"github.com/invokr-agent/invokr/tools/system/session_search"
@@ -66,6 +67,7 @@ func LoadSystemTools(
 	if deps.App.Shell.IsEnabled() {
 		shell.RegisterShellTool(caller, deps, wsp)
 	}
+	request_access.RegisterRequestAccessTool(caller, deps, wsp)
 	code_interpreter.RegisterCodeInterpreterTool(caller, deps, wsp)
 	tmux.RegisterTmuxTool(caller, deps, wsp)
 	unregisterToolbox := toolbox.RegisterToolboxTools(caller, deps, l)

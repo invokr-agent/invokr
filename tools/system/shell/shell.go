@@ -22,6 +22,7 @@ import (
 	"github.com/invokr-agent/invokr/support/mathutil"
 	"github.com/invokr-agent/invokr/support/strutil"
 	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/system/request_access"
 	"github.com/invokr-agent/invokr/tools/system/workspace"
 )
 
@@ -79,6 +80,9 @@ type preparedShellCommand struct {
 	// a reference checkout it may still read.
 	workspaceRoot        string
 	roots, readonlyRoots []string
+	// grantedRW and grantedRO are folders this session asked to reach beyond
+	// the roots: shell sandbox mounts them read-write and read-only.
+	grantedRW, grantedRO []string
 	// gitReadOnly mounts the repository read-only; see GitReadOnlyProcessSpec.
 	gitReadOnly bool
 	// sandboxExec marks a line running project code (an interpreter or a
@@ -163,6 +167,7 @@ func RegisterShellTool(c core.NativeRegistrar, deps core.CallerDeps, workspace w
 		Prepare: func(ctx context.Context, p preparedShellCommand) (preparedShellCommand, error) {
 			p.mode = approval.ModeFromContext(ctx)
 			p.protected = workspace.ProtectedPaths()
+			p.grantedRW, p.grantedRO = request_access.RequestAccessRoots(core.SessionIDFromContext(ctx))
 			if p.mode != approval.Manual {
 				p.allowNetwork = p.mode != approval.Plan || p.args.Network
 			}
@@ -326,6 +331,7 @@ func (r ShellResult) text() string {
 // not be started at all is a hard error; a non-zero exit is not.
 func runLine(dispatcher events.Dispatcher, ctx context.Context, plan preparedShellCommand) (ShellResult, error) {
 	plan.foreground = true
+	request_access.ExpireOnceGrants(core.SessionIDFromContext(ctx))
 	spec, err := processSpec(plan)
 	if err != nil {
 		dispatchShellAudit(dispatcher, ctx, plan, "failed", err)
