@@ -18,8 +18,8 @@ import (
 func TestM01_ElisionFallbackReduces(t *testing.T) {
 	home := newHome(t, "")
 	// Keep this narrow enough that the failed summary requires real elision
-	// (4,100 leaves room for the optional-tool catalog in the system prompt).
-	home.app.Provider.ContextWindowTokens = 4_100
+	// (4,200 leaves room for the optional-tool catalog in the system prompt).
+	home.app.Provider.ContextWindowTokens = 4_200
 	// Exercise the failed-summary path independently of bench defaults.
 	home.app.Agent.ContextWarningPercent = 70
 	home.app.Agent.ContextCompactPercent = 80
@@ -46,7 +46,7 @@ func TestM01_ElisionFallbackReduces(t *testing.T) {
 			}
 		}})
 	}
-	provider := providertest.New(t, steps, providertest.WithContextWindow(4_100))
+	provider := providertest.New(t, steps, providertest.WithContextWindow(4_200))
 	defer provider.Close()
 
 	got := runInProc(t, home, provider.URL(), "m01-original-request", grantAll)
