@@ -61,7 +61,7 @@ func (a *Agent) NewSession(_ context.Context, req acp.NewSessionRequest) (acp.Ne
 	if err != nil {
 		return acp.NewSessionResponse{}, err
 	}
-	if filepath.Clean(req.Cwd) != wd {
+	if !sameDir(req.Cwd, wd) {
 		return acp.NewSessionResponse{}, fmt.Errorf("acp: cwd %q differs from the workspace invokr was started in (%q); start invokr acp in that directory", req.Cwd, wd)
 	}
 	sess, broker, err := a.newSession("")
@@ -71,6 +71,15 @@ func (a *Agent) NewSession(_ context.Context, req acp.NewSessionRequest) (acp.Ne
 	id := acp.SessionID(sess.SessionID())
 	a.sessions.Store(id, &chatSession{IdentifiedSession: sess, approvals: broker})
 	return acp.NewSessionResponse{SessionID: id}, nil
+}
+
+func sameDir(a, b string) bool {
+	ra, errA := filepath.EvalSymlinks(a)
+	rb, errB := filepath.EvalSymlinks(b)
+	if errA != nil || errB != nil {
+		return filepath.Clean(a) == filepath.Clean(b)
+	}
+	return ra == rb
 }
 
 func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptResponse, error) {
@@ -89,14 +98,26 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	sess.turnMu.Lock()
 	defer sess.turnMu.Unlock()
 	var denied []turn.ToolOutcome
-	defer approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
+	var approved []acp.ToolCallID
+	stopDrain := approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
 		d := a.ask(ctx, req.SessionID, r)
-		if !d.Approved {
+		if d.Approved {
+			approved = append(approved, acp.ToolCallID(r.ID))
+		} else {
 			denied = append(denied, turn.ToolOutcome{Tool: r.Tool, Detail: strings.TrimPrefix(cmp.Or(r.Summary, r.Tool), "Run ")})
 		}
 		return d
-	})()
+	})
 	resp, err := sess.Send(ctx, strings.Join(text, "\n"))
+	stopDrain()
+	final := acp.ToolCallStatusCompleted
+	if err != nil {
+		final = acp.ToolCallStatusFailed
+	}
+	for _, callID := range approved {
+		update := acp.SessionUpdate{ToolCallUpdate: &acp.ToolCallUpdate{ToolCallID: callID, Status: final}}
+		_ = a.conn.SessionUpdate(context.WithoutCancel(ctx), acp.SessionNotification{SessionID: req.SessionID, Update: update})
+	}
 	if err != nil {
 		if ctx.Err() != nil {
 			return acp.PromptResponse{}, ctx.Err()

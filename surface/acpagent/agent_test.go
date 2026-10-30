@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -161,6 +162,11 @@ func TestPromptPermissionOutcomes(t *testing.T) {
 			if done == nil || done.ToolCallID != announce.ToolCallID || done.Status != tc.status {
 				t.Fatalf("completion = %+v, want status %q", client.updates[1], tc.status)
 			}
+			if tc.status == acp.ToolCallStatusInProgress {
+				if fin := client.updates[2].ToolCallUpdate; fin == nil || fin.ToolCallID != announce.ToolCallID || fin.Status != acp.ToolCallStatusCompleted {
+					t.Fatalf("final = %+v, want completed", client.updates[2])
+				}
+			}
 		})
 	}
 }
@@ -252,7 +258,7 @@ func TestConcurrentSessionsHaveIndependentApprovals(t *testing.T) {
 	for call, status := range got {
 		want := acp.ToolCallStatusFailed
 		if sessionOf[call] == allowed {
-			want = acp.ToolCallStatusInProgress
+			want = acp.ToolCallStatusCompleted
 		}
 		if status != want {
 			t.Fatalf("session %s call %s status %q, want %q", sessionOf[call], call, status, want)
@@ -292,6 +298,21 @@ func TestNewSessionRefusesOtherCwd(t *testing.T) {
 	cc := connect(t, &stubClient{})
 	if _, err := cc.NewSession(context.Background(), acp.NewSessionRequest{Cwd: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "differs from the workspace") {
 		t.Fatalf("err = %v, want cwd refusal", err)
+	}
+}
+
+func TestNewSessionAcceptsSymlinkedCwd(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "ws")
+	if err := os.Symlink(wd, link); err != nil {
+		t.Fatal(err)
+	}
+	cc := connect(t, &stubClient{})
+	if _, err := cc.NewSession(context.Background(), acp.NewSessionRequest{Cwd: link}); err != nil {
+		t.Fatalf("NewSession via symlink: %v", err)
 	}
 }
 

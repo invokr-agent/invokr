@@ -16,10 +16,12 @@ require (
 	github.com/dustin/go-humanize v1.1.0
 	github.com/gofrs/flock v0.13.1
 	github.com/google/uuid v1.6.0
+	github.com/invokr-agent/acp v0.1.0
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/rivo/uniseg v0.4.7
 	github.com/rivt-ai/go-inference-router v0.9.1
 	github.com/rivt-ai/go-inference-router/router v0.9.1
+	github.com/sergi/go-diff v1.4.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.12.1
@@ -61,7 +63,6 @@ require (
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/hhatto/gocloc v0.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/invokr-agent/acp v0.1.0 // indirect
 	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
 	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.1 // indirect
@@ -73,7 +74,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/ncruces/go-strftime v1.1.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect
 	github.com/stytchauth/squirrel v1.5.3-0.20230822204145-fbce445169d2 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
