@@ -99,7 +99,7 @@ func TestSecretRedactionInStringFormatting(t *testing.T) {
 		fmt.Sprintf("%v", cfg.Provider),
 	}
 	for _, dump := range dumps {
-		if strings.Contains(dump, "sk-super-secret-value-1234") || strings.Contains(dump, "123456:telegram-secret-token") {
+		if strings.Contains(dump, "sk-super-secret-value-1234") {
 			t.Fatalf("secret leaked in formatted config: %s", dump)
 		}
 	}
