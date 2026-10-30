@@ -45,7 +45,7 @@ func TestRootFlagOverridesLoadedEnvironment(t *testing.T) {
 
 func TestConfigShowPrintsEffectiveRedactedConfigWithoutBootstrap(t *testing.T) {
 	app := config.AppConfig{
-		Provider:  config.ProviderConfig{APIKey: "provider-secret-1234"},
+		Provider: config.ProviderConfig{APIKey: "provider-secret-1234"},
 	}
 	bootstrapCalls := 0
 	root, _ := newRootCmd(app, func(config.AppConfig, runtime.Options) (commandRuntime, error) {

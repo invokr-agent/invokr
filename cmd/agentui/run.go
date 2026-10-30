@@ -109,6 +109,7 @@ func Run(ctx context.Context, p Params) error {
 		}
 	}()
 	program := tea.NewProgram(uiModel, tea.WithContext(ctx), tea.WithInput(p.In), tea.WithOutput(p.Out))
+	go watchRelay(ctx, func() { program.Send(relayChangedMsg{}) })
 	unregister := registerToolEvents(p.EventBus, p.Session, toolEvents.Push, func() {
 		program.Send(toolEventsReadyMsg{})
 	})

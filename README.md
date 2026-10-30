@@ -110,7 +110,7 @@ invokr exec --last "now write the fix"    # continue the last session
 - **Skills.** Install `SKILL.md` instruction packs the agent loads on demand.
   Find them with `invokr skills search <term>`, then `invokr skills install <name>`.
 - **Chat relays.** Run the agent as an ACP agent with `invokr acp`;
-  [agent-relay](https://github.com/invokr-agent/agent-relay) (v0.1.0) carries Telegram, Signal
+  [agent-relay](https://github.com/invokr-agent/agent-relay) (v0.2.0+, `curl -fsSL https://raw.githubusercontent.com/invokr-agent/agent-relay/main/install.sh | sh`) carries Telegram, Signal
   and Matrix to it — `agent-relay setup --apply telegram` writes `"agent": ["invokr", "acp"]`.
 - **Update detection.** The banner notes when a newer release exists; the check
   never blocks startup or the UI, and it stays off for unstamped builds. Set

@@ -36,6 +36,9 @@ func TestTUITranscriptFolds(t *testing.T) {
 	// Collapsed: 12 output lines, 5-line tail => 7 hidden behind the fold.
 	s.waitFor(regexp.MustCompile(`▸ 7 more lines`), 10*time.Second)
 	s.waitFor(regexp.MustCompile(`fold turn done`), 10*time.Second)
+	// The answer text can show while it still streams; the meta line only
+	// lands with the finished turn, which is when the recorded calls exist.
+	s.waitFor(regexp.MustCompile(`e2e-scripted · \d+`), 10*time.Second)
 
 	s.send("M-r")
 	s.waitFor(regexp.MustCompile(`Execution history`), 5*time.Second)
