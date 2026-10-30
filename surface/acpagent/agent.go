@@ -30,6 +30,7 @@ type chatSession struct {
 	turn.IdentifiedSession
 	approvals *approval.Broker
 	turnMu    sync.Mutex
+	noticed   bool // the update notice was sent in this session; guarded by turnMu
 }
 
 // Agent serves invokr chat sessions over ACP; sessions live only as long as the process.
@@ -39,8 +40,12 @@ type Agent struct {
 	sessions   sync.Map
 }
 
+// latestVersion is the newer invokr release tag, "" when none is known; tests replace it.
+var latestVersion = version.LatestVersion
+
 func Serve(ctx context.Context, in io.Reader, out io.Writer, newSession runtime.ChatSessionFunc) error {
 	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession}
+	latestVersion() // starts the background lookup so the first reply can carry its answer
 	a.conn.Serve(ctx, a)
 	<-a.conn.Done()
 	return a.conn.Err()
@@ -126,6 +131,10 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 		return acp.PromptResponse{}, acp.NewError(acp.ErrInternalError, "model request failed")
 	}
 	reply := strings.TrimSpace(resp.Message) + toolTrailer(resp.ExecutionEvidence, resp.ToolFailures, denied)
+	if tag := latestVersion(); tag != "" && !sess.noticed {
+		sess.noticed = true
+		reply += fmt.Sprintf("\n\nℹ️ invokr %s is available (running %s): run `invokr update`", tag, version.Version)
+	}
 	chunk := acp.SessionUpdate{AgentMessageChunk: &acp.ContentChunk{Content: acp.ContentBlock{Text: &acp.TextContent{Text: reply}}}}
 	if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: req.SessionID, Update: chunk}); err != nil {
 		return acp.PromptResponse{}, err

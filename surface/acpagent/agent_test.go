@@ -294,6 +294,23 @@ func TestPromptErrors(t *testing.T) {
 	}
 }
 
+func TestUpdateNoticeOncePerSession(t *testing.T) {
+	orig := latestVersion
+	latestVersion = func() string { return "v9.9.9" }
+	t.Cleanup(func() { latestVersion = orig })
+	client := &stubClient{decide: selectOption(0)}
+	cc := connect(t, client)
+	id := newSession(t, cc)
+	for i, want := range []bool{true, false} {
+		if _, err := prompt(cc, id, "list files"); err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Contains(lastReply(t, client), "invokr v9.9.9 is available"); got != want {
+			t.Fatalf("reply %d: notice = %v, want %v", i, got, want)
+		}
+	}
+}
+
 func TestNewSessionRefusesOtherCwd(t *testing.T) {
 	cc := connect(t, &stubClient{})
 	if _, err := cc.NewSession(context.Background(), acp.NewSessionRequest{Cwd: t.TempDir()}); err == nil || !strings.Contains(err.Error(), "differs from the workspace") {
