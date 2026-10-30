@@ -53,6 +53,9 @@ func renderIntro(width, height int) string {
 		brand = ui.Invokr.Logo()
 	}
 	meta := ui.Invokr.Muted.Render("agent started") + "  " + ui.Invokr.Pill(ui.Invokr.Info, buildVersion())
+	if relayRunning.Load() {
+		meta += "  " + ui.Invokr.Pill(ui.Invokr.Success, "relay ●")
+	}
 	// Two columns joined at their vertical centers: the logo can grow as tall as it
 	// likes without pushing the badges onto a line of their own.
 	head := lipgloss.JoinHorizontal(lipgloss.Center, brand, "  ", wrapText(meta, max(0, width-lipgloss.Width(brand)-2)))

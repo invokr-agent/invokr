@@ -176,7 +176,7 @@ func registerCommands(rootCmd *cobra.Command, appConfig *config.AppConfig, activ
 	// variables the borrowed RunE and Args close over. Must precede AddCommand,
 	// which would otherwise merge root's persistent flags into agentCmd.Flags().
 	rootCmd.Flags().AddFlagSet(agentCmd.Flags())
-	rootCmd.AddCommand(agentCmd, execCmd, NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewACPCmd(services),
+	rootCmd.AddCommand(agentCmd, execCmd, NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewACPCmd(services), NewRelayCmd(),
 		NewConfigCmd(appConfig), NewDoctorCmd(appConfig), NewSkillsCmd(appConfig), NewToolboxCmd(appConfig), NewProviderCmd(), NewUpdateCmd(), &cobra.Command{
 			Use: "version", Short: "Print the version (same as --version)", GroupID: groupConfigure, Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {

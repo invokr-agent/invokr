@@ -21,7 +21,7 @@ func messageItemID(id uint64) string { return "message:" + strconv.FormatUint(id
 
 func (m *model) transcriptItems() []tuikit.ListItem {
 	items := make([]tuikit.ListItem, 0, len(m.chatLog.messages)+2)
-	items = append(items, transcriptItem{id: "intro", render: func(width int) string {
+	items = append(items, transcriptItem{id: "intro", rev: boolRev(relayRunning.Load()), render: func(width int) string {
 		return renderIntro(width, m.height)
 	}})
 	for idx := range m.chatLog.messages {
@@ -47,4 +47,11 @@ func (m *model) transcriptItems() []tuikit.ListItem {
 	m.chat.Invalidate("tail")
 	items = append(items, transcriptItem{id: "tail", render: func(int) string { return "\n" + m.chatTail() + "\n" }})
 	return items
+}
+
+func boolRev(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

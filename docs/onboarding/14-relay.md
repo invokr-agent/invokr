@@ -38,12 +38,13 @@ conversations to sessions itself, and its `setup --apply telegram` writes
 curl -fsSL https://raw.githubusercontent.com/invokr-agent/agent-relay/main/install.sh | sh
 cd ~/my-project                      # the workspace invokr serves
 agent-relay setup telegram           # or: signal, matrix; agent command: invokr acp
-agent-relay service install          # or run `agent-relay` in the foreground
+invokr relay start                   # = agent-relay service install; also: stop, status
 agent-relay update                   # later: install the newest release
 ```
 
 The relay spawns `invokr acp` in its configured `cwd`, which must be the
-workspace: `NewSession` refuses any other directory.
+workspace: `NewSession` refuses any other directory. While an `agent-relay`
+process runs, the TUI header shows a `relay ●` pill (polled every 15s).
 
 The relay owns the allowlists, the credentials and the answer formatting;
 invokr only sees prompts and permission requests.

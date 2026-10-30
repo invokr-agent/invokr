@@ -145,6 +145,10 @@ type historySavedMsg struct {
 
 type toolEventsReadyMsg struct{}
 
+// relayChangedMsg repaints the header after agent-relay starts or stops; any
+// message repaints, so update needs no case for it.
+type relayChangedMsg struct{}
+
 func newModelWithCommands(ctx context.Context, session turn.Session, commands CommandBackend, toolEvents *toolEventQueue, approvalQueue *approval.ApprovalQueue, logs LogSource, logView bool, promptHistory turn.PromptHistory, initialHistory []string) *model {
 	keys := defaultKeyMap(logView && logs != nil)
 	input := textarea.New()
