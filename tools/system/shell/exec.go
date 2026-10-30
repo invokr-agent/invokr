@@ -184,7 +184,12 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 			sb.RW = append(sb.RW, root)
 		}
 	}
+	// A granted folder is mounted the way the user approved it: write grants
+	// read-write, read grants read-only and sealed, so a write-tier line still
+	// cannot modify a folder the session was only let read.
 	sb.RO = append(sb.RO, plan.readonlyRoots...)
+	sb.RW = append(sb.RW, plan.grantedRW...)
+	sb.RO = append(sb.RO, plan.grantedRO...)
 	// With no workspace configured the call runs from the process's own
 	// directory, which has to exist inside the sandbox too.
 	if !slices.ContainsFunc(sb.RW, func(root string) bool { _, ok := fsutil.RelInside(root, plan.cwd); return ok }) {
@@ -232,6 +237,7 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 		sb.Sealed = append(sb.Sealed, plan.protected...)
 	}
 	sb.Sealed = append(sb.Sealed, plan.readonlyRoots...)
+	sb.Sealed = append(sb.Sealed, plan.grantedRO...)
 	return sandbox.DedupPlan(sb)
 }
 
