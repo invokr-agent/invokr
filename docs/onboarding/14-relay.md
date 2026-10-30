@@ -2,7 +2,7 @@
 
 Package: `surface/acpagent/`. Entry: `invokr acp` (`cmd/chat_cli.go`). Relays live
 outside this repository: [agent-relay](https://github.com/invokr-agent/agent-relay)
-(v0.2.0+) carries Telegram, Signal and Matrix to invokr over ACP.
+(v0.3.0+) carries Telegram, Signal and Matrix to invokr over ACP.
 
 ## Topology
 
@@ -38,7 +38,8 @@ conversations to sessions itself, and its `setup --apply telegram` writes
 curl -fsSL https://raw.githubusercontent.com/invokr-agent/agent-relay/main/install.sh | sh
 cd ~/my-project                      # the workspace invokr serves
 agent-relay setup telegram           # or: signal, matrix; agent command: invokr acp
-invokr relay start                   # = agent-relay service install; also: stop, status
+invokr relay start                   # background, for this directory; also: stop, status, --replace
+invokr relay service install         # optional: a login service that restarts on failure
 agent-relay update                   # later: install the newest release
 ```
 
