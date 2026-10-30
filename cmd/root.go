@@ -219,8 +219,8 @@ func skipsRuntimeBootstrap(cmd *cobra.Command) bool {
 	// the config file. Jobs commands manage the store directly; `jobs run`
 	// bootstraps its own runtime inside jobs.RunJob, so the root bootstrap
 	// would create a second one. `update` only fetches a release and replaces
-	// this binary, so it needs no model either.
-	return hasAncestorNamed(cmd, "jobs", "config", "skills", "provider") ||
+	// this binary, so it needs no model either, and `relay` only drives agent-relay.
+	return hasAncestorNamed(cmd, "jobs", "config", "skills", "provider", "relay") ||
 		slices.Contains([]string{"setup", "doctor", "version", "update"}, cmd.Name())
 }
 

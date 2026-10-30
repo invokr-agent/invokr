@@ -54,7 +54,14 @@ func runAgentRelay(cmd *cobra.Command, args ...string) error {
 	if err != nil {
 		return err
 	}
-	c := exec.CommandContext(cmd.Context(), bin, args...)
+	// Not CommandContext: ctrl+c reaches agent-relay through the terminal, and
+	// killing it mid-start would leave the relay it spawned unreported.
+	c := exec.Command(bin, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, cmd.OutOrStdout(), cmd.ErrOrStderr()
-	return c.Run()
+	err = c.Run()
+	// agent-relay has already said what went wrong: pass its exit code on silently.
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		os.Exit(exitErr.ExitCode())
+	}
+	return err
 }
