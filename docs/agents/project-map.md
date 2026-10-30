@@ -12,7 +12,7 @@
 
 - `agent` (`agent_cli.go`): interactive TUI / plain-mode session.
 - `exec` / `resume` (`exec_cli.go`): non-interactive one-shot and session-resume runs, JSONL ledger output.
-- `bot serve` (`chat_cli.go`): Telegram/Signal chat transport loop.
+- `acp` (`chat_cli.go`): ACP agent over stdio, for an editor or agent-relay.
 - `sessions` (`sessions_cli.go`): list/search/show stored sessions.
 - `jobs` (`jobs_cli.go`): scheduled-job store CRUD + `run`.
 - `index` (`index_cli.go`): sync workspace docs into the memory store as `doc`-kind
@@ -37,7 +37,7 @@
 - `platform/events/`: event model and the ordered dispatcher.
 - `platform/turn/`: runtime turn/session protocol types (`Session`, `AgentResponse`, `TokenUsage`, tool-outcome guard).
 - `capability/memory/`: manager + curator, Markdown pinned memory, SQLite records/FTS/vectors, Zerfoo embedding runtime, chat-model summarization, prompt history, recall policy/orchestrator, recall gate (`recallgate/`), forgetting decay (`forgetting/`), summary types.
-- `surface/messaging/`: Telegram/Signal transports, router/serve loop, chat→session store.
+- `surface/acpagent/`: ACP agent over stdio; sessions live only as long as the process.
 - `capability/jobs/`, `capability/jobs/jobrun/`: scheduled-job store + crontab boundary, and its runtime executor.
 - `capability/docker_sandbox/`: docker/podman image build and self-re-exec relaunch.
 - `capability/sessionstore/`: persisted session transcripts.
@@ -76,5 +76,5 @@ Start from these before broad scans:
 - Memory extensions: `capability/memory/recallgate/gate.go`, `capability/memory/forgetting/retention.go`, `capability/memory/curator.go`
 - Subagents: `capability/agentdef/agentdef.go`, `tools/system/delegate/delegate.go`, `platform/runtime/subagent.go`
 - Sandbox: `capability/docker_sandbox/relaunch.go`, `capability/docker_sandbox/image.go`
-- Messaging: `surface/messaging/router.go`, `surface/messaging/telegram/telegram.go`, `surface/messaging/signal/signal.go`
+- ACP: `surface/acpagent/agent.go`, `cmd/chat_cli.go` (relays: agent-relay, a separate repo)
 - Jobs: `capability/jobs/`, `capability/jobs/jobrun/`, `tools/system/schedule/`

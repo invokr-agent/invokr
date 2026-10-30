@@ -100,7 +100,7 @@ func newRootCmd(app config.AppConfig, bootstrap runtimeBootstrap) (*cobra.Comman
 				LogView:      logView,
 				ModelFlagSet: cmd.Root().PersistentFlags().Changed("model"),
 				// ponytail: only commands that send turns need a model.
-				ModelOptional: !isAgentCommand(cmd) && !hasAncestorNamed(cmd, "exec", "bot"),
+				ModelOptional: !isAgentCommand(cmd) && !hasAncestorNamed(cmd, "exec", "acp"),
 			})
 			if err != nil {
 				return err
@@ -176,7 +176,7 @@ func registerCommands(rootCmd *cobra.Command, appConfig *config.AppConfig, activ
 	// variables the borrowed RunE and Args close over. Must precede AddCommand,
 	// which would otherwise merge root's persistent flags into agentCmd.Flags().
 	rootCmd.Flags().AddFlagSet(agentCmd.Flags())
-	rootCmd.AddCommand(agentCmd, execCmd, NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewChatCmd(services),
+	rootCmd.AddCommand(agentCmd, execCmd, NewIndexCmd(services), NewSessionsCmd(services), NewJobsCmd(appConfig), NewSetupCmd(), NewTokfFilterStdinCmd(), NewACPCmd(services),
 		NewConfigCmd(appConfig), NewDoctorCmd(appConfig), NewSkillsCmd(appConfig), NewToolboxCmd(appConfig), NewProviderCmd(), NewUpdateCmd(), &cobra.Command{
 			Use: "version", Short: "Print the version (same as --version)", GroupID: groupConfigure, Args: cobra.NoArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {

@@ -429,10 +429,10 @@ nested `unshare` fails in an unprivileged container. See ADR 0005.
 
 ## Other surfaces worth knowing about
 
-- **Chat transports** (`bot serve`) fail closed. An empty allowlist admits
-  nobody, and a transport refuses to start without one unless `allow_all: true`
-  is set explicitly. Approvals over chat are inline buttons (Telegram) or
-  `YES <id>` / `NO <id>` replies (Signal).
+- **Chat relays** are not invokr's surface: Telegram, Signal and Matrix are carried
+  to `invokr acp` by [agent-relay](https://github.com/invokr-agent/agent-relay) (v0.1.0),
+  which owns their allowlists. Over ACP, a permission request that fails, is
+  cancelled or goes unanswered denies the call.
 - **`web_search`** auto-approves ordinary queries but **prompts** when the query
   looks sensitive: an email address, a token-shaped string, a filesystem path, a
   secret-shaped literal, or any configured `sensitive_terms` / `private_hosts` /
@@ -462,11 +462,11 @@ nested `unshare` fails in an unprivileged container. See ADR 0005.
   `~/.invokr/spill` holds oversized tool output verbatim (`0600`, pruned after
   24h) — full command output lands there even when the model only saw a stub.
 - **Secrets in config**: `config.json` is written `0600`, but
-  `provider.api_key`, `router.providers[].api_key`, and
-  `messaging.telegram.token` store credentials in plaintext when set. Every one
-  of them has an environment alternative — `router.providers[].api_key_env`,
-  `INVOKR_TELEGRAM_TOKEN`, and the provider env vars — and MCP HTTP headers can
-  *only* be supplied via `headers_env`. Prefer the env forms; `invokr config`
+  `provider.api_key` and `router.providers[].api_key` store credentials in plaintext
+  when set. Both have environment alternatives —
+  `router.providers[].api_key_env` and the provider env vars — and MCP HTTP headers can
+  *only* be supplied via `headers_env`. Chat credentials, if any, belong to
+  agent-relay's own config, not to invokr's. Prefer the env forms; `invokr config`
   output masks keys either way (`config/redact.go`), but the file itself does
   not.
 

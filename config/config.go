@@ -36,7 +36,6 @@ type AppConfig struct {
 	CodeInterpreter CodeInterpreterConfig `json:"code_interpreter,omitempty"`
 	MCP             MCPConfig             `json:"mcp,omitempty"`
 	Sandbox         SandboxConfig         `json:"sandbox,omitempty"`
-	Messaging       MessagingConfig       `json:"messaging,omitempty"`
 	Approvals       ApprovalsConfig       `json:"approvals,omitempty"`
 	LSP             LSPConfig             `json:"lsp,omitempty"`
 	UI              UIConfig              `json:"ui,omitempty"`
@@ -646,7 +645,6 @@ func (c AppConfig) withDefaults(homeDir string) AppConfig {
 	}
 	c.Approvals.GrantsFile = cmp.Or(c.Approvals.GrantsFile, filepath.Join(homeDir, "grants.json"))
 	c.Sandbox.Engine = cmp.Or(c.Sandbox.Engine, "docker")
-	c.Messaging.Signal.Socket = cmp.Or(c.Messaging.Signal.Socket, "/var/run/signal-cli/socket")
 	c.Log.Level = cmp.Or(c.Log.Level, DefaultLevel)
 	c.Log.Format = cmp.Or(c.Log.Format, DefaultFormat)
 	c.Log.Output = cmp.Or(c.Log.Output, DefaultOutput)

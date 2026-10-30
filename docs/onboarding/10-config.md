@@ -38,8 +38,7 @@ percents), `Log`, `Memory` (dir + `Zerfoo`, `RecallGate`, `Forgetting`),
 `Workspace` (root, extra_roots, readonly_roots, allow_hidden_paths, reads), `ApplyPatchEnabled`,
 `Toolbox` (dirs, runtimes, isolation, limits, package policy), `Skills`,
 `Agents` (subagent defs dir), `Shell`, `WebSearch`,
-`CodeInterpreter`, `MCP` (servers map), `Sandbox`, `Messaging`
-(Telegram/Signal).
+`CodeInterpreter`, `MCP` (servers map), `Sandbox`.
 
 ## Conventions
 
@@ -51,7 +50,7 @@ percents), `Log`, `Memory` (dir + `Zerfoo`, `RecallGate`, `Forgetting`),
   `time.ParseDuration` from env.
 - List env vars are comma-separated (`envList`); map-shaped ones are
   `KEY=value,K2=v2` (`envMap`); `envFields` splits on whitespace.
-- Secrets: `ProviderConfig`/`TelegramConfig` implement `String()` with
+- Secrets: `ProviderConfig` implements `String()` with
   masking so `%v` logging can't leak them; `Redacted()` backs `config show`.
 - `Validate(logger)` (called at bootstrap) rejects only what defaults can't
   repair — negative timeouts/retries/turns and inconsistent compaction

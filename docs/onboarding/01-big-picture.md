@@ -17,7 +17,7 @@ main.go                       setup preflight → config load → sandbox re-exe
       │                       jobs, sandbox, sessionstore — feature verticals
       ├─ platform/events      ordered synchronous event bus
       ├─ platform/turn        shared session/response protocol types
-      └─ surface/             messaging transports (telegram/signal), ui styles
+      └─ surface/             acp agent (stdio protocol), ui styles
 ```
 
 Dependency direction: `cmd` → `platform/runtime` → everything else.
@@ -68,7 +68,7 @@ that import without a cycle).
 - `invokr agent` — TUI (or plain stdin mode when stdin isn't a terminal).
 - `invokr exec` — one shot; JSONL event ledger with `--json`; approvals
   auto-denied unless `--allow`/`--allow-all`.
-- `invokr bot serve` — Telegram/Signal, one worker+session per chat.
+- `invokr acp` — ACP agent over stdio; a relay (agent-relay) carries Telegram/Signal/Matrix.
 - `invokr jobs run <id>` / cron — headless runs with a fixed approval policy.
 
 All of them go through the same `platform/runtime.Bootstrap` and the same

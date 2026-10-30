@@ -105,15 +105,15 @@ unless `sandbox.image` pins one; `sandbox.engine` selects `docker` (default) or
 `podman`. This is whole-agent isolation, distinct from the per-toolbox-tool
 sandbox in `tools/system/toolbox/` (ADR 0005).
 
-## Messaging
+## ACP agent
 
-`invokr bot serve` runs `surface/messaging.Router`, which fans inbound messages
-from every configured transport into one loop and dispatches them to per-chat
-agent sessions. Transports are Telegram (`surface/messaging/telegram/`, long-poll
-`getUpdates`) and Signal (`surface/messaging/signal/`, signal-cli JSON-RPC over a
-UNIX socket). Allowlists (`allowed_chat_ids` / `allowed_numbers`) gate who may talk
-to the agent; a chat→session store maps each conversation to a persisted session.
-Approvals over chat are handled by a YES/NO reply convention.
+`invokr acp` (`surface/acpagent/`) speaks Agent Client Protocol over stdio: one
+process owns the sessions it serves, each keyed by the ACP session id and carrying
+its own approval broker; permission requests ask the client, and a failed,
+cancelled or unanswered request denies. Sessions are not persisted. Telegram,
+Signal and Matrix belong to [agent-relay](https://github.com/invokr-agent/agent-relay)
+(v0.1.0), a separate repository that runs `["invokr", "acp"]`
+(`agent-relay setup --apply telegram`).
 
 ## Scheduled jobs
 
@@ -126,10 +126,10 @@ an import cycle with `tools/system/schedule`). The `jobs` CLI and the agent-faci
 
 `config.AppConfig` owns provider, agent, log, memory (incl. zerfoo, recall gate,
 forgetting), workspace, toolbox, tools (the advertised tool set), skills, agents
-(subagent dir), shell, web search, code interpreter, MCP, sandbox, messaging,
+(subagent dir), shell, web search, code interpreter, MCP, sandbox,
 approvals, LSP, and UI settings. `LoadFile` resolves defaults -> file -> environment;
 `WithDefaults()` is env-free and idempotent. Cobra then binds flags onto the resolved
-config, giving flags highest precedence. Messaging config lives in `config/messaging.go`.
+config, giving flags highest precedence. Chat relays are configured by agent-relay, not here.
 
 Avoid adding config unless behavior must be operator-tunable.
 

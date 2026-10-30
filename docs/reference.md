@@ -23,7 +23,7 @@ invokr --last                # resume the most recent session in this directory
 invokr exec "prompt"         # one-shot, non-interactive; --json emits a JSONL ledger
 invokr exec --last "prompt"  # continue the most recent session (or --resume <id>)
 invokr sessions              # history view; search/show/rm to drill in, --json to script it
-invokr bot serve             # run Telegram/Signal chat transports
+invokr acp                   # run the agent as an ACP agent over stdio (editor or agent-relay)
 invokr jobs                  # scheduled-job store: add/list/rm/purge/run (add takes --allow <tier>)
 invokr index                 # build the retrieval tool's workspace index; `index status` reports it
 invokr doctor                # diagnose provider, model, sandbox, interpreters, MCP
@@ -201,26 +201,22 @@ whole agent (distinct from the per-toolbox-tool sandbox).
   inside the container (`INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1`), since nested `unshare`
   fails in unprivileged containers. See ADR 0005 for details.
 
-## Chat transports (Telegram / Signal)
+## ACP agent and chat relays
 
-`invokr bot serve` exposes the agent over chat. It is single-instance per memory
-dir — a second `bot serve` sharing the same `memory.dir` refuses to start
-(exclusive lock on `<memory.dir>/bot-serve.lock`). Configure one or both transports:
+`invokr acp` speaks Agent Client Protocol over stdio: prompts come in as messages,
+answers and tool calls go back as updates, and permission requests ask the client
+(deny is the default: a failed or unanswered request grants nothing). Sessions live
+only as long as the process, in the workspace invokr was started in.
 
-```json
-{
-  "messaging": {
-    "telegram": { "token": "...", "allowed_chat_ids": [123456789] },
-    "signal":   { "socket": "/run/signal-cli/socket", "allowed_numbers": ["+15551234567"] }
-  }
-}
+Telegram, Signal and Matrix are handled by [agent-relay](https://github.com/invokr-agent/agent-relay)
+(v0.1.0), a separate repository that drives this command:
+
+```sh
+agent-relay setup --apply telegram
 ```
 
-Allowlists gate who may talk to the agent and **fail closed**: an empty
-allowlist admits nobody, and a transport refuses to start without one unless
-`allow_all: true` is set explicitly. Signal talks to a `signal-cli` JSON-RPC
-UNIX socket; Telegram long-polls `getUpdates`. Over chat, tool approvals are
-answered with inline buttons (Telegram) or a `YES <id>`/`NO <id>` reply (Signal).
+which writes, per transport, `"agent": ["invokr", "acp"]` — invokr carries no chat
+transport, no allowlist and no messaging config of its own.
 
 ## Memory forgetting and the recall gate
 

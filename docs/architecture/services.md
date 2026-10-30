@@ -49,7 +49,7 @@ This document defines where responsibilities belong. New logic should extend the
 | Shared UI styles/helpers | `surface/ui/` |
 | Test helpers | `support/testutil/` |
 | Constants for built-in prompts/tools/policies | `constants/` |
-| Chat transports (Telegram/Signal), serve loop, chat→session store | `surface/messaging/` |
+| ACP agent over stdio (relays such as agent-relay drive it) | `surface/acpagent/` |
 | Persisted session transcripts (JSONL) | `capability/sessionstore/` |
 | Whole-agent docker/podman sandbox (image build + self-re-exec) | `capability/docker_sandbox/` |
 | Tool-result filtering integration (tokf) | `tools/integrations/` |

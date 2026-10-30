@@ -46,7 +46,6 @@ func TestRootFlagOverridesLoadedEnvironment(t *testing.T) {
 func TestConfigShowPrintsEffectiveRedactedConfigWithoutBootstrap(t *testing.T) {
 	app := config.AppConfig{
 		Provider:  config.ProviderConfig{APIKey: "provider-secret-1234"},
-		Messaging: config.MessagingConfig{Telegram: config.TelegramConfig{Token: "telegram-secret-5678"}},
 	}
 	bootstrapCalls := 0
 	root, _ := newRootCmd(app, func(config.AppConfig, runtime.Options) (commandRuntime, error) {
@@ -64,12 +63,12 @@ func TestConfigShowPrintsEffectiveRedactedConfigWithoutBootstrap(t *testing.T) {
 		t.Fatalf("runtime bootstrap calls = %d, want 0", bootstrapCalls)
 	}
 	shown := out.String()
-	for _, secret := range []string{"provider-secret-1234", "telegram-secret-5678"} {
+	for _, secret := range []string{"provider-secret-1234"} {
 		if strings.Contains(shown, secret) {
 			t.Fatalf("config output leaked %q: %s", secret, shown)
 		}
 	}
-	for _, want := range []string{`"model": "flag-model"`, `"api_key": "****1234"`, `"token": "****5678"`} {
+	for _, want := range []string{`"model": "flag-model"`, `"api_key": "****1234"`} {
 		if !strings.Contains(shown, want) {
 			t.Fatalf("config output missing %q: %s", want, shown)
 		}

@@ -94,11 +94,9 @@ func TestValidateWarnsOnMissingDirs(t *testing.T) {
 func TestSecretRedactionInStringFormatting(t *testing.T) {
 	cfg := AppConfig{}
 	cfg.Provider.APIKey = "sk-super-secret-value-1234"
-	cfg.Messaging.Telegram.Token = "123456:telegram-secret-token"
 	dumps := []string{
 		fmt.Sprintf("%+v", cfg.Provider),
 		fmt.Sprintf("%v", cfg.Provider),
-		fmt.Sprintf("%+v", cfg.Messaging.Telegram),
 	}
 	for _, dump := range dumps {
 		if strings.Contains(dump, "sk-super-secret-value-1234") || strings.Contains(dump, "123456:telegram-secret-token") {
