@@ -69,3 +69,15 @@ func TestUnsteerAndDrop(t *testing.T) {
 		t.Fatal("DropSteered left a message")
 	}
 }
+
+// A user's message that happens to start like an internal nudge is not one.
+func TestStripTrailingNudgeKeepsSteeredMessage(t *testing.T) {
+	own := internalNudgePrefix + "my words"
+	messages := []inference.Message{inference.UserMessage("task"), inference.UserMessage(own)}
+	if got := stripTrailingInternalNudge(messages, []string{own}); len(got) != 2 {
+		t.Fatalf("stripped the user's steered message: %#v", got)
+	}
+	if got := stripTrailingInternalNudge(messages, nil); len(got) != 1 {
+		t.Fatalf("kept a trailing nudge: %#v", got)
+	}
+}

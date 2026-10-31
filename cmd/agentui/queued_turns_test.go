@@ -157,6 +157,7 @@ type steerSession struct {
 
 func (s *steerSession) Steer(text string) { s.pending = append(s.pending, text) }
 func (s *steerSession) DropSteered()      { s.pending = nil }
+func (s *steerSession) SessionID() string { return "s1" }
 func (s *steerSession) Unsteer() (string, bool) {
 	if len(s.pending) == 0 {
 		return "", false
@@ -210,5 +211,19 @@ func TestModel_UnsteerOnlyWhileUntaken(t *testing.T) {
 	m.historyUp()
 	if m.input.Value() != "" || len(m.queued) != 1 {
 		t.Fatalf("input=%q queued=%v, want a taken message left alone", m.input.Value(), m.queued)
+	}
+}
+
+// A stopped turn saves the messages it took along with its prompt.
+func TestModel_InterruptSavesSteeredMessages(t *testing.T) {
+	session := &steerSession{fakeSession: &fakeSession{}}
+	m := newModel(context.Background(), session, nil, nil, nil, false, &fakePromptHistory{}, nil)
+	var saved []string
+	m.recordInterrupted = func(_ string, prompts ...string) { saved = prompts }
+	m.lastPrompt = "task"
+	m.trackSteered(events.Event{Type: events.EventSteered, Notice: &events.NoticePayload{Text: "also this"}})
+	m.saveInterrupted()
+	if fmt.Sprint(saved) != "[task also this]" {
+		t.Fatalf("saved = %v, want the prompt then the steered message", saved)
 	}
 }

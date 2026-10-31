@@ -101,6 +101,7 @@ func (m *model) trackSteered(ev events.Event) {
 	if ev.Type != events.EventSteered || ev.Notice == nil {
 		return
 	}
+	m.steeredTurn = append(m.steeredTurn, ev.Notice.Text)
 	if i := slices.Index(m.queued, ev.Notice.Text); i >= 0 {
 		m.queued = slices.Delete(m.queued, i, i+1)
 	}

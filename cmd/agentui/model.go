@@ -75,7 +75,8 @@ type model struct {
 	// lastPrompt is what /retry replays; draft is the half-typed line the
 	// history walk displaced, and browsing says the walk is in progress.
 	lastPrompt, draft               string
-	recordInterrupted               func(sessionID, prompt string)
+	recordInterrupted               func(sessionID string, prompts ...string)
+	steeredTurn                     []string // taken by the turn in flight
 	browsing, sending, userScrolled bool
 	// queued holds messages Enter submitted while a turn was in flight: they
 	// render dimmed above the input with a count, go out in order when the turn
@@ -1013,7 +1014,7 @@ func (m *model) keyHints() string {
 
 func (m *model) saveInterrupted() {
 	if id, ok := m.session.(turn.IdentifiedSession); ok && m.recordInterrupted != nil {
-		m.recordInterrupted(id.SessionID(), m.lastPrompt)
+		m.recordInterrupted(id.SessionID(), append([]string{m.lastPrompt}, m.steeredTurn...)...)
 	}
 }
 
@@ -1181,7 +1182,7 @@ func (m *model) submit() (*model, tea.Cmd) {
 // pulled back with up-arrow survives the sends that follow.
 func (m *model) sendPrompt(text string) tea.Cmd {
 	m.appendHistory(text)
-	m.lastPrompt = text
+	m.lastPrompt, m.steeredTurn = text, nil
 	m.recorded, m.recordedWarning, m.turnStart = "", "", m.chatLog.nextID
 	m.chatLog.recordedTools = nil
 	m.chatLog.Append(message{role: "user", text: text})

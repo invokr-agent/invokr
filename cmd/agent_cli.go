@@ -105,11 +105,16 @@ func runAgentSessions(ctx context.Context, services appruntime.Services, params 
 // interruptRecorder saves a prompt the user stopped before it was answered,
 // with an interrupted marker, so a resumed session shows it rather than
 // dropping it: the store is otherwise written only when a turn answers.
-func interruptRecorder(ctx context.Context, services appruntime.Services) func(sessionID, prompt string) {
-	return func(sessionID, prompt string) {
+func interruptRecorder(ctx context.Context, services appruntime.Services) func(sessionID string, prompts ...string) {
+	return func(sessionID string, prompts ...string) {
 		store := sessionstore.NewForWorkspace(services.App.Memory.Dir, services.App.Workspace.Root, services.Logger)
 		ctx := context.WithoutCancel(ctx)
-		_, err := store.Append(ctx, sessionID, "user", prompt)
+		var err error
+		for _, prompt := range prompts {
+			if _, err = store.Append(ctx, sessionID, "user", prompt); err != nil {
+				break
+			}
+		}
 		if err == nil {
 			_, err = store.AppendInterrupted(ctx, sessionID, "assistant", "", sessionstore.ToolRecord{})
 		}
