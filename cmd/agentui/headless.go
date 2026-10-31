@@ -14,14 +14,30 @@ import (
 // such as ACP chats.
 type HeadlessCommand struct{ Name, Usage, Summary string }
 
-// headlessHidden have a plain handler that only points back at the TUI.
-var headlessHidden = map[string]bool{"recorded": true}
+// headlessAllowed are the built-ins a chat may run: none acts on the host
+// without the model and its approvals. false means the bare listing only,
+// so /jobs cannot run a job nor /skills install one. Skills are allowed too:
+// they become a prompt. Tool commands are not: they would run outside the
+// chat's own approvals.
+var headlessAllowed = map[string]bool{
+	"help": true, "usage": true, "compact": true, "model": true, "reasoning": true,
+	"profile": true, "tools": true, "agents": true, "jobs": false, "skills": false,
+}
+
+func headless(spec *commandSpec) bool {
+	_, builtin := headlessAllowed[spec.name]
+	return spec.plain != nil && (builtin || spec.skill)
+}
 
 func HeadlessCommands() []HeadlessCommand {
 	var out []HeadlessCommand
 	for _, spec := range commandRegistry {
-		if spec.plain != nil && !headlessHidden[spec.name] {
-			out = append(out, HeadlessCommand{spec.name, spec.usage, spec.summary})
+		if headless(&spec) {
+			usage := spec.usage
+			if !headlessAllowed[spec.name] && !spec.skill {
+				usage = "/" + spec.name
+			}
+			out = append(out, HeadlessCommand{spec.name, usage, spec.summary})
 		}
 	}
 	return out
@@ -33,8 +49,11 @@ func HeadlessCommands() []HeadlessCommand {
 func RunHeadless(ctx context.Context, backend CommandBackend, session turn.Session, text string) (reply, prompt string, handled bool) {
 	name, args, slash := parseCommand(text)
 	spec := findCommand(name)
-	if !slash || spec == nil || spec.plain == nil || headlessHidden[name] {
+	if !slash || spec == nil || !headless(spec) {
 		return "", "", false
+	}
+	if withArgs, builtin := headlessAllowed[name]; builtin && !withArgs && len(args) > 0 {
+		return "/" + name + " takes no arguments here; use the terminal UI", "", true
 	}
 	if name == "help" {
 		return headlessHelp(), "", true
