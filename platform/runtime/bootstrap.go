@@ -532,12 +532,11 @@ func (d toolLayerDeps) sessionDeps(sessionID string, caller *tools.Caller, promp
 
 // chatSessionFactory returns a ChatSessionFunc that builds a fresh session
 // with its own approval broker and policy, sharing the runtime tool-layer
-// dependencies: one chat's /mode must not change another's.
+// dependencies.
 func (d toolLayerDeps) chatSessionFactory() ChatSessionFunc {
 	return func(sessionID string) (turn.IdentifiedSession, *approval.Broker, error) {
 		fresh := d
 		fresh.providerContext, fresh.recallGate = nil, nil // Keep chat sessions independent of CLI-only context.
-		// Commands without a startup policy still give chats one /mode can set.
 		fresh.policy = cmp.Or(d.policy.Clone(), approval.NewPolicy(approval.Manual, false))
 		return fresh.newSession(sessionID)
 	}

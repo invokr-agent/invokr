@@ -145,7 +145,6 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	return a.send(ctx, req.SessionID, sess, input)
 }
 
-// commandReply answers a command, first telling the client about any option it changed.
 func (a *Agent) commandReply(ctx context.Context, id acp.SessionID, sess *chatSession, input, reply string) (acp.PromptResponse, error) {
 	if configChanged(input) {
 		_ = a.update(ctx, id, acp.SessionUpdate{ConfigOptionUpdate: &acp.ConfigOptionUpdate{ConfigOptions: configOptions(sess)}})

@@ -63,8 +63,6 @@ func (p *Policy) SetMode(mode Mode) error {
 	return nil
 }
 
-// Clone starts an independent policy for another session: same settings and
-// standing-rules store, its own mode from here on.
 func (p *Policy) Clone() *Policy {
 	if p == nil {
 		return nil

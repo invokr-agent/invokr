@@ -68,7 +68,6 @@ func (a *Agent) setMode(ctx context.Context, id acp.SessionID, sess *chatSession
 	return a.update(ctx, id, acp.SessionUpdate{CurrentModeUpdate: &acp.CurrentModeUpdate{CurrentModeID: acp.SessionModeID(mode)}})
 }
 
-// modeText answers /mode (and its alias /approvals) in chat.
 func (a *Agent) modeText(ctx context.Context, id acp.SessionID, sess *chatSession, input string) (string, bool) {
 	fields := strings.Fields(input)
 	if len(fields) == 0 || (fields[0] != "/mode" && fields[0] != "/approvals") {
@@ -114,8 +113,7 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, req acp.SetSessionCo
 	return acp.SetSessionConfigOptionResponse{ConfigOptions: configOptions(sess)}, nil
 }
 
-// listModels asks the model server once per session, so later option
-// updates never wait on it; the current model alone stands in on failure.
+// Once per session: option updates must not wait on the model server.
 func listModels(ctx context.Context, sess *chatSession) {
 	ms, ok := sess.IdentifiedSession.(modelSession)
 	if !ok {
@@ -131,8 +129,6 @@ func listModels(ctx context.Context, sess *chatSession) {
 	}
 }
 
-// configOptions offers the model and reasoning effort as selects; a session
-// that supports neither offers none.
 func configOptions(sess *chatSession) []acp.SessionConfigOption {
 	var out []acp.SessionConfigOption
 	if ms, ok := sess.IdentifiedSession.(modelSession); ok {
@@ -159,8 +155,6 @@ func selectConfig(id acp.SessionConfigID, name string, category acp.SessionConfi
 	return acp.SessionConfigOption{ID: id, Name: name, Category: category, Type: "select", CurrentValue: currentJSON, Options: optionsJSON}
 }
 
-// configChanged reports a /model, /reasoning or /profile command, after which
-// clients get the new option values.
 func configChanged(input string) bool {
 	name, _, _ := strings.Cut(strings.TrimPrefix(input, "/"), " ")
 	return strings.HasPrefix(input, "/") && (name == "model" || name == "reasoning" || name == "profile")
