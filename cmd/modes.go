@@ -15,6 +15,9 @@ func startupMode(cmd *cobra.Command) (*approval.Policy, error) {
 	yolo, _ := f.GetBool("yolo")
 	publish, _ := f.GetBool("allow-publishing")
 	requested := slices.ContainsFunc([]string{"mode", "yolo", "allow-publishing"}, f.Changed)
+	if cmd.Name() == "acp" {
+		return approval.NewPolicy(approval.Manual, false), nil
+	}
 	if !isAgentCommand(cmd) && cmd.Name() != "exec" {
 		return nil, nil // other commands do not register the session flags
 	}

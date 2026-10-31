@@ -63,6 +63,15 @@ func (p *Policy) SetMode(mode Mode) error {
 	return nil
 }
 
+func (p *Policy) Clone() *Policy {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return &Policy{mode: p.mode, publish: p.publish, outside: p.outside, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
+}
+
 func (p *Policy) SetPublishing(allow bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

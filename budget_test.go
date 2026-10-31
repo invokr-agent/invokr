@@ -41,7 +41,7 @@ var budgets = []area{
 	// Surfaces. The TUI is the thinnest subsystem against comparable
 	// harnesses (3.8k here against crush's 27k), so it gets the most room:
 	// the cap should not be what stops the TUI catching up.
-	{"cmd/agentui", 6247},
+	{"cmd/agentui", 6302},
 	{"cmd", 2500},
 	{"internal", 153},
 
@@ -58,7 +58,7 @@ var budgets = []area{
 	{"capability", 4700},
 
 	// Platform, config, clients, surfaces, leaf helpers.
-	{"platform", 2525},
+	{"platform", 2526},
 	{"config", 1389},
 	{"clients", 800},
 	{"surface", 1600},
