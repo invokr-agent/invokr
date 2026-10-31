@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"slices"
 	"sync"
 
 	inference "github.com/rivt-ai/go-inference-router"
@@ -51,11 +52,23 @@ func (r *Runner) takeSteered() []string {
 	return taken
 }
 
-// injectSteered adds every pending message as a user message, in order.
+// injectSteered adds every pending message as a user message, in order. A
+// pending internal nudge stays last: afterModelTurn drops the last message
+// as that nudge, and the user's words must outlive it.
 func (r *Runner) injectSteered(ctx context.Context, req RunRequest, state *runState) {
-	for _, text := range r.takeSteered() {
-		r.steering.taken = append(r.steering.taken, text)
-		state.messages = append(state.messages, inference.UserMessage(text))
+	taken := r.takeSteered()
+	if len(taken) == 0 {
+		return
+	}
+	at := len(state.messages)
+	if state.nudgeAppended {
+		at--
+	}
+	added := make([]inference.Message, len(taken))
+	for i, text := range taken {
+		added[i] = inference.UserMessage(text)
 		events.Steered(ctx, r.events, req.SessionID, r.parentSessionID, text)
 	}
+	state.messages = slices.Insert(state.messages, at, added...)
+	r.steering.taken = append(r.steering.taken, taken...)
 }

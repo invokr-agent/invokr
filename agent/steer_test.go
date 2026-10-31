@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 
+	inference "github.com/rivt-ai/go-inference-router"
+
 	"github.com/invokr-agent/invokr/platform/events"
 	"github.com/invokr-agent/invokr/tools/core"
 )
@@ -38,8 +40,13 @@ func TestRunnerTakesSteeredMessageAfterToolRound(t *testing.T) {
 	}
 	gateway := runner.modelGateway.(*sequenceGateway)
 	next := gateway.continueRequests[0].Messages
-	if last := next[len(next)-1]; last.Role != "user" || last.Content != "also check the README" {
-		t.Fatalf("next model call ends with %#v, want the steered message", last)
+	// The budget warning nudge stays last, so dropping it after the turn
+	// cannot take the user's message with it.
+	if got := next[len(next)-2]; got.Role != "user" || got.Content != "also check the README" {
+		t.Fatalf("next model call has %#v before its nudge, want the steered message", got)
+	}
+	if !slices.ContainsFunc(runner.messages, func(m inference.Message) bool { return m.Content == "also check the README" }) {
+		t.Fatal("the steered message did not survive in the run's history")
 	}
 	if !slices.Equal(steered, []string{"also check the README"}) {
 		t.Fatalf("steered events = %v", steered)
@@ -49,19 +56,14 @@ func TestRunnerTakesSteeredMessageAfterToolRound(t *testing.T) {
 	}
 }
 
-// A run that answers without another tool round leaves the message for the
-// caller, which sends it as the next prompt.
-func TestSteeredMessageWaitsWhenRunEnds(t *testing.T) {
-	runner := testRunner(t, okHandler, []string{`{"type":"reply","message":"Done."}`})
-	s := &Session{runner: runner}
+// Unsteer takes back only what no run has taken; DropSteered clears the rest.
+func TestUnsteerAndDrop(t *testing.T) {
+	s := &Session{runner: testRunner(t, okHandler, nil)}
+	s.Steer("first")
 	s.Steer("late")
-	if _, err := runner.Run(context.Background(), RunRequest{SessionID: "s1", Message: "hi"}); err != nil {
-		t.Fatal(err)
-	}
 	if text, ok := s.Unsteer(); !ok || text != "late" {
-		t.Fatalf("Unsteer = %q, %v; want the untaken message", text, ok)
+		t.Fatalf("Unsteer = %q, %v; want the newest message", text, ok)
 	}
-	s.Steer("x")
 	s.DropSteered()
 	if _, ok := s.Unsteer(); ok {
 		t.Fatal("DropSteered left a message")

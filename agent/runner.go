@@ -309,6 +309,9 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 	defer cancelWork()
 
 	for turn := 0; r.turnAvailable(ctx, req, &budget, &state); turn++ {
+		// Here, not at the end of the last round: only a run that calls the
+		// model again takes a message, so none goes to the tools-off wrap-up.
+		r.injectSteered(ctx, req, &state)
 		r.applyPendingModel()
 		state.usage = state.usage.WithContextWindowTokens(r.providerContext.ContextWindowTokens())
 		turnStarted := time.Now()
@@ -346,7 +349,6 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 		}
 		budget.observe(result, r.nudgeParseFailure(ctx, req, &state, result, state.nudges != nudges))
 		r.warnNearExhaustion(turn, &state, started, &budget)
-		r.injectSteered(ctx, req, &state)
 	}
 	if exhaustion == "" {
 		exhaustion = stepLimitReason(budget.limitTurns())

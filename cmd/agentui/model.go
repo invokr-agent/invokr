@@ -1161,6 +1161,7 @@ func (m *model) submit() (*model, tea.Cmd) {
 	// run never took it.
 	if m.sending {
 		m.queued = append(m.queued, text)
+		m.appendHistory(text) // a steered message never passes sendPrompt
 		m.steer(text)
 		return m, nil
 	}
