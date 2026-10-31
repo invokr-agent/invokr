@@ -125,7 +125,7 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	defer sess.turnMu.Unlock()
 	input := strings.Join(text, "\n")
 	if a.commands != nil {
-		if reply, prompt, ok := a.commands.Run(ctx, sess, input); ok {
+		if reply, prompt, ok := a.commands.Run(ctx, sess.IdentifiedSession, input); ok {
 			if prompt == "" {
 				return a.reply(ctx, req.SessionID, reply)
 			}

@@ -364,7 +364,10 @@ func (stubCommands) Available() []acp.AvailableCommand {
 	return []acp.AvailableCommand{{Name: "usage", Description: "show token usage"}}
 }
 
-func (stubCommands) Run(_ context.Context, _ turn.Session, text string) (string, string, bool) {
+func (stubCommands) Run(_ context.Context, sess turn.Session, text string) (string, string, bool) {
+	if _, ok := sess.(*stubSession); !ok {
+		return "got a wrapper, not the runtime session", "", true // commands type-assert the session's optional interfaces
+	}
 	switch {
 	case text == "/usage":
 		return "12 tokens", "", true
