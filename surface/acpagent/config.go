@@ -99,7 +99,7 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, req acp.SetSessionCo
 	rs, canReason := sess.IdentifiedSession.(reasoningSession)
 	switch {
 	case req.ConfigID == configModel && canModel:
-		if !slices.Contains(sess.models, value) {
+		if value != ms.Model() && !slices.Contains(sess.models, value) {
 			return acp.SetSessionConfigOptionResponse{}, acp.NewError(acp.ErrInvalidParams, fmt.Sprintf("acp: model %q is not offered", value))
 		}
 		ms.SetModel(value)
