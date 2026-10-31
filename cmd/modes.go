@@ -16,7 +16,6 @@ func startupMode(cmd *cobra.Command) (*approval.Policy, error) {
 	publish, _ := f.GetBool("allow-publishing")
 	requested := slices.ContainsFunc([]string{"mode", "yolo", "allow-publishing"}, f.Changed)
 	if cmd.Name() == "acp" {
-		// Chats start in manual; each gets its own copy, carrying the standing rules.
 		return approval.NewPolicy(approval.Manual, false), nil
 	}
 	if !isAgentCommand(cmd) && cmd.Name() != "exec" {
