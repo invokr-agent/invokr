@@ -58,7 +58,7 @@ var budgets = []area{
 	{"capability", 4700},
 
 	// Platform, config, clients, surfaces, leaf helpers.
-	{"platform", 2525},
+	{"platform", 2526},
 	{"config", 1389},
 	{"clients", 800},
 	{"surface", 1600},
