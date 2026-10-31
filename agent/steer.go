@@ -10,17 +10,12 @@ import (
 	"github.com/invokr-agent/invokr/platform/events"
 )
 
-// steering holds messages the user sent while a run was in flight. The run
-// takes them after its next tool round, before it calls the model again.
 type steering struct {
 	mu      sync.Mutex
 	pending []string
-	taken   []string // by the run in flight, for its after-response record; run goroutine only
+	taken   []string // run goroutine only
 }
 
-// Steer hands text to the run in flight; it joins after the next tool round.
-// A run that ends first leaves it for DropSteered, and the caller sends it as
-// the next prompt instead.
 func (s *Session) Steer(text string) {
 	st := &s.runner.steering
 	st.mu.Lock()
@@ -28,7 +23,6 @@ func (s *Session) Steer(text string) {
 	st.pending = append(st.pending, text)
 }
 
-// Unsteer takes back the newest message the run has not taken yet.
 func (s *Session) Unsteer() (string, bool) {
 	st := &s.runner.steering
 	st.mu.Lock()
@@ -41,7 +35,6 @@ func (s *Session) Unsteer() (string, bool) {
 	return text, true
 }
 
-// DropSteered forgets what the finished run did not take.
 func (s *Session) DropSteered() { s.runner.takeSteered() }
 
 func (r *Runner) takeSteered() []string {
@@ -52,9 +45,7 @@ func (r *Runner) takeSteered() []string {
 	return taken
 }
 
-// injectSteered adds every pending message as a user message, in order. A
-// pending internal nudge stays last: afterModelTurn drops the last message
-// as that nudge, and the user's words must outlive it.
+// A pending nudge stays last: afterModelTurn drops the last message as the nudge.
 func (r *Runner) injectSteered(ctx context.Context, req RunRequest, state *runState) {
 	taken := r.takeSteered()
 	if len(taken) == 0 {

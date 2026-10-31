@@ -25,8 +25,7 @@ const (
 	EventBeforeSave              EventType = "before_save"
 	EventAfterSave               EventType = "after_save"
 	EventNotice                  EventType = "notice"
-	// EventSteered carries, as a Notice, a message the user sent mid-run that
-	// the run took after a tool round.
+	// EventSteered carries its text as a Notice.
 	EventSteered        EventType = "steered"
 	EventAssistantDelta EventType = "assistant_delta"
 	// EventReasoning carries one turn's full reasoning text, when the model
@@ -110,10 +109,9 @@ type PromptPayload struct {
 type ResponsePayload struct {
 	ExecutionEvidence []turn.ExecutionEvidence `json:"execution_evidence"`
 	Query             string                   `json:"query,omitempty"`
-	// Steered are the messages the user sent mid-run that the run took, in order.
-	Steered      []string           `json:"steered,omitempty"`
-	Text         string             `json:"text,omitempty"`
-	ToolOutcomes []turn.ToolOutcome `json:"tool_outcomes,omitempty"`
+	Steered           []string                 `json:"steered,omitempty"`
+	Text              string                   `json:"text,omitempty"`
+	ToolOutcomes      []turn.ToolOutcome       `json:"tool_outcomes,omitempty"`
 	// ToolCallCount is the runner ledger's count of tool calls for the turn.
 	ToolCallCount int `json:"tool_call_count,omitempty"`
 }

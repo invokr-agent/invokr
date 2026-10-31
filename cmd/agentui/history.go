@@ -60,8 +60,7 @@ func (m *model) historyUp() {
 	// sent. It leaves the queue, so Enter re-queues it in place instead of a
 	// second copy being sent when the turn ends.
 	if m.input.Value() == "" && len(m.queued) > 0 {
-		// The run may already have taken it: then it is in the transcript, not
-		// editable.
+		// Already taken by the run: it is in the transcript.
 		if s, ok := m.session.(steerer); ok {
 			if _, pending := s.Unsteer(); !pending {
 				return

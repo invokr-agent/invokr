@@ -91,15 +91,12 @@ func (m *model) trackCompaction(ev events.Event) {
 	}
 }
 
-// steerer is a session whose run in flight takes messages after a tool round.
 type steerer interface {
 	Steer(text string)
 	Unsteer() (string, bool)
 	DropSteered()
 }
 
-// trackSteered drops a message from the queue once the run has taken it: the
-// chat log shows it as sent.
 func (m *model) trackSteered(ev events.Event) {
 	if ev.Type != events.EventSteered || ev.Notice == nil {
 		return

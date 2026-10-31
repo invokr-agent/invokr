@@ -253,7 +253,6 @@ func (c *curator) appendResponseEvents(ctx context.Context, ev events.Event) err
 		tools         sessionstore.ToolRecord
 	}
 	turns := []record{{role: "user", content: ev.Response.Query}}
-	// Mid-run messages land between the prompt and the answer they shaped.
 	for _, text := range ev.Response.Steered {
 		turns = append(turns, record{role: "user", content: text})
 	}

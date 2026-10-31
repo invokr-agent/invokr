@@ -309,8 +309,7 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 	defer cancelWork()
 
 	for turn := 0; r.turnAvailable(ctx, req, &budget, &state); turn++ {
-		// Here, not at the end of the last round: only a run that calls the
-		// model again takes a message, so none goes to the tools-off wrap-up.
+		// At the top, so the tools-off wrap-up never takes one.
 		r.injectSteered(ctx, req, &state)
 		r.applyPendingModel()
 		state.usage = state.usage.WithContextWindowTokens(r.providerContext.ContextWindowTokens())

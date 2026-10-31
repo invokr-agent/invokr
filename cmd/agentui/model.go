@@ -1156,12 +1156,10 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	// A turn is in flight: the run takes the message after its next tool
-	// round; until then it waits here, and goes out when the turn ends if the
-	// run never took it.
+	// A turn is in flight: the run takes it after a tool round, else the flush sends it.
 	if m.sending {
 		m.queued = append(m.queued, text)
-		m.appendHistory(text) // a steered message never passes sendPrompt
+		m.appendHistory(text)
 		m.steer(text)
 		return m, nil
 	}
