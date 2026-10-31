@@ -537,7 +537,8 @@ func (d toolLayerDeps) chatSessionFactory() ChatSessionFunc {
 	return func(sessionID string) (turn.IdentifiedSession, *approval.Broker, error) {
 		fresh := d
 		fresh.providerContext, fresh.recallGate = nil, nil // Keep chat sessions independent of CLI-only context.
-		fresh.policy = d.policy.Clone()
+		// Commands without a startup policy still give chats one /mode can set.
+		fresh.policy = cmp.Or(d.policy.Clone(), approval.NewPolicy(approval.Manual, false))
 		return fresh.newSession(sessionID)
 	}
 }
