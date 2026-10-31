@@ -33,11 +33,9 @@ type chatSession struct {
 	noticed   bool // the update notice was sent in this session; guarded by turnMu
 }
 
-// Commands are the slash commands a chat runs without the model.
 type Commands interface {
 	Available() []acp.AvailableCommand
-	// Run answers a command with reply, or turns it into prompt for the
-	// model; handled is false for text that is not a command.
+	// Run returns prompt instead of reply when the command becomes a model turn.
 	Run(ctx context.Context, sess turn.Session, text string) (reply, prompt string, handled bool)
 }
 
@@ -52,7 +50,6 @@ type Agent struct {
 // latestVersion is the newer invokr release tag, "" when none is known; tests replace it.
 var latestVersion = version.LatestVersion
 
-// Serve runs the agent until the client hangs up; commands may be nil.
 func Serve(ctx context.Context, in io.Reader, out io.Writer, newSession runtime.ChatSessionFunc, commands Commands) error {
 	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}
 	latestVersion() // starts the background lookup so the first reply can carry its answer
@@ -86,8 +83,6 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 	id := acp.SessionID(sess.SessionID())
 	a.sessions.Store(id, &chatSession{IdentifiedSession: sess, approvals: broker})
 	if a.commands != nil {
-		// Not ordered against the response: the library offers no hook, and a
-		// client may see the update just before session/new returns.
 		go func() {
 			_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{AvailableCommands: a.commands.Available()}})
 		}()

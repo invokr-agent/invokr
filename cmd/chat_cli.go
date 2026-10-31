@@ -32,15 +32,13 @@ func NewACPCmd(services ServicesProvider) *cobra.Command {
 			}
 			protocol := cmd.OutOrStdout()
 			os.Stdout = os.Stderr
-			// Skills installed later need an invokr acp restart: the registry
-			// is read by concurrent sessions, so it is filled once, here.
+			// Once: sessions read the registry concurrently, so new skills need a restart.
 			registerCustomCommands(cmd.Context(), s.Commands, s.Logger)
 			return acpagent.Serve(cmd.Context(), cmd.InOrStdin(), protocol, s.NewChatSession, acpCommands{s.Commands})
 		},
 	}
 }
 
-// acpCommands offers the TUI's headless slash commands to ACP chats.
 type acpCommands struct{ backend agentui.CommandBackend }
 
 func (c acpCommands) Available() []acp.AvailableCommand {
