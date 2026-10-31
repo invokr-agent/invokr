@@ -247,15 +247,17 @@ func (c *curator) appendResponseEvents(ctx context.Context, ev events.Event) err
 		}
 		metadata = map[string]string{"tool_outcomes": string(data)}
 	}
-	turns := []struct {
+	type record struct {
 		role, content string
 		metadata      map[string]string
 		tools         sessionstore.ToolRecord
-	}{
-		{role: "user", content: ev.Response.Query},
-		{role: "assistant", content: ev.Response.Text, metadata: metadata,
-			tools: sessionstore.ToolRecord{Calls: ev.Response.ToolOutcomes, Count: ev.Response.ToolCallCount, Evidence: ev.Response.ExecutionEvidence}},
 	}
+	turns := []record{{role: "user", content: ev.Response.Query}}
+	for _, text := range ev.Response.Steered {
+		turns = append(turns, record{role: "user", content: text})
+	}
+	turns = append(turns, record{role: "assistant", content: ev.Response.Text, metadata: metadata,
+		tools: sessionstore.ToolRecord{Calls: ev.Response.ToolOutcomes, Count: ev.Response.ToolCallCount, Evidence: ev.Response.ExecutionEvidence}})
 	for _, t := range turns {
 		if strings.TrimSpace(t.content) == "" {
 			continue

@@ -2,6 +2,7 @@ package agentui
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -64,7 +65,7 @@ func isToolEvent(ev events.Event) bool {
 	switch ev.Type {
 	case events.EventAssistantDelta:
 		return ev.Delta != nil
-	case events.EventNotice:
+	case events.EventNotice, events.EventSteered:
 		return ev.Notice != nil
 	case events.EventReasoning:
 		return ev.Reasoning != nil && strings.TrimSpace(ev.Reasoning.Text) != ""
@@ -87,5 +88,33 @@ func (m *model) trackCompaction(ev events.Event) {
 		}
 	case ev.Notice.Text == "context compaction complete", strings.HasPrefix(ev.Notice.Text, "context summarization failed;"):
 		m.compactingAt = time.Time{}
+	}
+}
+
+type steerer interface {
+	Steer(text string)
+	Unsteer() (string, bool)
+	DropSteered()
+}
+
+func (m *model) trackSteered(ev events.Event) {
+	if ev.Type != events.EventSteered || ev.Notice == nil {
+		return
+	}
+	m.steeredTurn = append(m.steeredTurn, ev.Notice.Text)
+	if i := slices.Index(m.queued, ev.Notice.Text); i >= 0 {
+		m.queued = slices.Delete(m.queued, i, i+1)
+	}
+}
+
+func (m *model) steer(text string) {
+	if s, ok := m.session.(steerer); ok {
+		s.Steer(text)
+	}
+}
+
+func (m *model) dropSteered() {
+	if s, ok := m.session.(steerer); ok {
+		s.DropSteered()
 	}
 }

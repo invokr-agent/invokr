@@ -292,6 +292,7 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 	r.applyProviderContext()
 
 	r.turnProcessor.ResetCallHistory()
+	r.steering.taken = nil
 	r.mu.RLock()
 	state := runState{
 		usage: r.usage.NewTurnUsage(), messages: append([]inference.Message(nil), r.messages...), contextState: r.contextState,
@@ -308,6 +309,8 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 	defer cancelWork()
 
 	for turn := 0; r.turnAvailable(ctx, req, &budget, &state); turn++ {
+		// At the top, so the tools-off wrap-up never takes one.
+		r.injectSteered(ctx, req, &state)
 		r.applyPendingModel()
 		state.usage = state.usage.WithContextWindowTokens(r.providerContext.ContextWindowTokens())
 		turnStarted := time.Now()
@@ -350,7 +353,7 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 		exhaustion = stepLimitReason(budget.limitTurns())
 	}
 
-	state.messages = stripTrailingInternalNudge(state.messages)
+	state.messages = stripTrailingInternalNudge(state.messages, r.steering.taken)
 	return r.gracefulExhaustion(ctx, req, state, started, exhaustion)
 }
 
@@ -676,12 +679,13 @@ func (r *Runner) applyProviderContext() {
 	r.mu.Unlock()
 }
 
-func stripTrailingInternalNudge(messages []inference.Message) []inference.Message {
+// steered are the user's own mid-run messages, which may happen to carry the prefix.
+func stripTrailingInternalNudge(messages []inference.Message, steered []string) []inference.Message {
 	if len(messages) == 0 {
 		return messages
 	}
 	last := messages[len(messages)-1]
-	if last.Role == inference.RoleUser && strings.HasPrefix(last.Content, internalNudgePrefix) {
+	if last.Role == inference.RoleUser && strings.HasPrefix(last.Content, internalNudgePrefix) && !slices.Contains(steered, last.Content) {
 		return messages[:len(messages)-1]
 	}
 	return messages
@@ -824,7 +828,7 @@ func emptyAnswerReason(turn, maxTurns int, finish inference.FinishReason) string
 // before an error return, matching the success paths — otherwise the tokens
 // burned by a failed request vanish from the runner's snapshot.
 func (r *Runner) failedResponse(state runState) turnpkg.AgentResponse {
-	state.messages = stripTrailingInternalNudge(state.messages)
+	state.messages = stripTrailingInternalNudge(state.messages, r.steering.taken)
 	state.usage = r.spend.priced(state.usage.WithContextWindowTokens(r.providerContext.ContextWindowTokens()).RecordUsage())
 
 	r.storeState(state)
@@ -924,7 +928,7 @@ func (r *Runner) gracefulExhaustion(ctx context.Context, req RunRequest, state r
 	// Copy rather than append in place: the salvage call's slice still holds
 	// the wrap-up instruction, and growing over it would rewrite the messages
 	// the gateway was handed.
-	kept := stripTrailingInternalNudge(modelTurn.Messages)
+	kept := stripTrailingInternalNudge(modelTurn.Messages, r.steering.taken)
 	state.messages = append(append([]inference.Message{}, kept...), inference.AssistantMessage(answer))
 	r.storeState(state)
 	r.logger.Info("agent request completed via best-effort answer", zap.Duration("duration", time.Since(started)), zap.Int("answer_len", len(answer)))
@@ -971,7 +975,7 @@ func exhaustionCode(reason string) string {
 func (r *Runner) dispatchAfterResponse(ctx context.Context, req RunRequest, resp turnpkg.AgentResponse) {
 	r.events.Dispatch(ctx, events.Event{
 		Type: events.EventAfterResponse, Timestamp: time.Now(), SessionID: req.SessionID, ParentSessionID: r.parentSessionID,
-		Response: &events.ResponsePayload{Query: req.Message, Text: resp.Message, ToolOutcomes: resp.ToolFailures, ToolCallCount: resp.ToolCallCount, ExecutionEvidence: resp.ExecutionEvidence},
+		Response: &events.ResponsePayload{Query: req.Message, Steered: r.steering.taken, Text: resp.Message, ToolOutcomes: resp.ToolFailures, ToolCallCount: resp.ToolCallCount, ExecutionEvidence: resp.ExecutionEvidence},
 	})
 }
 

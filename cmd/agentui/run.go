@@ -47,7 +47,7 @@ type Params struct {
 	Transcript []turn.TranscriptMessage
 	// RecordInterrupted saves a prompt the user stopped before it answered,
 	// so a resumed session can show it. Nil skips it (plain and test paths).
-	RecordInterrupted func(sessionID, prompt string)
+	RecordInterrupted func(sessionID string, prompts ...string)
 	In                io.Reader
 	Out, ErrOut       io.Writer
 }

@@ -461,7 +461,7 @@ func TestHandleEventWritesSessionTranscript(t *testing.T) {
 	if err := manager.HandleEvent(ctx, events.Event{
 		Type:      events.EventAfterResponse,
 		SessionID: "s1",
-		Response:  &events.ResponsePayload{Query: "what's the capital of France?", Text: "Paris"},
+		Response:  &events.ResponsePayload{Query: "what's the capital of France?", Steered: []string{"and its population?"}, Text: "Paris"},
 	}); err != nil {
 		t.Fatalf("HandleEvent() error = %v", err)
 	}
@@ -479,8 +479,9 @@ func TestHandleEventWritesSessionTranscript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if len(messages) != 2 || messages[0].Text != "what's the capital of France?" || messages[1].Text != "Paris" {
-		t.Fatalf("transcript = %+v, want the single top-level user/assistant turn", messages)
+	if len(messages) != 3 || messages[0].Text != "what's the capital of France?" ||
+		messages[1].Role != "user" || messages[1].Text != "and its population?" || messages[2].Text != "Paris" {
+		t.Fatalf("transcript = %+v, want the top-level turn with its mid-run message before the answer", messages)
 	}
 }
 
