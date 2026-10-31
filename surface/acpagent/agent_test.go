@@ -2,6 +2,7 @@ package acpagent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -443,5 +444,47 @@ func TestModesArePerSession(t *testing.T) {
 	}
 	if got := lastReply(t, client); !strings.HasPrefix(got, "mode: auto") {
 		t.Errorf("/mode auto = %q", got)
+	}
+}
+
+type modelStub struct {
+	*stubSession
+	model, pending string
+}
+
+func (m *modelStub) SetModel(name string) { m.pending = name }
+func (m *modelStub) Model() string        { return m.model }
+func (m *modelStub) PendingModel() string { return m.pending }
+func (m *modelStub) ListModels(context.Context) ([]string, error) {
+	return []string{"m1", "m2"}, nil
+}
+
+// A model switch waits for the next turn, but the client sees its pick at once.
+func TestModelOptionShowsPendingSwitch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	toAgentR, toAgentW := io.Pipe()
+	toClientR, toClientW := io.Pipe()
+	factory := func(string) (turn.IdentifiedSession, *approval.Broker, error) {
+		broker := approval.NewBroker()
+		broker.Policy = approval.NewPolicy(approval.Manual, false)
+		return &modelStub{stubSession: &stubSession{"sess-1", broker}, model: "m1"}, broker, nil
+	}
+	go func() { _ = Serve(ctx, toAgentR, toClientW, factory, nil) }()
+	cc := acp.Connect(ctx, &stubClient{decide: selectOption(0)}, toClientR, toAgentW)
+	defer func() { _ = cc.Close() }()
+	if _, err := cc.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: acp.V1}); err != nil {
+		t.Fatal(err)
+	}
+	id := newSession(t, cc)
+	resp, err := cc.SetSessionConfigOption(ctx, acp.SetSessionConfigOptionRequest{SessionID: id, ConfigID: configModel, Value: json.RawMessage(`"m2"`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(resp.ConfigOptions[0].CurrentValue); got != `"m2"` {
+		t.Fatalf("model option after the switch = %s, want the picked model", got)
+	}
+	if _, err := cc.SetSessionConfigOption(ctx, acp.SetSessionConfigOptionRequest{SessionID: id, ConfigID: configModel, Value: json.RawMessage(`"m9"`)}); err == nil {
+		t.Fatal("accepted a model that is not offered")
 	}
 }

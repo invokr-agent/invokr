@@ -35,7 +35,11 @@ const (
 type modelSession interface {
 	SetModel(string)
 	Model() string
+	PendingModel() string
 }
+
+// selectedModel is what the client picked, before the next turn applies it.
+func selectedModel(ms modelSession) string { return cmp.Or(ms.PendingModel(), ms.Model()) }
 
 type modelLister interface {
 	ListModels(context.Context) ([]string, error)
@@ -98,7 +102,7 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, req acp.SetSessionCo
 	rs, canReason := sess.IdentifiedSession.(reasoningSession)
 	switch {
 	case req.ConfigID == configModel && canModel:
-		if value != ms.Model() && !slices.Contains(sess.models, value) {
+		if value != selectedModel(ms) && !slices.Contains(sess.models, value) {
 			return acp.SetSessionConfigOptionResponse{}, acp.NewError(acp.ErrInvalidParams, fmt.Sprintf("acp: model %q is not offered", value))
 		}
 		ms.SetModel(value)
@@ -132,11 +136,11 @@ func listModels(ctx context.Context, sess *chatSession) {
 func configOptions(sess *chatSession) []acp.SessionConfigOption {
 	var out []acp.SessionConfigOption
 	if ms, ok := sess.IdentifiedSession.(modelSession); ok {
-		models := sess.models
-		if !slices.Contains(models, ms.Model()) {
-			models = append(slices.Clone(models), ms.Model()) // switched by /model or /profile
+		current, models := selectedModel(ms), sess.models
+		if !slices.Contains(models, current) {
+			models = append(slices.Clone(models), current) // switched by /model or /profile
 		}
-		out = append(out, selectConfig(configModel, "Model", acp.SessionConfigOptionCategoryModel, ms.Model(), models))
+		out = append(out, selectConfig(configModel, "Model", acp.SessionConfigOptionCategoryModel, current, models))
 	}
 	if rs, ok := sess.IdentifiedSession.(reasoningSession); ok {
 		level := cmp.Or(rs.ReasoningEffort().Level, "default")
