@@ -86,7 +86,8 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 	id := acp.SessionID(sess.SessionID())
 	a.sessions.Store(id, &chatSession{IdentifiedSession: sess, approvals: broker})
 	if a.commands != nil {
-		// After the response, so the client knows the session it names.
+		// Not ordered against the response: the library offers no hook, and a
+		// client may see the update just before session/new returns.
 		go func() {
 			_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{AvailableCommands: a.commands.Available()}})
 		}()
