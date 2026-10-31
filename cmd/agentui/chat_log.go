@@ -392,6 +392,8 @@ func (c *chatLog) applyTextEvent(ev events.Event) bool {
 		c.noteStreamRetry()
 	case ev.Type == events.EventNotice && ev.Notice != nil:
 		c.Append(message{role: "tool", text: ev.Notice.Text})
+	case ev.Type == events.EventSteered && ev.Notice != nil:
+		c.Append(message{role: "user", text: ev.Notice.Text})
 	default:
 		return false
 	}

@@ -25,7 +25,10 @@ const (
 	EventBeforeSave              EventType = "before_save"
 	EventAfterSave               EventType = "after_save"
 	EventNotice                  EventType = "notice"
-	EventAssistantDelta          EventType = "assistant_delta"
+	// EventSteered carries, as a Notice, a message the user sent mid-run that
+	// the run took after a tool round.
+	EventSteered        EventType = "steered"
+	EventAssistantDelta EventType = "assistant_delta"
 	// EventReasoning carries one turn's full reasoning text, when the model
 	// returned any. Distinct from EventAssistantDelta (streamed answer chunks):
 	// this fires once per turn with the whole thing, so a recorded run keeps
@@ -107,8 +110,10 @@ type PromptPayload struct {
 type ResponsePayload struct {
 	ExecutionEvidence []turn.ExecutionEvidence `json:"execution_evidence"`
 	Query             string                   `json:"query,omitempty"`
-	Text              string                   `json:"text,omitempty"`
-	ToolOutcomes      []turn.ToolOutcome       `json:"tool_outcomes,omitempty"`
+	// Steered are the messages the user sent mid-run that the run took, in order.
+	Steered      []string           `json:"steered,omitempty"`
+	Text         string             `json:"text,omitempty"`
+	ToolOutcomes []turn.ToolOutcome `json:"tool_outcomes,omitempty"`
 	// ToolCallCount is the runner ledger's count of tool calls for the turn.
 	ToolCallCount int `json:"tool_call_count,omitempty"`
 }
@@ -180,6 +185,10 @@ const StreamRetryNotice = "stream cut short; re-issuing the turn"
 // time and the given session identifiers. It is a no-op when d is nil.
 func Notice(ctx context.Context, d Dispatcher, sessionID, parentSessionID, text string) {
 	emit(ctx, d, Event{Type: EventNotice, SessionID: sessionID, ParentSessionID: parentSessionID, Notice: &NoticePayload{Text: text}})
+}
+
+func Steered(ctx context.Context, d Dispatcher, sessionID, parentSessionID, text string) {
+	emit(ctx, d, Event{Type: EventSteered, SessionID: sessionID, ParentSessionID: parentSessionID, Notice: &NoticePayload{Text: text}})
 }
 
 func emit(ctx context.Context, d Dispatcher, event Event) {

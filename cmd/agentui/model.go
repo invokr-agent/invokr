@@ -758,6 +758,7 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 	m.syncChatViewport(true)
 	// Only a clean turn end hands the queue its next message: a stop or an
 	// error leaves those messages queued until the user sends again.
+	m.dropSteered()
 	return m, tea.Batch(m.notify.turnDone(), m.notifyPendingCmd(), m.flushQueued(interrupted, msg.err))
 }
 
@@ -799,6 +800,7 @@ func (m *model) drainToolEvents() {
 		for _, ev := range m.toolEvents.Drain() {
 			m.heardAt = time.Now()
 			m.chatLog.ApplyEvent(ev)
+			m.trackSteered(ev)
 			m.trackCompaction(ev)
 			m.noteToolSuggestion(ev)
 		}
@@ -917,7 +919,7 @@ func (m *model) queuedArea() string {
 		folded[i] = fmt.Sprintf("%d \u2981 %s", i+1, strings.ReplaceAll(text, "\n", " "))
 	}
 	// The whole block is muted: it is pending, not part of the transcript.
-	return ui.Invokr.Muted.Render(fmt.Sprintf("%d queued \u00b7 sent when this turn ends\n%s", len(m.queued), strings.Join(folded, "\n")))
+	return ui.Invokr.Muted.Render(fmt.Sprintf("%d queued \u00b7 joins after the next tool call, or sent when this turn ends\n%s", len(m.queued), strings.Join(folded, "\n")))
 }
 
 // inputBox frames the prompt in a rounded border. It replaces the filled
@@ -1154,9 +1156,12 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	// A turn is in flight: hold the message for the flush instead of sending.
+	// A turn is in flight: the run takes the message after its next tool
+	// round; until then it waits here, and goes out when the turn ends if the
+	// run never took it.
 	if m.sending {
 		m.queued = append(m.queued, text)
+		m.steer(text)
 		return m, nil
 	}
 

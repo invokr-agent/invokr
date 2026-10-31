@@ -292,6 +292,7 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 	r.applyProviderContext()
 
 	r.turnProcessor.ResetCallHistory()
+	r.steering.taken = nil
 	r.mu.RLock()
 	state := runState{
 		usage: r.usage.NewTurnUsage(), messages: append([]inference.Message(nil), r.messages...), contextState: r.contextState,
@@ -345,6 +346,7 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 		}
 		budget.observe(result, r.nudgeParseFailure(ctx, req, &state, result, state.nudges != nudges))
 		r.warnNearExhaustion(turn, &state, started, &budget)
+		r.injectSteered(ctx, req, &state)
 	}
 	if exhaustion == "" {
 		exhaustion = stepLimitReason(budget.limitTurns())
@@ -971,7 +973,7 @@ func exhaustionCode(reason string) string {
 func (r *Runner) dispatchAfterResponse(ctx context.Context, req RunRequest, resp turnpkg.AgentResponse) {
 	r.events.Dispatch(ctx, events.Event{
 		Type: events.EventAfterResponse, Timestamp: time.Now(), SessionID: req.SessionID, ParentSessionID: r.parentSessionID,
-		Response: &events.ResponsePayload{Query: req.Message, Text: resp.Message, ToolOutcomes: resp.ToolFailures, ToolCallCount: resp.ToolCallCount, ExecutionEvidence: resp.ExecutionEvidence},
+		Response: &events.ResponsePayload{Query: req.Message, Steered: r.steering.taken, Text: resp.Message, ToolOutcomes: resp.ToolFailures, ToolCallCount: resp.ToolCallCount, ExecutionEvidence: resp.ExecutionEvidence},
 	})
 }
 

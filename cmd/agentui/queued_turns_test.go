@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/invokr-agent/invokr/platform/events"
+
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -39,7 +41,7 @@ func TestModel_QueuedMessagesRenderAndFlushInOrder(t *testing.T) {
 	// rows, so the transcript gives the space up instead of the queue drawing
 	// over it.
 	view := ansi.Strip(m.View().Content)
-	if !strings.Contains(view, "2 queued \u00b7 sent when this turn ends") ||
+	if !strings.Contains(view, "2 queued \u00b7 joins after the next tool call, or sent when this turn ends") ||
 		!strings.Contains(view, "1 \u2981 first") || !strings.Contains(view, "2 \u2981 second") {
 		t.Fatalf("queue block missing:\n%s", view)
 	}
@@ -145,5 +147,68 @@ func TestModel_QueuedMessagesLeaveInterruptUnchanged(t *testing.T) {
 	last = m.chatLog.Last()
 	if fmt.Sprintf("%v", m.queued) != "[later]" || len(session.calls) != 0 || last == nil || last.text != "\u23f9 stopped" {
 		t.Fatalf("esc turn end: queued = %#v, calls = %#v, last = %#v", m.queued, session.calls, last)
+	}
+}
+
+type steerSession struct {
+	*fakeSession
+	pending []string
+}
+
+func (s *steerSession) Steer(text string) { s.pending = append(s.pending, text) }
+func (s *steerSession) DropSteered()      { s.pending = nil }
+func (s *steerSession) Unsteer() (string, bool) {
+	if len(s.pending) == 0 {
+		return "", false
+	}
+	text := s.pending[len(s.pending)-1]
+	s.pending = s.pending[:len(s.pending)-1]
+	return text, true
+}
+
+// Enter mid-turn hands the message to the run; once the run takes it, it
+// leaves the queue and shows as a user line, so the turn end sends nothing.
+func TestModel_SteeredMessageJoinsTheRunningTurn(t *testing.T) {
+	session := &steerSession{fakeSession: &fakeSession{}}
+	m := newModel(context.Background(), session, nil, nil, nil, false, &fakePromptHistory{}, nil)
+	m.sending = true
+	m.input.SetValue("also the README")
+	updated, _ := m.updateKey(testKey(tea.KeyEnter))
+	m = updated.(*model)
+	if fmt.Sprint(session.pending) != "[also the README]" {
+		t.Fatalf("session pending = %v, want the message handed to the run", session.pending)
+	}
+
+	session.pending = nil // the run took it
+	m.chatLog.ApplyEvent(events.Event{Type: events.EventSteered, Notice: &events.NoticePayload{Text: "also the README"}})
+	m.trackSteered(events.Event{Type: events.EventSteered, Notice: &events.NoticePayload{Text: "also the README"}})
+	if len(m.queued) != 0 {
+		t.Fatalf("queued = %v after the run took it", m.queued)
+	}
+	if last := m.chatLog.Last(); last == nil || last.role != "user" || last.text != "also the README" {
+		t.Fatalf("last message = %+v, want the steered user line", last)
+	}
+	if _, cmd := m.Update(responseMsg{text: "ok"}); cmd != nil && len(session.calls) != 0 {
+		t.Fatalf("turn end resent a message the run took: %v", session.calls)
+	}
+}
+
+// Up on an empty input takes back a message the run has not taken; one it
+// already took stays in the transcript.
+func TestModel_UnsteerOnlyWhileUntaken(t *testing.T) {
+	session := &steerSession{fakeSession: &fakeSession{}}
+	m := newModel(context.Background(), session, nil, nil, nil, false, &fakePromptHistory{}, nil)
+	m.sending = true
+	m.queued = []string{"draft"}
+	session.pending = []string{"draft"}
+	m.historyUp()
+	if m.input.Value() != "draft" || len(m.queued) != 0 || len(session.pending) != 0 {
+		t.Fatalf("input=%q queued=%v pending=%v, want it pulled back", m.input.Value(), m.queued, session.pending)
+	}
+	m.input.SetValue("")
+	m.queued = []string{"taken"}
+	m.historyUp()
+	if m.input.Value() != "" || len(m.queued) != 1 {
+		t.Fatalf("input=%q queued=%v, want a taken message left alone", m.input.Value(), m.queued)
 	}
 }

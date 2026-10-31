@@ -49,6 +49,7 @@ type Runner struct {
 	usage             turn.TokenUsage
 	parentSessionID   string
 	pendingModel      atomic.Pointer[string]
+	steering          steering
 	messages          []inference.Message
 	contextState      contextWindowState
 	budget            *contextBudget
