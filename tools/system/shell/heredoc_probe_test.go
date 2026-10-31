@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"testing"
 
 	"github.com/invokr-agent/invokr/tools/system/workspace"
@@ -8,6 +9,9 @@ import (
 
 // Probe: the real heredoc shapes that were refused in the round-6 bench rows.
 func TestHeredocProbeFromBenchRows(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	wsp := workspace.Policy{Root: t.TempDir()}
 	allowed := []string{"cat", "python3", "echo", "chmod"}
 	cases := map[string]string{

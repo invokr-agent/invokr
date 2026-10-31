@@ -7,6 +7,7 @@ import (
 	"github.com/invokr-agent/invokr/platform/events"
 	"github.com/invokr-agent/invokr/support/testutil"
 	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"testing"
 	"time"
 
@@ -14,6 +15,9 @@ import (
 )
 
 func TestNewCaller_CreateToolMakesToolImmediatelyCallable(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	root := t.TempDir()
 	t.Setenv("INVOKR_TOOLBOX_DIR", root)
 

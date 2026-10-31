@@ -6,6 +6,7 @@ import (
 	"github.com/invokr-agent/invokr/config"
 	"github.com/invokr-agent/invokr/constants"
 	"github.com/invokr-agent/invokr/platform/events"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"github.com/invokr-agent/invokr/tools/system/workspace"
 	"os"
 	"path/filepath"
@@ -24,6 +25,9 @@ func (d *captureDispatcher) Dispatch(_ context.Context, event events.Event) {
 }
 
 func TestProcessBackendRunsPythonAndCollectsArtifact(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	root := t.TempDir()
 	inputPath := filepath.Join(root, "data.txt")
 	if err := os.WriteFile(inputPath, []byte("hello"), 0600); err != nil {

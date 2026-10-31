@@ -220,11 +220,24 @@ func checkNamespaceSandbox() checkResult {
 		return ok("sandbox", "unprivileged user namespaces work; toolbox tools and the code_interpreter process backend run sandboxed")
 	}
 	detail := "unprivileged user namespaces unavailable"
+	remedy := "install util-linux and enable user.max_user_namespaces"
 	if runtime.GOOS != "linux" {
 		detail = "namespace sandboxing is Linux-only (this host is " + runtime.GOOS + ")"
+	} else if inContainer() {
+		detail = "inside a container that blocks user namespaces or a fresh /proc mount"
+		remedy = "run the container with --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined"
 	}
 	return checkResult{"sandbox", "warn", detail,
-		"toolbox tools and the code_interpreter process backend refuse to run; install util-linux and enable user.max_user_namespaces, or set INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1 to run them on the host (not recommended)"}
+		"toolbox tools and the code_interpreter process backend refuse to run; " + remedy + ", or set INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1 to run them unsandboxed (not recommended)"}
+}
+
+func inContainer() bool {
+	for _, marker := range []string{"/.dockerenv", "/run/.containerenv"} {
+		if _, err := os.Stat(marker); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 func checkContainerEngine(cfg config.AppConfig) checkResult {

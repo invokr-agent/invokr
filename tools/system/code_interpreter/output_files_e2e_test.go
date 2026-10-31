@@ -2,6 +2,7 @@ package code_interpreter
 
 import (
 	"context"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,9 @@ import (
 // mounting it at /artifacts while cwd was /work, so every relative write the
 // tool description asks for was silently dropped.
 func TestEndToEndOutputFilesRealPython(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "in.csv"), []byte("a,b\n1,2\n"), 0o644); err != nil {
 		t.Fatal(err)

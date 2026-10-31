@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"net/http"
 	"os"
 	"os/exec"
@@ -51,6 +52,9 @@ func TestMain(m *testing.M) {
 }
 
 func TestCLI_E2E_MockedLLM_ExecutesToolWithoutWritingMarkdownMemory(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	state := newE2EState(t)
 	writeFixtureProbeToolbox(t, state.toolbox, "alpha")
 	provider := providertest.NewScripted(t,
