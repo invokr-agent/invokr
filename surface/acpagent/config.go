@@ -154,8 +154,3 @@ func selectConfig(id acp.SessionConfigID, name string, category acp.SessionConfi
 	optionsJSON, _ := json.Marshal(options)
 	return acp.SessionConfigOption{ID: id, Name: name, Category: category, Type: "select", CurrentValue: currentJSON, Options: optionsJSON}
 }
-
-func configChanged(input string) bool {
-	name, _, _ := strings.Cut(strings.TrimPrefix(input, "/"), " ")
-	return strings.HasPrefix(input, "/") && (name == "model" || name == "reasoning" || name == "profile")
-}

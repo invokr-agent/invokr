@@ -50,7 +50,8 @@ func RunHeadless(ctx context.Context, backend CommandBackend, session turn.Sessi
 		return "/" + name + " takes no arguments here; use the terminal UI", "", true
 	}
 	if name == "help" {
-		return headlessHelp(), "", true
+		lines := toolcore.MapSlice(HeadlessCommands(), func(c HeadlessCommand) string { return c.Usage + " — " + c.Summary })
+		return strings.Join(lines, "\n"), "", true
 	}
 	if spec.skill {
 		instructions, err := backend.Execute(ctx, name, nil)
@@ -61,9 +62,4 @@ func RunHeadless(ctx context.Context, backend CommandBackend, session turn.Sessi
 	}
 	out, _ := spec.plain(ctx, backend, session, name, args)
 	return ansi.Strip(out), "", true
-}
-
-func headlessHelp() string {
-	lines := toolcore.MapSlice(HeadlessCommands(), func(c HeadlessCommand) string { return c.Usage + " — " + c.Summary })
-	return strings.Join(lines, "\n")
 }

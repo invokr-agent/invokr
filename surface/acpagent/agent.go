@@ -137,19 +137,14 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	if a.commands != nil {
 		if reply, prompt, ok := a.commands.Run(ctx, sess.IdentifiedSession, input); ok {
 			if prompt == "" {
-				return a.commandReply(ctx, req.SessionID, sess, input, reply)
+				// /model, /reasoning and /profile change options; the update is cheap for the rest.
+				_ = a.update(ctx, req.SessionID, acp.SessionUpdate{ConfigOptionUpdate: &acp.ConfigOptionUpdate{ConfigOptions: configOptions(sess)}})
+				return a.reply(ctx, req.SessionID, reply)
 			}
 			input = prompt
 		}
 	}
 	return a.send(ctx, req.SessionID, sess, input)
-}
-
-func (a *Agent) commandReply(ctx context.Context, id acp.SessionID, sess *chatSession, input, reply string) (acp.PromptResponse, error) {
-	if configChanged(input) {
-		_ = a.update(ctx, id, acp.SessionUpdate{ConfigOptionUpdate: &acp.ConfigOptionUpdate{ConfigOptions: configOptions(sess)}})
-	}
-	return a.reply(ctx, id, reply)
 }
 
 // send runs one model turn; the caller holds sess.turnMu.
