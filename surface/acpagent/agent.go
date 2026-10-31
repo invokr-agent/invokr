@@ -30,21 +30,29 @@ type chatSession struct {
 	turn.IdentifiedSession
 	approvals *approval.Broker
 	turnMu    sync.Mutex
-	noticed   bool // the update notice was sent in this session; guarded by turnMu
+	noticed   bool     // the update notice was sent in this session; guarded by turnMu
+	models    []string // listed at session/new; read-only after
+}
+
+type Commands interface {
+	Available() []acp.AvailableCommand
+	// Run returns prompt instead of reply when the command becomes a model turn.
+	Run(ctx context.Context, sess turn.Session, text string) (reply, prompt string, handled bool)
 }
 
 // Agent serves invokr chat sessions over ACP; sessions live only as long as the process.
 type Agent struct {
 	conn       *acp.AgentConn
 	newSession runtime.ChatSessionFunc
+	commands   Commands
 	sessions   sync.Map
 }
 
 // latestVersion is the newer invokr release tag, "" when none is known; tests replace it.
 var latestVersion = version.LatestVersion
 
-func Serve(ctx context.Context, in io.Reader, out io.Writer, newSession runtime.ChatSessionFunc) error {
-	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession}
+func Serve(ctx context.Context, in io.Reader, out io.Writer, newSession runtime.ChatSessionFunc, commands Commands) error {
+	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}
 	latestVersion() // starts the background lookup so the first reply can carry its answer
 	a.conn.Serve(ctx, a)
 	<-a.conn.Done()
@@ -61,7 +69,7 @@ func (a *Agent) Authenticate(context.Context, acp.AuthenticateRequest) (acp.Auth
 }
 
 // NewSession only serves the workspace invokr was started in: sessions cannot carry their own.
-func (a *Agent) NewSession(_ context.Context, req acp.NewSessionRequest) (acp.NewSessionResponse, error) {
+func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.NewSessionResponse, error) {
 	wd, err := os.Getwd()
 	if err != nil {
 		return acp.NewSessionResponse{}, err
@@ -74,8 +82,29 @@ func (a *Agent) NewSession(_ context.Context, req acp.NewSessionRequest) (acp.Ne
 		return acp.NewSessionResponse{}, err
 	}
 	id := acp.SessionID(sess.SessionID())
-	a.sessions.Store(id, &chatSession{IdentifiedSession: sess, approvals: broker})
-	return acp.NewSessionResponse{SessionID: id}, nil
+	chat := &chatSession{IdentifiedSession: sess, approvals: broker}
+	listModels(ctx, chat)
+	a.sessions.Store(id, chat)
+	commands := []acp.AvailableCommand{modeCommand}
+	if a.commands != nil {
+		commands = append(commands, a.commands.Available()...)
+	}
+	go func() {
+		_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{AvailableCommands: commands}})
+	}()
+	return acp.NewSessionResponse{SessionID: id, Modes: modeState(broker.Policy), ConfigOptions: configOptions(chat)}, nil
+}
+
+func (a *Agent) session(id acp.SessionID) (*chatSession, error) {
+	v, ok := a.sessions.Load(id)
+	if !ok {
+		return nil, acp.NewError(acp.ErrInvalidParams, fmt.Sprintf("acp: unknown session %q", id))
+	}
+	return v.(*chatSession), nil
+}
+
+func (a *Agent) update(ctx context.Context, id acp.SessionID, u acp.SessionUpdate) error {
+	return a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: id, Update: u})
 }
 
 func sameDir(a, b string) bool {
@@ -88,11 +117,10 @@ func sameDir(a, b string) bool {
 }
 
 func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptResponse, error) {
-	v, ok := a.sessions.Load(req.SessionID)
-	if !ok {
-		return acp.PromptResponse{}, acp.NewError(acp.ErrInvalidParams, fmt.Sprintf("acp: unknown session %q", req.SessionID))
+	sess, err := a.session(req.SessionID)
+	if err != nil {
+		return acp.PromptResponse{}, err
 	}
-	sess := v.(*chatSession)
 	var text []string
 	for _, block := range req.Prompt {
 		if block.Text == nil {
@@ -102,10 +130,29 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	}
 	sess.turnMu.Lock()
 	defer sess.turnMu.Unlock()
+	input := strings.Join(text, "\n")
+	if reply, ok := a.modeText(ctx, req.SessionID, sess, input); ok {
+		return a.reply(ctx, req.SessionID, reply)
+	}
+	if a.commands != nil {
+		if reply, prompt, ok := a.commands.Run(ctx, sess.IdentifiedSession, input); ok {
+			if prompt == "" {
+				// /model, /reasoning and /profile change options; the update is cheap for the rest.
+				_ = a.update(ctx, req.SessionID, acp.SessionUpdate{ConfigOptionUpdate: &acp.ConfigOptionUpdate{ConfigOptions: configOptions(sess)}})
+				return a.reply(ctx, req.SessionID, reply)
+			}
+			input = prompt
+		}
+	}
+	return a.send(ctx, req.SessionID, sess, input)
+}
+
+// send runs one model turn; the caller holds sess.turnMu.
+func (a *Agent) send(ctx context.Context, id acp.SessionID, sess *chatSession, input string) (acp.PromptResponse, error) {
 	var denied []turn.ToolOutcome
 	var approved []acp.ToolCallID
 	stopDrain := approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
-		d := a.ask(ctx, req.SessionID, r)
+		d := a.ask(ctx, id, r)
 		if d.Approved {
 			approved = append(approved, acp.ToolCallID(r.ID))
 		} else {
@@ -113,7 +160,7 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 		}
 		return d
 	})
-	resp, err := sess.Send(ctx, strings.Join(text, "\n"))
+	resp, err := sess.Send(ctx, input)
 	stopDrain()
 	final := acp.ToolCallStatusCompleted
 	if err != nil {
@@ -121,7 +168,7 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	}
 	for _, callID := range approved {
 		update := acp.SessionUpdate{ToolCallUpdate: &acp.ToolCallUpdate{ToolCallID: callID, Status: final}}
-		_ = a.conn.SessionUpdate(context.WithoutCancel(ctx), acp.SessionNotification{SessionID: req.SessionID, Update: update})
+		_ = a.conn.SessionUpdate(context.WithoutCancel(ctx), acp.SessionNotification{SessionID: id, Update: update})
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -135,8 +182,12 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 		sess.noticed = true
 		reply += fmt.Sprintf("\n\nℹ️ invokr %s is available (running %s): run `invokr update`", tag, version.Version)
 	}
-	chunk := acp.SessionUpdate{AgentMessageChunk: &acp.ContentChunk{Content: acp.ContentBlock{Text: &acp.TextContent{Text: reply}}}}
-	if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: req.SessionID, Update: chunk}); err != nil {
+	return a.reply(ctx, id, reply)
+}
+
+func (a *Agent) reply(ctx context.Context, id acp.SessionID, text string) (acp.PromptResponse, error) {
+	chunk := acp.SessionUpdate{AgentMessageChunk: &acp.ContentChunk{Content: acp.ContentBlock{Text: &acp.TextContent{Text: text}}}}
+	if err := a.update(ctx, id, chunk); err != nil {
 		return acp.PromptResponse{}, err
 	}
 	return acp.PromptResponse{StopReason: acp.StopReasonEndTurn}, nil

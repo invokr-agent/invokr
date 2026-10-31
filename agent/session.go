@@ -266,6 +266,14 @@ func (s *Session) SetModel(name string) { s.runner.pendingModel.Store(&name) }
 // (/profile). Concurrent-safe; the builder applies it at the next Build.
 func (s *Session) SetSystemPrompt(prompt string) { s.prompts.SetBasePrompt(prompt) }
 
+// PendingModel is a requested switch the next turn has not applied yet.
+func (s *Session) PendingModel() string {
+	if p := s.runner.pendingModel.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
 func (s *Session) Model() string {
 	if sw, ok := s.runner.modelGateway.(modelSwitcherGateway); ok {
 		return sw.Model()

@@ -2,11 +2,13 @@ package acpagent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -35,6 +37,9 @@ func (s *stubSession) Send(ctx context.Context, text string) (turn.AgentResponse
 	case "fail":
 		return turn.AgentResponse{}, errors.New("provider down")
 	}
+	if strings.HasPrefix(text, "echo ") {
+		return turn.AgentResponse{Message: text}, nil
+	}
 	if _, err := s.broker.RequestApproval(ctx, approval.Request{Tool: "shell", Summary: "run ls"}); err != nil {
 		return turn.AgentResponse{Message: "denied"}, nil
 	}
@@ -47,14 +52,19 @@ var ranLs = turn.AgentResponse{Message: "ran ls", ToolFailures: []turn.ToolOutco
 type stubClient struct {
 	decide func(acp.RequestPermissionRequest) (acp.RequestPermissionResponse, error)
 
-	mu      sync.Mutex
-	asked   []acp.RequestPermissionRequest
-	updates []acp.SessionUpdate
+	mu       sync.Mutex
+	asked    []acp.RequestPermissionRequest
+	updates  []acp.SessionUpdate
+	commands []acp.AvailableCommand // kept apart: it arrives asynchronously after session/new
 }
 
 func (c *stubClient) SessionUpdate(_ context.Context, n acp.SessionNotification) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if u := n.Update.AvailableCommandsUpdate; u != nil {
+		c.commands = u.AvailableCommands
+		return nil
+	}
 	c.updates = append(c.updates, n.Update)
 	return nil
 }
@@ -74,6 +84,11 @@ func selectOption(i int) func(acp.RequestPermissionRequest) (acp.RequestPermissi
 
 func connect(t *testing.T, client *stubClient) *acp.ClientConn {
 	t.Helper()
+	return connectWith(t, client, nil)
+}
+
+func connectWith(t *testing.T, client *stubClient, commands Commands) *acp.ClientConn {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
 	toAgentR, toAgentW := io.Pipe()
@@ -81,9 +96,10 @@ func connect(t *testing.T, client *stubClient) *acp.ClientConn {
 	var n atomic.Int32
 	newSession := func(string) (turn.IdentifiedSession, *approval.Broker, error) {
 		broker := approval.NewBroker()
+		broker.Policy = approval.NewPolicy(approval.Manual, false)
 		return &stubSession{fmt.Sprintf("sess-%d", n.Add(1)), broker}, broker, nil
 	}
-	go func() { _ = Serve(ctx, toAgentR, toClientW, newSession) }()
+	go func() { _ = Serve(ctx, toAgentR, toClientW, newSession, commands) }()
 	cc := acp.Connect(ctx, client, toClientR, toAgentW)
 	t.Cleanup(func() { _ = cc.Close() })
 	init, err := cc.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: acp.V1})
@@ -347,5 +363,128 @@ func TestCancelStopsPrompt(t *testing.T) {
 	}
 	if resp := <-done; resp.StopReason != acp.StopReasonCancelled {
 		t.Fatalf("stop reason = %q, want cancelled", resp.StopReason)
+	}
+}
+
+type stubCommands struct{}
+
+func (stubCommands) Available() []acp.AvailableCommand {
+	return []acp.AvailableCommand{{Name: "usage", Description: "show token usage"}}
+}
+
+func (stubCommands) Run(_ context.Context, sess turn.Session, text string) (string, string, bool) {
+	if _, ok := sess.(*stubSession); !ok {
+		return "got a wrapper, not the runtime session", "", true // commands type-assert the session's optional interfaces
+	}
+	switch {
+	case text == "/usage":
+		return "12 tokens", "", true
+	case strings.HasPrefix(text, "/skill:x"):
+		return "", "echo follow skill x", true
+	}
+	return "", "", false
+}
+
+func TestSlashCommands(t *testing.T) {
+	client := &stubClient{decide: selectOption(0)}
+	cc := connectWith(t, client, stubCommands{})
+	id := newSession(t, cc)
+	deadline := time.Now().Add(2 * time.Second)
+	for !hasCommands(client) {
+		if time.Now().After(deadline) {
+			t.Fatal("no available_commands_update after session/new")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	for text, want := range map[string]string{
+		"/usage":        "12 tokens",
+		"/skill:x task": "echo follow skill x",
+		"echo /unknown": "echo /unknown",
+	} {
+		if _, err := prompt(cc, id, text); err != nil {
+			t.Fatal(err)
+		}
+		if got := lastReply(t, client); !strings.HasPrefix(got, want) {
+			t.Errorf("%q replied %q, want %q", text, got, want)
+		}
+	}
+}
+
+func hasCommands(c *stubClient) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.ContainsFunc(c.commands, func(cmd acp.AvailableCommand) bool { return cmd.Name == "usage" })
+}
+
+func TestModesArePerSession(t *testing.T) {
+	client := &stubClient{decide: selectOption(0)}
+	cc := connect(t, client)
+	wd, _ := os.Getwd()
+	first, err := cc.NewSession(context.Background(), acp.NewSessionRequest{Cwd: wd})
+	if err != nil || first.Modes == nil || first.Modes.CurrentModeID != "manual" || len(first.Modes.AvailableModes) != 3 {
+		t.Fatalf("session/new modes = %+v, %v", first.Modes, err)
+	}
+	other := newSession(t, cc)
+	if _, err := cc.SetSessionMode(context.Background(), acp.SetSessionModeRequest{SessionID: first.SessionID, ModeID: "plan"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cc.SetSessionMode(context.Background(), acp.SetSessionModeRequest{SessionID: first.SessionID, ModeID: "yolo"}); err == nil {
+		t.Fatal("set_mode accepted yolo")
+	}
+	for id, want := range map[acp.SessionID]string{first.SessionID: "mode: plan", other: "mode: manual"} {
+		if _, err := prompt(cc, id, "/mode"); err != nil {
+			t.Fatal(err)
+		}
+		if got := lastReply(t, client); got != want {
+			t.Errorf("/mode in %s = %q, want %q", id, got, want)
+		}
+	}
+	if _, err := prompt(cc, other, "/mode auto"); err != nil {
+		t.Fatal(err)
+	}
+	if got := lastReply(t, client); !strings.HasPrefix(got, "mode: auto") {
+		t.Errorf("/mode auto = %q", got)
+	}
+}
+
+type modelStub struct {
+	*stubSession
+	model, pending string
+}
+
+func (m *modelStub) SetModel(name string) { m.pending = name }
+func (m *modelStub) Model() string        { return m.model }
+func (m *modelStub) PendingModel() string { return m.pending }
+func (m *modelStub) ListModels(context.Context) ([]string, error) {
+	return []string{"m1", "m2"}, nil
+}
+
+// A model switch waits for the next turn, but the client sees its pick at once.
+func TestModelOptionShowsPendingSwitch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	toAgentR, toAgentW := io.Pipe()
+	toClientR, toClientW := io.Pipe()
+	factory := func(string) (turn.IdentifiedSession, *approval.Broker, error) {
+		broker := approval.NewBroker()
+		broker.Policy = approval.NewPolicy(approval.Manual, false)
+		return &modelStub{stubSession: &stubSession{"sess-1", broker}, model: "m1"}, broker, nil
+	}
+	go func() { _ = Serve(ctx, toAgentR, toClientW, factory, nil) }()
+	cc := acp.Connect(ctx, &stubClient{decide: selectOption(0)}, toClientR, toAgentW)
+	defer func() { _ = cc.Close() }()
+	if _, err := cc.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: acp.V1}); err != nil {
+		t.Fatal(err)
+	}
+	id := newSession(t, cc)
+	resp, err := cc.SetSessionConfigOption(ctx, acp.SetSessionConfigOptionRequest{SessionID: id, ConfigID: configModel, Value: json.RawMessage(`"m2"`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(resp.ConfigOptions[0].CurrentValue); got != `"m2"` {
+		t.Fatalf("model option after the switch = %s, want the picked model", got)
+	}
+	if _, err := cc.SetSessionConfigOption(ctx, acp.SetSessionConfigOptionRequest{SessionID: id, ConfigID: configModel, Value: json.RawMessage(`"m9"`)}); err == nil {
+		t.Fatal("accepted a model that is not offered")
 	}
 }
