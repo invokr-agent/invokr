@@ -1,6 +1,7 @@
 package shell
 
 import (
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"strings"
 	"testing"
 )
@@ -9,6 +10,9 @@ import (
 // runs. Refusing it outright left no way to run a workspace script against the
 // workspace package (r9 L1/1).
 func TestPolicyAdmitsALibraryPathPrefixAtTheWriteTier(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	for _, line := range []string{
 		"PYTHONPATH=. python3 verify.py",
 		"PYTHONPATH=. go test ./...",

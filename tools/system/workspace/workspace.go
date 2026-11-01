@@ -438,7 +438,8 @@ func gitDirPointsBack(workspaceRoot, target string) bool {
 		return resolvesTo(target, strings.TrimSpace(string(back)), filepath.Join(root, ".git"))
 	}
 	// Git parses quoting and escapes in core.worktree.
-	value, err := exec.Command("git", "config", "--null", "--file", filepath.Join(target, "config"), "--get", "core.worktree").Output()
+	// -C: outside the caller's repository, whose breakage would fail git before it reads the file.
+	value, err := exec.Command("git", "-C", target, "config", "--null", "--file", filepath.Join(target, "config"), "--get", "core.worktree").Output()
 	return err == nil && resolvesTo(target, strings.TrimSuffix(string(value), "\x00"), root)
 }
 

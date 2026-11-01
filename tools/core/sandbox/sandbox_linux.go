@@ -252,7 +252,9 @@ func writeSandboxScript(plan Plan, toolDir string) (string, func(), error) {
 		// egress either way, so a failure here must not fail the tool call -
 		// but it does leave a greppable line rather than silently doing
 		// nothing (peer follow-up).
-		b.WriteString("ip link set lo up 2>/dev/null || echo 'invokr: loopback not brought up' >&2\n")
+		// Quiet when `ip` is absent (slim images): the line would otherwise
+		// lead the output of every command.
+		b.WriteString("! command -v ip >/dev/null || ip link set lo up 2>/dev/null || echo 'invokr: loopback not brought up' >&2\n")
 	}
 	fmt.Fprintf(&b, "ROOT=%s\nmount --bind \"$ROOT\" \"$ROOT\"\n", shellEscape(root))
 	// proc/dev/tmp must be mounted before the RO/RW binds below:
@@ -367,13 +369,16 @@ var sandboxSupported = probeSandboxSupport()
 // --map-root-user is the exact step that fails there ("write /proc/self/uid_map:
 // Operation not permitted"). Probing it once at init lets the caller fall back
 // to the explicit-opt-in unsandboxed path instead of failing every invocation.
+// It also mounts a fresh /proc, as every sandbox does: inside a container
+// whose /proc is masked (Docker's default) user namespaces work but that
+// mount fails ("Mount too revealing"), which would fail every command.
 func probeSandboxSupport() bool {
 	if _, err := exec.LookPath("unshare"); err != nil {
 		return false
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, "unshare", "--user", "--map-root-user", "true").Run() == nil
+	return exec.CommandContext(ctx, "unshare", "--user", "--map-root-user", "--mount", "--pid", "--fork", "--mount-proc", "true").Run() == nil
 }
 
 func Available() bool { return sandboxSupported }

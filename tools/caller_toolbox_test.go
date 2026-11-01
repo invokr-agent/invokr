@@ -6,7 +6,9 @@ import (
 	"github.com/invokr-agent/invokr/config"
 	"github.com/invokr-agent/invokr/support/testutil"
 	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,6 +19,9 @@ import (
 )
 
 func TestNewCaller_InvokesGoToolboxPlugin(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	root := t.TempDir()
 	testutil.MustWriteToolboxPlugin(t, root, "echo_value", "Echo value from arguments", map[string]string{
 		"main.go": `package main
@@ -80,6 +85,12 @@ func main() {
 }
 
 func TestNewCaller_InvokesPythonToolboxPluginInPerToolVenv(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
+	if exec.Command("python3", "-c", "import ensurepip").Run() != nil {
+		t.Skip("python3 cannot create a venv (python3-venv missing)")
+	}
 	root := t.TempDir()
 	pluginDir := testutil.MustWriteToolboxPlugin(t, root, "python_env", "Report Python environment", map[string]string{
 		"main.py": `import json
@@ -133,6 +144,9 @@ print(json.dumps({
 }
 
 func TestNewCaller_InvokesPythonToolboxPluginWithoutRequirementsDirectly(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	root := t.TempDir()
 	testutil.MustWriteToolboxPlugin(t, root, "python_no_requirements", "Report direct Python execution", map[string]string{
 		"main.py": `import json
@@ -162,6 +176,9 @@ print(json.dumps({"result": "ok"}), end="")
 }
 
 func TestNewCaller_RelativeToolboxDirInvocationWorks(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("getwd: %v", err)

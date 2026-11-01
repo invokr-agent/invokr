@@ -563,6 +563,9 @@ func TestPolicyNothingReachesReadonlyByAccident(t *testing.T) {
 // must not be refused as path expansions; a real brace expansion outside the
 // heredoc on the same line still is.
 func TestBraceExpansionSkipsHeredocBody(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	wsp := workspace.Policy{Root: t.TempDir()}
 	allowed := []string{"cat", "python3"}
 	for _, line := range []string{
@@ -683,6 +686,9 @@ func TestPolicyBuildToolPrefixStaysNarrow(t *testing.T) {
 // The escape hatch for a line the allowlist parser refuses is only useful if
 // the model is told about it (#428).
 func TestShellDescriptionNamesScriptEscapeHatch(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	desc := shellDescription(testAllowed, t.TempDir(), false)
 	if !strings.Contains(desc, "bash /tmp/") {
 		t.Fatalf("description does not surface the script escape hatch: %s", desc)
