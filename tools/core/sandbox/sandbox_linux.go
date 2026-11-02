@@ -183,7 +183,7 @@ func command(ctx context.Context, plan Plan, dir string, args []string) (*exec.C
 		closePinned(pinned)
 	}
 
-	unshareArgs := []string{"--user", "--map-root-user", "--mount", "--pid", "--fork", "--uts", "--ipc"}
+	unshareArgs := slices.Clone(namespaceArgs)
 	// --kill-child makes unshare SIGKILL the shell it forked when unshare itself
 	// dies, so Pdeathsig below reaches the whole tree and not just unshare.
 	if unshareSupportsKillChild() && !plan.Detached {
@@ -378,10 +378,20 @@ func probeSandboxSupport() bool {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	return exec.CommandContext(ctx, "unshare", "--user", "--map-root-user", "--mount", "--pid", "--fork", "--mount-proc", "true").Run() == nil
+	args := slices.Concat(namespaceArgs, []string{"--net", "--mount-proc", "true"})
+	return exec.CommandContext(ctx, "unshare", args...).Run() == nil
 }
 
-func Available() bool { return sandboxSupported }
+// namespaceArgs are the namespaces every sandbox enters; the probe uses the
+// same list so it cannot pass where real commands fail.
+var namespaceArgs = []string{"--user", "--map-root-user", "--mount", "--pid", "--fork", "--uts", "--ipc"}
+
+func Available() bool {
+	if forced != nil {
+		return *forced
+	}
+	return sandboxSupported
+}
 
 func writeSealedBinds(b *strings.Builder, root string, plan Plan) {
 	for _, p := range plan.Sealed {

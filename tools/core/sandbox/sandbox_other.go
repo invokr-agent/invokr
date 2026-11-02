@@ -36,4 +36,4 @@ func command(_ context.Context, _ Plan, _ string, _ []string) (*exec.Cmd, func()
 	return nil, nil, fmt.Errorf("namespace sandboxing is only implemented on Linux")
 }
 
-func Available() bool { return false }
+func Available() bool { return forced != nil && *forced }
