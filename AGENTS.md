@@ -38,7 +38,7 @@ Comment only what the code can't say: a non-obvious invariant, a security reason
 timeout := 30 * time.Second
 
 // GOOD: explains why
-// llama.cpp drops idle streams after 30s; stay under it.
+// The provider drops idle streams after 30s; stay under it.
 timeout := 25 * time.Second
 ```
 
