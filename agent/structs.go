@@ -40,7 +40,10 @@ type Session struct {
 }
 
 type Runner struct {
-	mu                sync.RWMutex
+	mu sync.RWMutex
+	// turn serializes Run with an out-of-turn /compact, so neither works on a
+	// transcript the other is about to replace.
+	turn              sync.Mutex
 	modelGateway      ModelGateway
 	turnProcessor     *TurnProcessor
 	events            events.Dispatcher

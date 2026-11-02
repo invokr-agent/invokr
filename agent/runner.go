@@ -287,6 +287,12 @@ func (g *repeatGuard) observeFailureTool(key string) bool {
 func (g *repeatGuard) reset() { *g = repeatGuard{} }
 
 func (r *Runner) Run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse, error) {
+	r.turn.Lock()
+	defer r.turn.Unlock()
+	return r.run(ctx, req)
+}
+
+func (r *Runner) run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse, error) {
 	started := time.Now()
 	r.logger.Info("agent request started", zap.Int("message_len", len(req.Message)))
 	r.applyProviderContext()
@@ -689,6 +695,18 @@ func stripTrailingInternalNudge(messages []inference.Message, steered []string) 
 		return messages[:len(messages)-1]
 	}
 	return messages
+}
+
+// compactNow runs a requested compaction between turns instead of at the
+// start of the next one.
+func (r *Runner) compactNow(ctx context.Context, sessionID string) {
+	r.turn.Lock()
+	defer r.turn.Unlock()
+	r.budget.RequestCompaction()
+	messages, state := r.budget.Prepare(ctx, sessionID, r.messages, r.contextState)
+	r.mu.Lock()
+	r.messages, r.contextState = messages, state
+	r.mu.Unlock()
 }
 
 func (r *Runner) prepareAndStoreContext(ctx context.Context, sessionID string, messages []inference.Message, state contextWindowState) ([]inference.Message, contextWindowState) {
