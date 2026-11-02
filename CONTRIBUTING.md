@@ -18,10 +18,25 @@ are held to it.
 3. **Write as little code as you can.** Reuse what's already in the codebase
    before adding anything new. Prefer the stdlib and existing helpers. The
    smallest diff that solves the issue wins.
-4. **Fundamentals need regression testing.** Changes to tools, the default
+4. **Bug fixes come with a regression test** that fails before your change and
+   passes after.
+5. **Fundamentals need regression testing.** Changes to tools, the default
    prompt or the agent loop affect everything the agent does. Run `make e2e`
    and include before/after runs on a real task in the PR. Show it doesn't make
    things worse, not just that your case works.
+
+## Your first PR
+
+1. Pick an issue labelled
+   [`good first issue`](https://github.com/invokr-agent/invokr/labels/good%20first%20issue),
+   or open one and wait for a reply before writing code.
+2. Read [docs/onboarding/](docs/onboarding/README.md): it walks through the
+   architecture in order, from the big picture to the agent loop and tools.
+3. Build from source (below), make the change, run `make verify`.
+4. Open the PR against `main` and fill in the template.
+
+Questions go to
+[Discussions](https://github.com/invokr-agent/invokr/discussions), not issues.
 
 ## Build from source
 
@@ -91,7 +106,14 @@ say so in the issue first.
 
 ## Pull requests
 
-Target `dev`, not `main`. Link the issue and keep the diff to one concern.
+Target `main`. Link the issue and keep the diff to one concern. PRs are
+squash-merged as `<area>: <title> (#<pr>)`, and CI (`lint`, `test`, `e2e`,
+`sandbox-containment`, CodeQL) must pass. A maintainer approves CI runs for
+first-time contributors. If an agent helped, say how in the template.
+
+PRs may be closed without review when they duplicate another PR, take an
+issue someone else is assigned to, skip this guide, or don't fit the
+architecture.
 
 ## Security
 
@@ -100,11 +122,12 @@ Don't open a public issue for a suspected vulnerability. See
 
 ## Releasing (maintainers)
 
-Tag and run [goreleaser](https://goreleaser.com) (`.goreleaser.yaml`):
+Push a `vX.Y.Z` tag cut from `main`; `.github/workflows/release.yml` runs
+[goreleaser](https://goreleaser.com) (`.goreleaser.yaml`) and attests every
+archive. Every merge to `main` also publishes an edge pre-release (`edge.yml`).
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0
-goreleaser release
 ```
 
 This builds `linux/{amd64,arm64}` and `darwin/{amd64,arm64}`, injects
