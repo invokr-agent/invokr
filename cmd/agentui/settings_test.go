@@ -3,6 +3,7 @@ package agentui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -99,7 +100,7 @@ func TestSettingsProfileSelectSwitches(t *testing.T) {
 	m.width, m.height = 120, 40
 	t.Setenv("INVOKR_HOME", home)
 	m.openSettings()
-	m.settings.tab = 2
+	m.settings.tab = slices.Index(settingsTitles, "Profiles")
 	m.Update(testKey(tea.KeyRight)) // (current) -> fast
 	if got := currentModel(m.session); got != "m-fast" {
 		t.Fatalf("model after profile switch = %q, want m-fast", got)
@@ -158,5 +159,20 @@ func TestSettingsResetToolTemplatesWithoutSavingConfig(t *testing.T) {
 	}
 	if _, err := os.Stat(config.DefaultConfigPath()); !os.IsNotExist(err) {
 		t.Fatalf("reset wrote config.json: %v", err)
+	}
+}
+
+func TestSettingsAutoTabTogglesNetwork(t *testing.T) {
+	m := newTestModelWithHiddenLogs()
+	m.width, m.height = 120, 40
+	m.openSettings()
+	m.settings.tab = autoTab
+	*m.settings.fields[autoTab][1].value = "allow" // the Network select
+	m.Update(struct{}{})
+	if !m.policy.AutoNetwork() {
+		t.Fatal("Auto mode tab did not allow network")
+	}
+	if m.policy.Publishing() {
+		t.Fatal("network toggle changed publishing")
 	}
 }

@@ -93,6 +93,7 @@ type preparedShellCommand struct {
 	// said unattended network access is fine, so the sandbox keeps the host
 	// network namespace instead of unsharing it (#543).
 	allowNetwork              bool
+	networkPreapproved        bool
 	timeoutMS, maxOutputBytes int
 	env, passthrough          []string
 }
@@ -168,8 +169,12 @@ func RegisterShellTool(c core.NativeRegistrar, deps core.CallerDeps, workspace w
 			p.mode = approval.ModeFromContext(ctx)
 			p.protected = workspace.ProtectedPaths()
 			p.grantedRW, p.grantedRO = request_access.RequestAccessRoots(core.SessionIDFromContext(ctx))
-			if p.mode != approval.Manual {
-				p.allowNetwork = p.mode != approval.Plan || p.args.Network
+			switch p.mode {
+			case approval.Plan:
+				p.allowNetwork = p.args.Network
+			case approval.Auto:
+				p.networkPreapproved = p.allowNetwork || cfg.AutoNetwork
+				p.allowNetwork = p.networkPreapproved || p.args.Network || approval.AutoNetworkAllowed(ctx)
 			}
 			return p, nil
 		},

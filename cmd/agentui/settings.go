@@ -23,12 +23,13 @@ import (
 // setter its slash command uses, so the panel adds no setting logic of its own.
 // Setup and Model options defer their config.json writes until Save.
 
-var settingsTitles = []string{"View", "Session", "Profiles", "Setup", "Model options"}
+var settingsTitles = []string{"View", "Session", "Auto mode", "Profiles", "Setup", "Model options"}
 
 const (
 	settingsHint    = "ctrl+←/→ tabs · tab fields · esc close"
-	setupTab        = 3
-	modelOptionsTab = 4
+	autoTab         = 2
+	setupTab        = 4
+	modelOptionsTab = 5
 	currentProfile  = "(current)"
 )
 
@@ -50,8 +51,8 @@ type setupDraft struct {
 type settingsPanel struct {
 	open         bool
 	tab          int
-	forms        [5]*huh.Form
-	fields       [5][]*settingField
+	forms        [6]*huh.Form
+	fields       [6][]*settingField
 	models       []string
 	setup        setupDraft
 	modelOptions modelOptionsDraft
@@ -60,7 +61,7 @@ type settingsPanel struct {
 func runSettingsCommand(m *model, _ string, _ []string) tea.Cmd { return m.openSettings() }
 
 func settingsPlainText(turn.Session, []string) string {
-	return "the settings panel is TUI-only; use /usage, /mode, /model, /reasoning, /profile, /progress (Mouse, Notify and Syntax theme are TUI-only settings edits)"
+	return "the settings panel is TUI-only; use /usage, /mode, /publishing, /network, /model, /reasoning, /profile, /progress (Mouse, Notify and Syntax theme are TUI-only settings edits)"
 }
 
 func (m *model) openSettings() tea.Cmd {
@@ -75,7 +76,7 @@ func (m *model) openSettings() tea.Cmd {
 
 func (m *model) buildSettingsTab(tab int) tea.Cmd {
 	m.settings.fields[tab] = nil
-	build := [...]func(*model) []huh.Field{(*model).viewSettings, (*model).sessionSettings, (*model).profileSettings, (*model).setupSettings, (*model).modelOptionsSettings}[tab]
+	build := [...]func(*model) []huh.Field{(*model).viewSettings, (*model).sessionSettings, (*model).autoSettings, (*model).profileSettings, (*model).setupSettings, (*model).modelOptionsSettings}[tab]
 	form := huh.NewForm(huh.NewGroup(build(m)...)).WithShowHelp(false).WithTheme(huh.ThemeFunc(huh.ThemeCharm)).WithWidth(max(20, m.settingsWidth()-4))
 	m.settings.forms[tab] = form
 	return form.Init()
@@ -193,11 +194,9 @@ func (m *model) viewSettings() []huh.Field {
 
 func (m *model) sessionSettings() []huh.Field {
 	modes := []string{"manual", "auto", "plan"}
-	publishing := map[bool]string{false: "ask", true: "allow"}[m.policy.Publishing()]
 	fields := []huh.Field{
 		m.choice(1, "Model", currentModel(m.session), m.settings.models, func(m *model, v string) { runModelCommand(m, "/model "+v, nil) }),
 		m.choice(1, "Mode", string(m.policy.Mode()), modes, argSetter((*model).setApprovalMode)),
-		m.choice(1, "Auto publishing", publishing, []string{"ask", "allow"}, argSetter((*model).setPublishing)),
 		m.choice(1, "Reads outside workspace", readsState(m.policy), []string{config.ReadsWorkspace, config.ReadsAsk}, argSetter((*model).setReads)),
 	}
 	if rs, ok := m.session.(reasoningSession); ok {
@@ -208,13 +207,22 @@ func (m *model) sessionSettings() []huh.Field {
 	return fields
 }
 
+// autoSettings are what Auto may do without asking, for this session.
+func (m *model) autoSettings() []huh.Field {
+	state := map[bool]string{false: "ask", true: "allow"}
+	return []huh.Field{
+		m.choice(autoTab, "Publishing", state[m.policy.Publishing()], []string{"ask", "allow"}, argSetter((*model).setPublishing)),
+		m.choice(autoTab, "Network", state[m.policy.AutoNetwork()], []string{"ask", "allow"}, argSetter((*model).setAutoNetwork)),
+	}
+}
+
 func (m *model) profileSettings() []huh.Field {
 	home := config.InvokrHomeDir()
 	names, err := config.ListProfiles(home)
 	if err != nil || len(names) == 0 {
 		return []huh.Field{huh.NewNote().Title("Profiles").Description(renderProfileList(home))}
 	}
-	return []huh.Field{m.choice(2, "Profile", currentProfile, names, func(m *model, v string) {
+	return []huh.Field{m.choice(3, "Profile", currentProfile, names, func(m *model, v string) {
 		if v != currentProfile {
 			m.commandMessage(profileCommandText(m.session, []string{v}))
 		}
@@ -250,7 +258,7 @@ func (m *model) settingsView(bg string) string {
 	// The hint leads the body so a short terminal clips the form, not the hint.
 	body := ui.Invokr.Muted.Render(settingsHint) + "\n\n" + p.forms[p.tab].View()
 	pal := ui.Invokr.Palette
-	accents := []color.Color{pal.Brand, pal.Blue, pal.Cyan, pal.Yellow, pal.Brand}
+	accents := []color.Color{pal.Brand, pal.Blue, pal.Yellow, pal.Cyan, pal.Yellow, pal.Brand}
 	return m.tabbedModal(bg, settingsTitles, accents, p.tab, m.settingsWidth(), body)
 }
 

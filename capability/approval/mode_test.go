@@ -20,28 +20,32 @@ func TestModeAuthorization(t *testing.T) {
 		mode                         Mode
 		req                          Request
 		ask, publish, prompt, denied bool
+		network                      bool
 	}{
-		{"manual-auto", Manual, Request{Writes: true}, false, false, false, false},
-		{"manual-ask", Manual, Request{Writes: true}, true, false, true, false},
-		{"auto-edit", Auto, Request{Writes: true, Confined: true}, true, false, false, false},
-		{"auto-network", Auto, Request{Network: true, Confined: true}, true, false, false, false},
-		{"auto-host", Auto, Request{Writes: true}, false, false, true, false},
-		{"auto-protected", Auto, Request{Writes: true, Confined: true, Protected: true}, true, false, true, false},
-		{"auto-publish", Auto, Request{Publishes: true, Network: true, Confined: true}, true, false, true, false},
-		{"auto-publish-enabled", Auto, Request{Publishes: true, Network: true, Confined: true}, true, true, false, false},
-		{"plan-read", Plan, Request{ReadOnly: true}, true, false, false, false},
-		{"plan-check", Plan, Request{Confined: true}, true, false, false, false},
-		{"plan-network", Plan, Request{Confined: true, Network: true}, false, false, true, false},
-		{"plan-write", Plan, Request{Confined: true, Writes: true}, false, false, false, true},
-		{"plan-host", Plan, Request{}, false, false, false, true},
-		{"plan-publish", Plan, Request{Confined: true, Publishes: true}, true, true, false, true},
-		{"yolo", YOLO, Request{Writes: true, Publishes: true, Protected: true}, true, false, false, false},
-		{"manual-outside", Manual, Request{ReadOnly: true, Outside: true}, true, false, true, false},
-		{"auto-outside", Auto, Request{ReadOnly: true, Outside: true}, true, false, true, false},
-		{"plan-outside", Plan, Request{ReadOnly: true, Outside: true}, true, false, true, false},
+		{"manual-auto", Manual, Request{Writes: true}, false, false, false, false, false},
+		{"manual-ask", Manual, Request{Writes: true}, true, false, true, false, false},
+		{"auto-edit", Auto, Request{Writes: true, Confined: true}, true, false, false, false, false},
+		{"auto-network", Auto, Request{Network: true, Confined: true}, true, false, true, false, false},
+		{"auto-network-session", Auto, Request{Network: true, Confined: true}, true, false, false, false, true},
+		{"auto-network-config", Auto, Request{Network: true, Confined: true, NetworkPreapproved: true}, true, false, false, false, false},
+		{"auto-host", Auto, Request{Writes: true}, false, false, true, false, false},
+		{"auto-protected", Auto, Request{Writes: true, Confined: true, Protected: true}, true, false, true, false, false},
+		{"auto-publish", Auto, Request{Publishes: true, Network: true, Confined: true}, true, false, true, false, false},
+		{"auto-publish-enabled", Auto, Request{Publishes: true, Network: true, Confined: true}, true, true, false, false, false},
+		{"plan-read", Plan, Request{ReadOnly: true}, true, false, false, false, false},
+		{"plan-check", Plan, Request{Confined: true}, true, false, false, false, false},
+		{"plan-network", Plan, Request{Confined: true, Network: true}, false, false, true, false, false},
+		{"plan-write", Plan, Request{Confined: true, Writes: true}, false, false, false, true, false},
+		{"plan-host", Plan, Request{}, false, false, false, true, false},
+		{"plan-publish", Plan, Request{Confined: true, Publishes: true}, true, true, false, true, false},
+		{"yolo", YOLO, Request{Writes: true, Publishes: true, Protected: true}, true, false, false, false, false},
+		{"manual-outside", Manual, Request{ReadOnly: true, Outside: true}, true, false, true, false, false},
+		{"auto-outside", Auto, Request{ReadOnly: true, Outside: true}, true, false, true, false, false},
+		{"plan-outside", Plan, Request{ReadOnly: true, Outside: true}, true, false, true, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			policy := NewPolicy(tc.mode, tc.publish)
+			policy.SetAutoNetwork(tc.network)
 			ctx, done := policy.Begin(context.Background(), tc.req)
 			defer done()
 			called := false

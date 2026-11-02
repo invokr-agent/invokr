@@ -34,7 +34,7 @@ func modeShellApproval(cfg config.ShellConfig, p preparedShellCommand) core.Appr
 		// The sandbox mounts no ~/.config/gh, so gh reports "not logged in".
 		return core.Deny(GHSandboxDenial)
 	}
-	req.Network, req.Publishes = p.networkAllowed(), p.publishes
+	req.Network, req.Publishes, req.NetworkPreapproved = p.networkAllowed(), p.publishes, p.networkPreapproved
 	req.RequiresScopedApproval = p.sandboxExec
 	if !req.Confined {
 		req.Details += "\nUNSANDBOXED: this command runs on the host."
