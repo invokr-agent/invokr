@@ -1,4 +1,4 @@
-.PHONY: dev record screenshots generate test containment e2e e2e-fixture e2e-swe e2e-swe-live e2e-docker e2e-live e2e-report lint lint-ci verify analyze diagram-view install
+.PHONY: dev record screenshots generate test containment fuzz-shell e2e e2e-fixture e2e-swe e2e-swe-live e2e-docker e2e-live e2e-report lint lint-ci verify analyze diagram-view install
 
 INSTALL_DIR ?= $(HOME)/.local/bin
 
@@ -18,6 +18,13 @@ test:
 containment:
 	python3 -m unittest discover -s scripts -p test_containment.py
 	python3 scripts/containment.py
+
+# Runs every line the shell classifier calls read-only and fails if it changed
+# the workspace. Container only: a classifier bug means a real write runs.
+fuzz-shell:
+	docker run --rm --network none --user $$(id -u):$$(id -g) -e HOME=/tmp -e GOCACHE=/tmp/gocache \
+		-e INVOKR_FUZZ_EXEC=1 -v "$(CURDIR)":/src -v "$$(go env GOMODCACHE)":/go/pkg/mod -w /src golang:1.26 \
+		go test -buildvcs=false ./tools/system/shell/ -run '^$$' -fuzz FuzzClassifyLine -fuzztime $${FUZZTIME:-5m}
 
 e2e:
 	go test -tags e2e -timeout 20m ./e2e/...

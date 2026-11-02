@@ -90,7 +90,9 @@ var commandRules = map[string]commandRule{
 	// gofmt is read-only unless it rewrites in place.
 	"gofmt": {ReadFlags: []string{"-l", "-d", "-e", "-s"}},
 
-	"git": {Readonly: []string{"status", "diff", "show", "log", "rev-parse", "help"}, Network: []string{"fetch", "pull", "clone"}, WriteFlags: []string{"--output"}},
+	// --no-index reads any path, outside the workspace too; --ext-diff and
+	// --textconv run configured helpers; help can launch a browser or viewer.
+	"git": {Readonly: []string{"status", "diff", "show", "log", "rev-parse"}, Network: []string{"fetch", "pull", "clone"}, WriteFlags: []string{"--output", "--no-index", "--ext-diff", "--textconv"}},
 	// go's WriteFlags exist because `go env -w/-u` persists config.
 	// -vettool and -toolexec run arbitrary binaries, so they demote (#318).
 	"go": {Readonly: []string{"version", "list", "vet", "env"}, WriteFlags: []string{"-w", "-u", "-vettool", "-toolexec"}},
