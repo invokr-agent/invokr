@@ -702,8 +702,13 @@ func stripTrailingInternalNudge(messages []inference.Message, steered []string) 
 func (r *Runner) compactNow(ctx context.Context, sessionID string) {
 	r.turn.Lock()
 	defer r.turn.Unlock()
+	if r.budget == nil {
+		return
+	}
 	r.budget.RequestCompaction()
 	messages, state := r.budget.Prepare(ctx, sessionID, r.messages, r.contextState)
+	// Prepare re-arms a request it could not act on; an explicit /compact is done either way.
+	r.budget.forceCompaction.Store(false)
 	r.mu.Lock()
 	r.messages, r.contextState = messages, state
 	r.mu.Unlock()

@@ -366,8 +366,6 @@ func compactCommandText(session turn.Session, _ []string) string {
 
 type immediateCompactor interface{ CompactNow(context.Context) }
 
-// runCompactCommand compacts at once between turns; mid-turn the request
-// waits for the turn's next model call.
 func runCompactCommand(m *model, _ string, _ []string) tea.Cmd {
 	compactor, ok := m.session.(immediateCompactor)
 	if m.sending || !ok {
