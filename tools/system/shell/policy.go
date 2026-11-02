@@ -604,7 +604,7 @@ func tierWord(t shellTier) string { return cmp.Or(tierWords[t], "read-only") }
 // loaderVariables are the environment names that change which program a
 // command resolves to or what it loads before running — the names that would
 // let a read-only line run model-written code without an approval.
-var loaderVariables = []string{"PATH", "BASH_ENV", "ENV", "IFS", "CDPATH", "SHELLOPTS", "BASHOPTS", "NODE_OPTIONS", "PYTHONSTARTUP", "PYTHONPATH", "PERL5OPT", "PERL5LIB", "RUBYOPT", "GOFLAGS", "GIT_EXEC_PATH", "GIT_CONFIG_PARAMETERS"}
+var loaderVariables = []string{"PATH", "BASH_ENV", "ENV", "IFS", "CDPATH", "SHELLOPTS", "BASHOPTS", "NODE_OPTIONS", "PYTHONSTARTUP", "PYTHONPATH", "PERL5OPT", "PERL5LIB", "RUBYOPT", "GOFLAGS", "HOME", "XDG_CONFIG_HOME", "PAGER", "EDITOR", "VISUAL", "BROWSER", "GCONV_PATH", "SSH_ASKPASS"}
 
 // buildToolVariables are read-only build-tool settings the model routinely
 // puts in front of a command (`GOFLAGS=-mod=mod go test ./...`). They pick a
@@ -772,5 +772,10 @@ func (w *policyWalker) paramExp(p *syntax.ParamExp) error {
 }
 
 func loaderVariable(name string) bool {
-	return slices.Contains(loaderVariables, name) || strings.HasPrefix(name, "LD_") || strings.HasPrefix(name, "DYLD_")
+	return slices.Contains(loaderVariables, name) || slices.ContainsFunc(loaderPrefixes, func(p string) bool { return strings.HasPrefix(name, p) })
 }
+
+// loaderPrefixes cover families too large to list: every GIT_* name can point
+// git at a config, directory or helper that runs a command (GIT_EXTERNAL_DIFF,
+// GIT_CONFIG_KEY_0=core.fsmonitor, GIT_DIR, GIT_SSH_COMMAND, ...).
+var loaderPrefixes = []string{"LD_", "DYLD_", "GIT_", "LESS"}

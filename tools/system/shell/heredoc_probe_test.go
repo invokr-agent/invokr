@@ -9,9 +9,7 @@ import (
 
 // Probe: the real heredoc shapes that were refused in the round-6 bench rows.
 func TestHeredocProbeFromBenchRows(t *testing.T) {
-	if !sandbox.Available() {
-		t.Skip("namespace sandbox unavailable")
-	}
+	sandbox.ForceAvailable(t, true)
 	wsp := workspace.Policy{Root: t.TempDir()}
 	allowed := []string{"cat", "python3", "echo", "chmod"}
 	cases := map[string]string{

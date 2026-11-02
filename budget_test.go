@@ -47,8 +47,8 @@ var budgets = []area{
 
 	// Agent loop and tool plumbing — the core of the core.
 		{"agent", 3897},
-	{"tools/core", 1344},
-	{"tools/system", 11320},
+	{"tools/core", 1359},
+	{"tools/system", 11321},
 	{"tools", 600}, // tools/, tools/integrations
 
 	// Capabilities. Memory is budgeted apart from the rest because it is by
