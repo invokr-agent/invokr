@@ -1,0 +1,34 @@
+name: Bug report
+description: Something invokr does wrong
+labels: [bug]
+body:
+  - type: textarea
+    id: issue
+    attributes:
+      label: Issue
+      description: What happened, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and platform
+      description: Output of `invokr version`, plus OS and architecture.
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: invokr doctor output
+      render: text
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Optional. How we know it's fixed.
