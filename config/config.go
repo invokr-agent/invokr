@@ -507,6 +507,8 @@ type ShellConfig struct {
 	AllowedCommands      []string `json:"allowed_commands,omitempty" env:"INVOKR_SHELL_ALLOWED_COMMANDS"`
 	AllowWriteCommands   bool     `json:"allow_write_commands,omitempty" env:"INVOKR_SHELL_ALLOW_WRITE_COMMANDS"`
 	AllowNetworkCommands bool     `json:"allow_network_commands,omitempty" env:"INVOKR_SHELL_ALLOW_NETWORK_COMMANDS"`
+	// AutoNetwork gives every Auto-mode line the host network without asking.
+	AutoNetwork bool `json:"auto_network,omitempty" env:"INVOKR_SHELL_AUTO_NETWORK"`
 	// AllowAnyCommand lifts the executable allowlist: a root that is not on it
 	// is classified as write tier and asked for, instead of being refused
 	// outright. It is the policy half of `exec --allow-all`, whose whole point

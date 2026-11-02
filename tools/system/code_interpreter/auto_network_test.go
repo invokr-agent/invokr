@@ -1,6 +1,7 @@
 package code_interpreter
 
 import (
+	"context"
 	"testing"
 
 	"github.com/invokr-agent/invokr/config"
@@ -17,7 +18,7 @@ func TestAutoModeKeepsNetworkOffUnlessConfigured(t *testing.T) {
 		{config.CodeInterpreterConfig{AutoNetwork: true}, true},
 		{config.CodeInterpreterConfig{ContainerNetwork: true}, true},
 	} {
-		if got := prepareAuto(prepared{cfg: tc.cfg}, wsp).cfg.ContainerNetwork; got != tc.want {
+		if got := prepareAuto(context.Background(), prepared{cfg: tc.cfg}, wsp).cfg.ContainerNetwork; got != tc.want {
 			t.Errorf("%+v: network = %v, want %v", tc.cfg, got, tc.want)
 		}
 	}

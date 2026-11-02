@@ -73,6 +73,7 @@ func init() {
 		{name: "approvals", usage: "/approvals [manual|auto|plan]", summary: "alias for /mode", handler: voidCmd((*model).setApprovalMode)},
 		{name: "mode", usage: "/mode [manual|auto|plan]", summary: "show or set session mode (shift+tab cycles)", handler: voidCmd((*model).setApprovalMode)},
 		{name: "publishing", usage: "/publishing [ask|allow]", summary: "publishing permission for this Auto session", handler: voidCmd((*model).setPublishing)},
+		{name: "network", usage: "/network [ask|allow]", summary: "network access without asking for this Auto session", handler: voidCmd((*model).setAutoNetwork)},
 		{name: "reads", usage: "/reads [workspace|ask]", summary: "reads outside the workspace: refuse, or ask each time (this session)", handler: voidCmd((*model).setReads)},
 		{name: "clear", usage: "/clear", summary: "start a new session (keep saved history and memory)", handler: runClearCommand},
 		{name: "compact", usage: "/compact", summary: "compact context before next turn", handler: sessionCmd(compactCommandText), plain: sessionText(compactCommandText)},
@@ -286,17 +287,22 @@ func (m *model) setApprovalMode(args []string) {
 }
 
 func (m *model) setPublishing(args []string) {
+	m.setAutoAllow("publishing", args, m.policy.SetPublishing, m.policy.Publishing)
+}
+
+func (m *model) setAutoNetwork(args []string) {
+	m.setAutoAllow("network", args, m.policy.SetAutoNetwork, m.policy.AutoNetwork)
+}
+
+// setAutoAllow sets or shows one ask/allow permission of the Auto session.
+func (m *model) setAutoAllow(name string, args []string, set func(bool), get func() bool) {
 	if len(args) == 1 && slices.Contains([]string{"ask", "allow"}, args[0]) {
-		m.policy.SetPublishing(args[0] == "allow")
+		set(args[0] == "allow")
 	} else if len(args) != 0 {
-		m.commandMessage("usage: /publishing [ask|allow]")
+		m.commandMessage("usage: /" + name + " [ask|allow]")
 		return
 	}
-	state := "ask"
-	if m.policy.Publishing() {
-		state = "allow"
-	}
-	m.commandMessage("Auto publishing: " + state + " (this session only)")
+	m.commandMessage("Auto " + name + ": " + map[bool]string{false: "ask", true: "allow"}[get()] + " (this session only)")
 }
 
 func (m *model) setReads(args []string) {

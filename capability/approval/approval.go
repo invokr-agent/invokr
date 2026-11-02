@@ -15,8 +15,11 @@ type Request struct {
 	ReadOnly, Confined, Writes, Network, Publishes, Protected bool
 	// RequiresScopedApproval keeps opaque execution behind a per-call decision in Auto.
 	RequiresScopedApproval bool
-	Paths                  []string
-	PolicyChecked          bool
+	// NetworkPreapproved marks network the operator allowed in config
+	// (shell.allow_network_commands, *.auto_network), so Auto does not ask.
+	NetworkPreapproved bool
+	Paths              []string
+	PolicyChecked      bool
 	// Subject is the canonical, matchable argument string for this call (for
 	// shell, the command line). It is the ONLY thing standing grants match
 	// against: a request that leaves it empty can never be auto-approved by a

@@ -3,6 +3,8 @@ name: e2e
 on:
   pull_request:
     branches: [main, dev]
+  push:
+    branches: [main] # the README badge reads main's push runs
 
 # Read-only token: no job here writes to the repository.
 permissions:
