@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write # attestation signing
+      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,3 +51,9 @@ jobs:
           # The commit can also carry an edge tag (edge.yml publishes every
           # merge); without this goreleaser may pick that one.
           GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
+      # Signed build provenance for every archive: install.sh and invokr update
+      # check it with `gh attestation verify`, so a release asset swapped after
+      # the build fails even though its checksums.txt was swapped too.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/checksums.txt

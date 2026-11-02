@@ -352,6 +352,11 @@ back to `process` only if neither is.
 Enabling `container_network` adds the `execute_network_command` tier and always
 prompts.
 
+In Auto mode Python runs without a prompt and, by default, without network.
+`code_interpreter.auto_network: true` gives those unprompted runs the host
+network, which reaches loopback services (model servers, local daemons) and
+lets an injected prompt send workspace data out.
+
 **Process backend** runs Python in the same unprivileged namespace sandbox as
 toolbox tools when it is available: workspace roots read-only, only the
 artifacts directory writable, a private `/tmp`, and no network unless

@@ -325,3 +325,17 @@ func TestCheckLanguageServersRespectsDisabledAndCustomServers(t *testing.T) {
 		t.Fatalf("configured servers replace the built-in table, got %q", got.remedy)
 	}
 }
+
+func TestContainerCgroupRecognisesRuntimes(t *testing.T) {
+	for cgroup, want := range map[string]bool{
+		"0::/kubepods/besteffort/pod1/abc":          true,
+		"0::/system.slice/cri-containerd-abc.scope": true,
+		"12:pids:/docker/0123abcd":                  true,
+		"0::/init.scope":                            false,
+		"0::/user.slice/user-1000.slice":            false,
+	} {
+		if got := containerCgroup(cgroup); got != want {
+			t.Errorf("%q: got %v, want %v", cgroup, got, want)
+		}
+	}
+}

@@ -103,3 +103,7 @@ func TestRunReportsAMissingRelease(t *testing.T) {
 		t.Fatalf("Run = %v, want a 404", err)
 	}
 }
+
+func init() {
+	attested = func(context.Context, []byte, io.Writer) error { return nil }
+}
