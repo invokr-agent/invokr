@@ -27,6 +27,7 @@ type Policy struct {
 	mu      sync.Mutex
 	mode    Mode
 	publish bool
+	network bool
 	outside bool
 	store   *Store
 	loadErr error
@@ -69,7 +70,7 @@ func (p *Policy) Clone() *Policy {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &Policy{mode: p.mode, publish: p.publish, outside: p.outside, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
+	return &Policy{mode: p.mode, publish: p.publish, network: p.network, outside: p.outside, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
 }
 
 func (p *Policy) SetPublishing(allow bool) {
@@ -78,6 +79,28 @@ func (p *Policy) SetPublishing(allow bool) {
 	p.publish = allow
 }
 func (p *Policy) Publishing() bool { p.mu.Lock(); defer p.mu.Unlock(); return p.publish }
+
+// SetAutoNetwork lets Auto run network access without asking, for this
+// session. Off, Auto asks before any network use, and confined work that did
+// not ask for network runs without it.
+func (p *Policy) SetAutoNetwork(allow bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.network = allow
+}
+func (p *Policy) AutoNetwork() bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.network
+}
+
+func AutoNetworkAllowed(ctx context.Context) bool {
+	s, ok := ctx.Value(callKey{}).(*callState)
+	return ok && s.policy.AutoNetwork()
+}
 
 // SetOutsideReads lets read and file_search ask to reach paths beyond the
 // workspace roots (workspace.reads "ask"), for this session.
@@ -243,7 +266,7 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 		return Decision{Reason: "Plan permits only reads and confined verification with read-only sources"}, true
 	}
 	s.policy.mu.Lock()
-	store, publish := s.policy.store, s.policy.publish
+	store, publish, network := s.policy.store, s.policy.publish, s.policy.network
 	s.policy.mu.Unlock()
 	if s.mode == YOLO {
 		return Decision{Approved: true, Reason: "YOLO session policy"}, true
@@ -251,7 +274,7 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 	if s.mode == Manual && !ask {
 		return Decision{Approved: true}, true
 	}
-	if needsScopedApproval(s.mode, req, publish) {
+	if needsScopedApproval(s.mode, req, publish, network) {
 		return Decision{}, false
 	}
 	if d, ok := store.Decide(req); ok {
@@ -273,6 +296,8 @@ func blockedInPlan(req Request) bool {
 	return !req.ReadOnly && !req.Confined || req.Writes || req.Publishes
 }
 
-func needsScopedApproval(mode Mode, req Request, publish bool) bool {
-	return mode == Auto && (req.Protected || req.RequiresScopedApproval || req.Publishes && !publish) || mode == Plan && req.Network
+func needsScopedApproval(mode Mode, req Request, publish, network bool) bool {
+	// An allowed publish (a push) needs the network it publishes over.
+	networkAllowed := network || req.NetworkPreapproved || req.Publishes && publish
+	return mode == Auto && (req.Protected || req.RequiresScopedApproval || req.Publishes && !publish || req.Network && !networkAllowed) || mode == Plan && req.Network
 }

@@ -64,6 +64,7 @@ type resolvedOutput struct {
 type prepared struct {
 	args                                        Args
 	cfg                                         config.CodeInterpreterConfig
+	networkPreapproved                          bool
 	codeHash, sessionDir, inputDir, artifactDir string
 	inputs                                      []resolvedInput
 	outputs                                     []resolvedOutput
@@ -112,7 +113,7 @@ func RegisterCodeInterpreterTool(registrar core.NativeRegistrar, deps core.Calle
 		},
 		Prepare: func(ctx context.Context, p prepared) (prepared, error) {
 			if approval.ModeFromContext(ctx) == approval.Auto {
-				p = prepareAuto(p, wsp)
+				p = prepareAuto(ctx, p, wsp)
 			}
 			return p, nil
 		},
@@ -127,7 +128,7 @@ func RegisterCodeInterpreterTool(registrar core.NativeRegistrar, deps core.Calle
 				req.Details = "Code:\n" + p.args.Code + "\n\n" + req.Details
 				req.Paths = core.MapSlice(p.outputs, func(out resolvedOutput) string { return wsp.DisplayPath(out.AbsPath) })
 				req.Confined = p.cfg.Backend == constants.CodeInterpreterBackendContainer || sandbox.Available()
-				req.Network = p.cfg.ContainerNetwork
+				req.Network, req.NetworkPreapproved = p.cfg.ContainerNetwork, p.networkPreapproved
 				req.Writes = slices.ContainsFunc(p.outputs, func(out resolvedOutput) bool {
 					_, scratch := fsutil.RelInside(fsutil.SharedTmpDir(wsp.Root), out.AbsPath)
 					return !scratch || slices.ContainsFunc(p.roots, func(root string) bool { return workspace.Overlaps(root, out.AbsPath) })
@@ -150,10 +151,12 @@ func RegisterCodeInterpreterTool(registrar core.NativeRegistrar, deps core.Calle
 }
 
 // prepareAuto protects Invokr's own paths from the unprompted run. Network
-// stays off unless configured: Auto approves without asking, and host network
-// reaches loopback services and lets an injected prompt send data out.
-func prepareAuto(p prepared, wsp workspace.Policy) prepared {
-	p.cfg.ContainerNetwork = p.cfg.ContainerNetwork || p.cfg.AutoNetwork
+// stays off unless auto_network or the session's Auto network setting allows
+// it: host network reaches loopback services and lets an injected prompt send
+// data out. container_network without either asks.
+func prepareAuto(ctx context.Context, p prepared, wsp workspace.Policy) prepared {
+	p.networkPreapproved = p.cfg.AutoNetwork
+	p.cfg.ContainerNetwork = p.cfg.ContainerNetwork || p.cfg.AutoNetwork || approval.AutoNetworkAllowed(ctx)
 	p.protected = wsp.ProtectedPaths()
 	return p
 }

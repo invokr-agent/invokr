@@ -84,10 +84,14 @@ grant covers the call; blocked in Plan) or `always_ask` (prompt every call; gran
 Pending approvals collect in a boxed queue (`APPROVAL  X of N`):
 `y` yes, `a` always (grants the first two words of the command, e.g. `go test *`; shown only when a safe pattern exists), `n` no, `Y` yes-to-all, `N`/`esc` no-to-all, `v` details.
 Shift+Tab cycles Manual, Auto, and Plan; `/mode` selects one directly and
-`/approvals` is an alias. Auto approves workspace edits and execution whose
-owner proves confinement, including network and local commits. Protected edits,
-unconfined execution, and recognized publishing still ask. `/publishing allow`
-authorizes publishing for this session. Plan denies source writes and publishing;
+`/approvals` is an alias. Auto approves workspace edits, local commits and
+execution whose owner proves confinement. Protected edits, unconfined
+execution, network use and recognized publishing still ask, and confined work
+that did not ask for network runs without it. `/publishing allow` and
+`/network allow`, or the Auto mode tab of the settings panel (Ctrl+O), allow
+publishing or network for this session; `shell.auto_network`,
+`code_interpreter.auto_network` and `shell.allow_network_commands` allow
+network from config. Plan denies source writes and publishing;
 verification uses read-only sources and separate scratch/cache, and network asks.
 Modes never persist. See [ADR 0007](agents/adr/0007-session-approval-modes.md) for
 execution boundaries, protected mount limitations, and the publishing guard's scope.
@@ -353,9 +357,10 @@ Enabling `container_network` adds the `execute_network_command` tier and always
 prompts.
 
 In Auto mode Python runs without a prompt and, by default, without network.
-`code_interpreter.auto_network: true` gives those unprompted runs the host
-network, which reaches loopback services (model servers, local daemons) and
-lets an injected prompt send workspace data out.
+Auto network (`/network allow`, Ctrl+O, or `code_interpreter.auto_network`)
+gives those unprompted runs the host network, which reaches loopback services
+(model servers, local daemons) and lets an injected prompt send workspace data
+out. The same holds for shell lines (`shell.auto_network`).
 
 **Process backend** runs Python in the same unprivileged namespace sandbox as
 toolbox tools when it is available: workspace roots read-only, only the
