@@ -42,6 +42,15 @@ timeout := 30 * time.Second
 timeout := 25 * time.Second
 ```
 
+## Split big changes into stacked PRs
+
+A PR should be reviewable in one sitting. Split when a change has more than one concern or roughly 400+ changed implementation lines:
+
+- Plan the stack before writing code and agree it with the human: prep or refactor first, then the feature, then cleanup.
+- Each PR targets the branch of the one below it (the first targets `main`), builds and passes `make verify` on its own, and does one thing.
+- Each PR body lists the stack in order (`1/3`, `2/3`, ...) with links, and says what it depends on.
+- Never mix a refactor and a behaviour change in one PR.
+
 ## Acting on the human's behalf
 
 - Do not commit, push, open PRs, or post issue/PR comments without the human's explicit approval for that action.
