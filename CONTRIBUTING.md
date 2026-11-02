@@ -18,7 +18,9 @@ are held to it.
 3. **Write as little code as you can.** Reuse what's already in the codebase
    before adding anything new. Prefer the stdlib and existing helpers. The
    smallest diff that solves the issue wins.
-4. **Fundamentals need regression testing.** Changes to tools, the default
+4. **Bug fixes come with a regression test** that fails before your change and
+   passes after.
+5. **Fundamentals need regression testing.** Changes to tools, the default
    prompt or the agent loop affect everything the agent does. Run `make e2e`
    and include before/after runs on a real task in the PR. Show it doesn't make
    things worse, not just that your case works.
@@ -105,8 +107,13 @@ say so in the issue first.
 ## Pull requests
 
 Target `main`. Link the issue and keep the diff to one concern. PRs are
-squash-merged, and CI (`lint`, `test`, `e2e`, `sandbox-containment`, CodeQL)
-must pass. A maintainer approves CI runs for first-time contributors.
+squash-merged as `<area>: <title> (#<pr>)`, and CI (`lint`, `test`, `e2e`,
+`sandbox-containment`, CodeQL) must pass. A maintainer approves CI runs for
+first-time contributors. If an agent helped, say how in the template.
+
+PRs may be closed without review when they duplicate another PR, take an
+issue someone else is assigned to, skip this guide, or don't fit the
+architecture.
 
 ## Security
 

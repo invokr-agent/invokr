@@ -15,3 +15,5 @@ Closes #
 - [ ] One concern per PR; the diff is as small as it can be
 - [ ] Docs updated if behaviour changed (README, `docs/`)
 - [ ] I've read the whole diff and can explain it in review
+- [ ] Bug fix: a regression test fails before this change and passes after
+- [ ] AI helped write this (say how): 
