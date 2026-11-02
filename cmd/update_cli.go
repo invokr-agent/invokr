@@ -27,7 +27,8 @@ func NewUpdateCmd() *cobra.Command {
 	update := &cobra.Command{
 		Use:   "update [version]",
 		Short: "Install the latest release over this binary",
-		Long: "Downloads a release, verifies its checksum, and replaces the binary this\n" +
+		Long: "Downloads a release, verifies its checksum and, when gh is installed, its signed\n" +
+			"build provenance, and replaces the binary this\n" +
 			"command came from. Pass a version (e.g. 0.2.1 or v0.2.1) to install that release\n" +
 			"instead of the newest. --edge (or update_channel: edge) also considers the edge\n" +
 			"pre-release built from every merge to main.",

@@ -225,7 +225,7 @@ func checkNamespaceSandbox() checkResult {
 		detail = "namespace sandboxing is Linux-only (this host is " + runtime.GOOS + ")"
 	} else if inContainer() {
 		detail = "inside a container that blocks user namespaces or a fresh /proc mount"
-		remedy = "run the container with --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined"
+		remedy = "run the container with --security-opt seccomp=unconfined --security-opt apparmor=unconfined --security-opt systempaths=unconfined (this unmasks /proc and /sys for everything in the container, so use it only for a dedicated invokr container)"
 	}
 	return checkResult{"sandbox", "warn", detail,
 		"toolbox tools and the code_interpreter process backend refuse to run; " + remedy + ", or set INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1 to run them unsandboxed (not recommended)"}
@@ -234,6 +234,21 @@ func checkNamespaceSandbox() checkResult {
 func inContainer() bool {
 	for _, marker := range []string{"/.dockerenv", "/run/.containerenv"} {
 		if _, err := os.Stat(marker); err == nil {
+			return true
+		}
+	}
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		return true
+	}
+	cgroup, _ := os.ReadFile("/proc/1/cgroup")
+	return containerCgroup(string(cgroup))
+}
+
+// containerCgroup reads PID 1's cgroup path; containerd and Kubernetes leave
+// no marker file, only their names here.
+func containerCgroup(cgroup string) bool {
+	for _, name := range []string{"docker", "kubepods", "containerd", "libpod", "lxc"} {
+		if strings.Contains(cgroup, name) {
 			return true
 		}
 	}

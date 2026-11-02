@@ -16,6 +16,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -32,7 +33,11 @@ var (
 	downloadBase = "https://github.com/invokr-agent/invokr/releases/download"
 	client       = http.DefaultClient
 	executable   = os.Executable
+	attested     = ghAttested
 )
+
+// repo is whose release workflow must have built the archive.
+const repo = "invokr-agent/invokr"
 
 // Run installs a release over the running binary. An empty version means the
 // newest release, counting edge pre-releases when edge is set.
@@ -62,6 +67,9 @@ func Run(ctx context.Context, version string, edge bool, out io.Writer) error {
 		return err
 	}
 	if err := verify(archive, sums, asset); err != nil {
+		return err
+	}
+	if err := attested(ctx, archive, out); err != nil {
 		return err
 	}
 	bin, err := extract(archive)
@@ -176,4 +184,35 @@ func replace(target string, bin []byte) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), target)
+}
+
+// ghAttested checks the archive's signed build provenance. The checksum only
+// proves the archive matches checksums.txt, which sits in the same release;
+// the attestation proves this repo's release workflow built it. gh does the
+// Sigstore verification, so without gh only the checksum is checked.
+func ghAttested(ctx context.Context, archive []byte, out io.Writer) error {
+	if os.Getenv("INVOKR_SKIP_ATTESTATION") != "" {
+		return nil
+	}
+	gh, err := exec.LookPath("gh")
+	if err != nil {
+		_, _ = fmt.Fprintln(out, "note: gh not found, so build provenance was not verified (checksum only)")
+		return nil
+	}
+	f, err := os.CreateTemp("", "invokr-release-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("stage archive for attestation check: %w", err)
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+	_, err = f.Write(archive)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("stage archive for attestation check: %w", err)
+	}
+	if msg, err := exec.CommandContext(ctx, gh, "attestation", "verify", f.Name(), "--repo", repo).CombinedOutput(); err != nil {
+		return fmt.Errorf("build provenance check failed; releases from before attestations need INVOKR_SKIP_ATTESTATION=1: %s", bytes.TrimSpace(msg))
+	}
+	return nil
 }

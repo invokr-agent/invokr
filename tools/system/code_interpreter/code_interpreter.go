@@ -112,8 +112,7 @@ func RegisterCodeInterpreterTool(registrar core.NativeRegistrar, deps core.Calle
 		},
 		Prepare: func(ctx context.Context, p prepared) (prepared, error) {
 			if approval.ModeFromContext(ctx) == approval.Auto {
-				p.cfg.ContainerNetwork = true
-				p.protected = wsp.ProtectedPaths()
+				p = prepareAuto(p, wsp)
 			}
 			return p, nil
 		},
@@ -148,6 +147,15 @@ func RegisterCodeInterpreterTool(registrar core.NativeRegistrar, deps core.Calle
 			service.audit(ctx, p, Result{}, "denied", err, 0)
 		},
 	})
+}
+
+// prepareAuto protects Invokr's own paths from the unprompted run. Network
+// stays off unless configured: Auto approves without asking, and host network
+// reaches loopback services and lets an injected prompt send data out.
+func prepareAuto(p prepared, wsp workspace.Policy) prepared {
+	p.cfg.ContainerNetwork = p.cfg.ContainerNetwork || p.cfg.AutoNetwork
+	p.protected = wsp.ProtectedPaths()
+	return p
 }
 
 func NewService(cfg config.CodeInterpreterConfig, wsp workspace.Policy, dispatcher events.Dispatcher) *Service {

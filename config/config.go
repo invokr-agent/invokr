@@ -561,7 +561,10 @@ type CodeInterpreterConfig struct {
 	ContainerImage   string `json:"container_image,omitempty" env:"INVOKR_CODE_INTERPRETER_CONTAINER_IMAGE"`
 	ContainerCPUs    string `json:"container_cpus,omitempty" env:"INVOKR_CODE_INTERPRETER_CONTAINER_CPUS"`
 	ContainerNetwork bool   `json:"container_network,omitempty" env:"INVOKR_CODE_INTERPRETER_CONTAINER_NETWORK"`
-	AllowEnv         bool   `json:"allow_env,omitempty" env:"INVOKR_CODE_INTERPRETER_ALLOW_ENV"`
+	// AutoNetwork restores host network for code_interpreter in Auto mode
+	// without a prompt; off, Auto runs Python with no network at all.
+	AutoNetwork bool `json:"auto_network,omitempty" env:"INVOKR_CODE_INTERPRETER_AUTO_NETWORK"`
+	AllowEnv    bool `json:"allow_env,omitempty" env:"INVOKR_CODE_INTERPRETER_ALLOW_ENV"`
 }
 
 // SandboxConfig controls the self-re-exec container sandbox. When Enabled is

@@ -10,6 +10,8 @@
 #                              the script isn't fetched from the real repo URL)
 #   INVOKR_INSTALL_VERSION   tag to install, default: latest
 #   INVOKR_INSTALL_DIR       install directory, default: $HOME/.local/bin
+#   INVOKR_SKIP_ATTESTATION  skip the gh build-provenance check (releases made
+#                              before attestations existed)
 set -eu
 
 REPO="${INVOKR_INSTALL_REPO:-invokr-agent/invokr}"
@@ -72,6 +74,18 @@ install_binary() {
 			die "neither sha256sum nor shasum found; cannot verify checksum"
 		fi
 	) || die "checksum verification failed for ${asset}"
+
+	# The checksum only matches checksums.txt from the same release; the
+	# attestation proves the release workflow built the archive.
+	if [ -n "${INVOKR_SKIP_ATTESTATION:-}" ]; then
+		:
+	elif command -v gh >/dev/null 2>&1; then
+		log "verifying build provenance..."
+		gh attestation verify "${tmp_dir}/${asset}" --repo "$REPO" >/dev/null ||
+			die "build provenance check failed for ${asset}; releases from before attestations need INVOKR_SKIP_ATTESTATION=1"
+	else
+		log "note: gh not found, so build provenance was not verified (checksum only)"
+	fi
 
 	tar -xzf "${tmp_dir}/${asset}" -C "$tmp_dir" "$BIN_NAME"
 	mkdir -p "$INSTALL_DIR"

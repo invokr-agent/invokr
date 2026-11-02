@@ -81,7 +81,9 @@ jobs:
     if: needs.build.outputs.tag
     runs-on: ubuntu-latest
     environment: edge
-    permissions: {}
+    permissions:
+      id-token: write # attestation signing
+      attestations: write
     env:
       TAG: ${{ needs.build.outputs.tag }}
     steps:
@@ -98,6 +100,9 @@ jobs:
         with:
           name: edge
           path: dist # the upload stored paths relative to dist/
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/checksums.txt
       # Creates the tag on the merged commit through the API, as depstamper (the
       # release-tags ruleset's bypass actor for it).
       - name: Release
