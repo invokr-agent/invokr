@@ -80,9 +80,11 @@ func isToolEvent(ev events.Event) bool {
 
 // trackUsage keeps the footer's context meter live inside a turn: the runner
 // publishes the running usage after every model call, so the bar moves while
-// tools are still running instead of only when the answer lands.
+// tools are still running instead of only when the answer lands. A delegated
+// child's usage meters the child's context, not this session's, and the child's
+// runner shares the bus.
 func (m *model) trackUsage(ev events.Event) {
-	if ev.Type != events.EventUsage || ev.Usage == nil {
+	if ev.Type != events.EventUsage || ev.ParentSessionID != "" {
 		return
 	}
 	m.usage, m.hasUsage = *ev.Usage, true

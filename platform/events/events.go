@@ -205,12 +205,9 @@ func emit(ctx context.Context, d Dispatcher, event Event) {
 	d.Dispatch(ctx, event)
 }
 
-// Usage dispatches the turn's running token usage. It is a no-op when d is
-// nil or usage is nil (a provider that has reported nothing yet).
+// Usage dispatches the turn's running token usage. Callers hold the provider's
+// reported usage before calling it, so there is no nil-usage case here.
 func Usage(ctx context.Context, d Dispatcher, sessionID, parentSessionID string, usage *turn.TokenUsage) {
-	if usage == nil {
-		return
-	}
 	emit(ctx, d, Event{Type: EventUsage, SessionID: sessionID, ParentSessionID: parentSessionID, Usage: usage})
 }
 

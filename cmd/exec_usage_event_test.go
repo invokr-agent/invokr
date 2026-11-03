@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -41,5 +43,26 @@ func TestExecJSONLUsageEvent(t *testing.T) {
 	}
 	if out.text() != "" || errOut.text() != "" {
 		t.Fatalf("non-JSON exec printed %q / %q, want nothing", out.text(), errOut.text())
+	}
+}
+
+// TestExecJSONLExcludesChildSessionUsage records the decision for exec: a
+// delegated subagent runs in its own session, and the run does not own that
+// session, so its usage events stay out of the parent's ledger - the same call
+// already made for tool events.
+func TestExecJSONLExcludesChildSessionUsage(t *testing.T) {
+	bus := events.NewOrderedDispatcher(nil)
+	var out bytes.Buffer
+	stop := registerExecEvents(bus, &out, &bytes.Buffer{}, "parent", true)
+	defer stop()
+
+	child := events.Event{Type: events.EventUsage, SessionID: "child", ParentSessionID: "parent",
+		Usage: &turn.TokenUsage{Available: true, ContextWindowTokens: 32_000, LatestPromptTokens: 30_000}}
+	own := events.Event{Type: events.EventUsage, SessionID: "parent",
+		Usage: &turn.TokenUsage{Available: true, ContextWindowTokens: 32_000, LatestPromptTokens: 1_000}}
+	bus.Dispatch(context.Background(), child)
+	bus.Dispatch(context.Background(), own)
+	if got := strings.Count(out.String(), "\n"); got != 1 {
+		t.Fatalf("JSONL lines = %d, want only the run's own usage: %q", got, out.String())
 	}
 }
