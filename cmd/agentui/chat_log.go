@@ -560,8 +560,14 @@ func thinkingLines(text string, body int) []string {
 	var out []string
 	for _, segment := range splitFenced(text) {
 		if segment.code {
+			// Same size cap settled code uses: a megabyte of fenced text stays
+			// plain muted rather than being lexed on every frame.
+			file := codeFileFor(segment.language)
+			if len(segment.text) > maxCodeBytes {
+				file = ""
+			}
 			out = append(out, cappedLines(strings.TrimRight(segment.text, "\n"), body, 0,
-				codeStyle(codeFileFor(segment.language), true))...)
+				codeStyle(file, true))...)
 			continue
 		}
 		// Blank lines between paragraphs are dropped: the gutter already sets

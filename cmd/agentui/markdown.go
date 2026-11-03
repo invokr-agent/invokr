@@ -145,7 +145,9 @@ func codeStyle(file string, muted bool) func(string) string {
 
 // muteCode dims highlighted code with the terminal's faint attribute, which
 // keeps each colour's hue. Chroma resets after every token, so faint is
-// re-applied after each reset.
+// re-applied after each reset — either spelling of the reset ([0m or the
+// bare [m) drops faint, so both get it back.
 func muteCode(text string) string {
-	return "\x1b[2m" + strings.ReplaceAll(text, "\x1b[0m", "\x1b[0;2m") + "\x1b[0m"
+	reset := strings.ReplaceAll(strings.ReplaceAll(text, "\x1b[0m", "\x1b[0;2m"), "\x1b[m", "\x1b[;2m")
+	return "\x1b[2m" + reset + "\x1b[0m"
 }
