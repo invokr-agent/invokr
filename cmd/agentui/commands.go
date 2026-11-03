@@ -90,6 +90,7 @@ func init() {
 		{name: "recorded", usage: "/recorded", summary: "show recorded calls for this request (alt+r)", handler: func(m *model, _ string, _ []string) tea.Cmd { m.showRecorded(); return nil }, plain: func(context.Context, CommandBackend, turn.Session, string, []string) (string, bool) {
 			return "Recorded-call overlay unavailable in plain mode; see printed execution history", true
 		}},
+		{name: "relay", usage: "/relay", summary: "chat-relay status: running, its directory, this session", handler: textCmd((*model).relayStatusText)},
 		{name: "settings", usage: "/settings", summary: "open the settings panel (ctrl+o)", handler: runSettingsCommand, plain: sessionText(settingsPlainText)},
 		{name: "retry", usage: "/retry", summary: "retry the last prompt", handler: runRetryCommand},
 		{name: "skills", usage: "/skills [install [<name>]]", summary: "list skills, or install from the skill hubs", handler: runSkillsCommand, plain: runPlainBackend, needsBackend: true},
