@@ -34,7 +34,7 @@ func TestEvidenceOverlayUsesQueuedCallsFromCurrentTurnOnly(t *testing.T) {
 		t.Fatalf("response still contains execution summary: %s", shown)
 	}
 	m.updateKey(testModifiedKey('r', tea.ModAlt))
-	if got := ansi.Strip(m.overlay.Content()); !m.overlay.IsOpen() || !strings.Contains(got, "edit") || !strings.Contains(got, "queue-b.txt") || !strings.Contains(got, "queue-a.txt") {
+	if got := ansi.Strip(renderedOverlay(m)); !m.overlay.IsOpen() || !strings.Contains(got, "edit") || !strings.Contains(got, "queue-b.txt") || !strings.Contains(got, "queue-a.txt") {
 		t.Fatalf("current-call overlay missing queued arguments: open=%v content=%q", m.overlay.IsOpen(), got)
 	}
 	m.updateKey(testKey(tea.KeyEscape))
@@ -45,7 +45,7 @@ func TestEvidenceOverlayUsesQueuedCallsFromCurrentTurnOnly(t *testing.T) {
 	m.submit()
 	m.updateResponse(responseMsg{text: "No tools needed"})
 	m.runCommand("/recorded")
-	if got := ansi.Strip(m.overlay.Content()); !m.overlay.IsOpen() || !strings.Contains(got, "No tool calls recorded for this request") || strings.Contains(got, "queue-b.txt") {
+	if got := ansi.Strip(renderedOverlay(m)); !m.overlay.IsOpen() || !strings.Contains(got, "No tool calls recorded for this request") || strings.Contains(got, "queue-b.txt") {
 		t.Fatalf("new zero-tool turn reused old details: open=%v content=%q", m.overlay.IsOpen(), got)
 	}
 }
@@ -54,13 +54,13 @@ func TestEvidenceOverlayResumeDoesNotInventPaths(t *testing.T) {
 	m := newTestModelWithHiddenLogs()
 	m.appendSavedTranscript(turn.TranscriptMessage{Role: "assistant", Text: "Created B", ExecutionEvidence: []turn.ExecutionEvidence{{CallID: "old-edit", Tool: "edit", Outcome: "completed"}}})
 	m.updateKey(testModifiedKey('r', tea.ModAlt))
-	if got := ansi.Strip(m.overlay.Content()); !m.overlay.IsOpen() || !strings.Contains(got, "Historical — not current verification") || !strings.Contains(got, "edit") || strings.Contains(got, "queue-b.txt") {
+	if got := ansi.Strip(renderedOverlay(m)); !m.overlay.IsOpen() || !strings.Contains(got, "Historical — not current verification") || !strings.Contains(got, "edit") || strings.Contains(got, "queue-b.txt") {
 		t.Fatalf("resume overlay claimed unavailable paths: open=%v content=%q", m.overlay.IsOpen(), got)
 	}
 	m.overlay.Close()
 	m.appendSavedTranscript(turn.TranscriptMessage{Role: "assistant", Text: "Later answer"})
 	m.updateKey(testModifiedKey('r', tea.ModAlt))
-	if got := ansi.Strip(m.overlay.Content()); !strings.Contains(got, "Historical call details unavailable") || strings.Contains(got, "old-edit") {
+	if got := ansi.Strip(renderedOverlay(m)); !strings.Contains(got, "Historical call details unavailable") || strings.Contains(got, "old-edit") {
 		t.Fatalf("latest saved turn borrowed earlier evidence: %s", got)
 	}
 }
@@ -71,7 +71,7 @@ func TestEvidenceOverlayDoesNotBorrowPriorToolID(t *testing.T) {
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &tool})
 	m.turnStart = m.chatLog.nextID
 	m.updateResponse(responseMsg{text: "done", evidence: []turn.ExecutionEvidence{{CallID: "same", Tool: "edit", Outcome: "completed"}}})
-	if got := ansi.Strip(m.recorded); strings.Contains(got, "old-secret.txt") {
+	if got := ansi.Strip(m.recorded(120)); strings.Contains(got, "old-secret.txt") {
 		t.Fatalf("borrowed prior-turn argument: %s", got)
 	}
 }
@@ -79,7 +79,7 @@ func TestEvidenceOverlayDoesNotBorrowPriorToolID(t *testing.T) {
 func TestEvidenceOverlayRetainsInterruptedEvidence(t *testing.T) {
 	m := newTestModelWithHiddenLogs()
 	m.updateResponse(responseMsg{err: context.Canceled, evidence: []turn.ExecutionEvidence{{Tool: "shell", Command: "go test ./...", Outcome: "failed", Code: "canceled"}}})
-	if got := ansi.Strip(m.recorded); !strings.Contains(got, "go test ./...") || !strings.Contains(got, "canceled") {
+	if got := ansi.Strip(m.recorded(120)); !strings.Contains(got, "go test ./...") || !strings.Contains(got, "canceled") {
 		t.Fatalf("interrupted evidence lost: %s", got)
 	}
 	if got := ansi.Strip(m.helpHint()); !strings.Contains(got, "Interrupted") {
@@ -115,7 +115,7 @@ func TestEvidenceOverlayCancellationUsesQueuedTerminalEvents(t *testing.T) {
 		t.Fatalf("test session did not reproduce nil-ledger cancellation: %+v", response)
 	}
 	m.updateResponse(response)
-	got := ansi.Strip(m.recorded)
+	got := ansi.Strip(m.recorded(120))
 	if !strings.Contains(got, "Interrupted — incomplete") || !strings.Contains(got, "go test ./...") || !strings.Contains(got, "canceled") {
 		t.Fatalf("canceled request lost observed terminal call: %s", got)
 	}
@@ -186,4 +186,11 @@ func TestExecutionWarningCountsEachCallOnce(t *testing.T) {
 	if got := executionWarning(failures[:1], nil); !strings.HasPrefix(got, "1 call needs a look") {
 		t.Fatalf("failures-only warning = %q", got)
 	}
+}
+
+// renderedOverlay is the overlay's text as a 120-column frame lays it out:
+// OpenFunc content only exists once the overlay renders.
+func renderedOverlay(m *model) string {
+	m.overlay.Render("", 120, 40)
+	return m.overlay.Content()
 }

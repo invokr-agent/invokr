@@ -147,7 +147,7 @@ func TestResponseHistoryOpensOnDemand(t *testing.T) {
 		t.Fatalf("failure warning hidden: %s", warning)
 	}
 	m.showRecorded()
-	expanded := ansi.Strip(m.overlay.Content())
+	expanded := ansi.Strip(renderedOverlay(m))
 	for _, want := range []string{"Execution history", "go test ./tools", "failed", "old missing context", "missing.txt", "exit=0"} {
 		if !strings.Contains(expanded, want) {
 			t.Fatalf("overlay missing %q: %s", want, expanded)
@@ -183,7 +183,7 @@ func TestResponseHistoryDoesNotInventVerification(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newTestModelWithHiddenLogs()
 			m.updateResponse(tc.response)
-			got := ansi.Strip(m.recorded)
+			got := ansi.Strip(m.recorded(120))
 			if tc.name == "legacy" || tc.name == "empty" {
 				got = ansi.Strip(m.chatContent())
 			}

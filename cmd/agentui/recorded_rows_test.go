@@ -34,7 +34,7 @@ func TestRecordedOverlayRowsShowEachCallOnce(t *testing.T) {
 		{CallID: "read-2", Tool: "read", Outcome: "completed", Finished: 3},
 		{CallID: "shell-1", Tool: "shell", Outcome: "failed", Code: "exit_1", ExitCode: new(1), Freshness: "stale", Finished: 4},
 	}})
-	rows := strings.Split(ansi.Strip(m.recorded), "\n")
+	rows := strings.Split(ansi.Strip(m.recorded(120)), "\n")
 	if len(rows) != 3 {
 		t.Fatalf("rows=%d want 3 (header, failure, collapsed repeat):\n%s", len(rows), strings.Join(rows, "\n"))
 	}
@@ -44,12 +44,12 @@ func TestRecordedOverlayRowsShowEachCallOnce(t *testing.T) {
 	if !strings.Contains(rows[2], "×3") || !strings.Contains(rows[2], "✓") || !strings.Contains(rows[2], "queue-a.txt") {
 		t.Fatalf("repeat row = %q", rows[2])
 	}
-	if strings.Contains(m.recorded, "(stale)") || strings.Contains(m.recorded, "\\\"") || strings.Contains(m.recorded, "\t") {
-		t.Fatalf("row noise survived: %q", m.recorded)
+	if strings.Contains(m.recorded(120), "(stale)") || strings.Contains(m.recorded(120), "\\\"") || strings.Contains(m.recorded(120), "\t") {
+		t.Fatalf("row noise survived: %q", m.recorded(120))
 	}
 	for _, row := range rows {
-		if ansi.StringWidth(row) > m.recordedRowsWidth() {
-			t.Fatalf("row is wider than the popup shows: %d > %d", ansi.StringWidth(row), m.recordedRowsWidth())
+		if ansi.StringWidth(row) > 120 {
+			t.Fatalf("row is wider than the popup shows: %d > %d", ansi.StringWidth(row), 120)
 		}
 	}
 }
@@ -154,4 +154,16 @@ func columnOf(line, needle string) int {
 		}
 	}
 	return -1
+}
+
+// A heredoc or multi-line command is still one row.
+func TestRecordedRowFlattensMultiLineCommand(t *testing.T) {
+	m := newTestModelWithHiddenLogs()
+	m.updateResponse(responseMsg{text: "done", evidence: []turn.ExecutionEvidence{
+		{CallID: "s", Tool: "shell", Command: "cat <<'EOF' > x.txt\nhello\nEOF", Outcome: "completed", Finished: 1},
+	}})
+	rows := strings.Split(ansi.Strip(m.recorded(120)), "\n")
+	if len(rows) != 2 || !strings.Contains(rows[1], "cat <<'EOF' > x.txt hello EOF") {
+		t.Fatalf("multi-line command rows = %q", rows)
+	}
 }

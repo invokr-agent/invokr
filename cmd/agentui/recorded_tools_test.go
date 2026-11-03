@@ -29,7 +29,7 @@ func TestRecordedToolsExposeCapturedEditDespiteFinalCreateLabel(t *testing.T) {
 		{CallID: editID, Tool: "edit", Outcome: "completed", Started: 1, Finished: 2},
 		{CallID: readID, Tool: "read", Outcome: "completed", ReadOnly: true, Started: 3, Finished: 4},
 	}})
-	history := ansi.Strip(m.recorded)
+	history := ansi.Strip(m.recorded(120))
 	for _, want := range []string{"Execution history", "edit", "qa-bot4-manual/queue-b.txt", "read", "qa-bot4-manual/queue-a.txt", "completed"} {
 		if !strings.Contains(history, want) {
 			t.Fatalf("recorded history lacks %q: %s", want, history)
@@ -46,7 +46,7 @@ func TestRecordedToolsFallbackWithoutEventArgs(t *testing.T) {
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &tool})
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolCompleted, Tool: &tool})
 	m.updateResponse(responseMsg{text: "done", evidence: []turn.ExecutionEvidence{{CallID: "missing", Tool: "edit", Outcome: "completed", Finished: 2}}})
-	history := ansi.Strip(m.recorded)
+	history := ansi.Strip(m.recorded(120))
 	if !strings.Contains(history, "arguments unavailable") || !strings.Contains(history, "completed") || strings.Contains(history, "queue-b.txt") {
 		t.Fatalf("fallback invented a path: %s", history)
 	}
@@ -63,7 +63,7 @@ func TestRecordedToolsBoundManyCalls(t *testing.T) {
 		evidence[i] = turn.ExecutionEvidence{CallID: id, Tool: "read", Outcome: "completed", Started: 2*i + 1, Finished: 2*i + 2}
 	}
 	m.updateResponse(responseMsg{text: "done", evidence: evidence})
-	history := ansi.Strip(m.recorded)
+	history := ansi.Strip(m.recorded(120))
 	for _, want := range []string{"file-0.txt", "file-3.txt", "file-4.txt", "file-5.txt"} {
 		if !strings.Contains(history, want) {
 			t.Fatalf("bounded history lacks %q: %s", want, history)
@@ -85,7 +85,7 @@ func TestRecordedToolsLongPathsShowOmissionAndKeepRawArgs(t *testing.T) {
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolStarted, Tool: &tool})
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolCompleted, Tool: &tool})
 	m.updateResponse(responseMsg{text: "done", evidence: []turn.ExecutionEvidence{{CallID: tool.ID, Tool: "read", Outcome: "completed", Finished: 2}}})
-	history := ansi.Strip(m.recorded)
+	history := ansi.Strip(m.recorded(120))
 	if !strings.Contains(history, "...") {
 		t.Fatalf("long paths lack visible bounded elision: %s", history)
 	}

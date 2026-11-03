@@ -283,17 +283,20 @@ func (m message) foldable() bool {
 	return m.role == "reasoning" || m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
 }
 
-// executionHistory is the Alt+R breakdown: one row per call — a status glyph,
-// the tool, its target on a single line, and what happened (outcome, exit and
-// reason code). Calls that need a look lead, the rest follow in call order, and
-// a run of calls that read identically collapses to one row with a count. The
-// freshness marker ("(stale)") is dropped: every row here comes from the same
-// finished turn, so it repeats on all of them without saying which call to look
-// at.
+// historyView is the Alt+R breakdown laid out at whatever width the overlay
+// gives it, so rows stay one line and re-flow on resize.
+func (c *chatLog) historyView(prefix string, start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) func(int) string {
+	return func(width int) string { return prefix + c.executionHistory(start, failures, evidence, width) }
+}
+
+// executionHistory renders one row per call, needs-a-look calls first and
+// identical neighbours collapsed with a count. "(stale)" is dropped: every row
+// comes from the same finished turn, so it would repeat on all of them.
 func (c *chatLog) executionHistory(start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence, width int) string {
 	// A failed call is in both lists: the evidence row carries the call, the
-	// failure its reason (first line only; the rest is format help). A reason
-	// with no evidence row left to join gets a row of its own.
+	// failure its reason (first line only; the rest is format help). ToolOutcome
+	// has no call ID, so a tool's reasons join its failed rows in order. A reason
+	// with no row left to join gets a row of its own.
 	var rows []string
 	reasons := map[string][]string{}
 	for _, failure := range failures {
@@ -362,7 +365,9 @@ func recordedGlyph(item turn.ExecutionEvidence) (string, toolStatus) {
 // reason and exit codes when the ledger has them.
 func recordedOutcome(item turn.ExecutionEvidence) string {
 	out := cmp.Or(item.Outcome, "unknown")
-	if item.Code != "" && item.Code != item.Outcome {
+	// An exit code already names the failure, so a code that only restates it
+	// ("exit 2", "exit_1") is dropped.
+	if item.Code != "" && item.Code != item.Outcome && (item.ExitCode == nil || !strings.HasPrefix(item.Code, "exit")) {
 		out += " " + item.Code
 	}
 	if item.ExitCode != nil {
@@ -377,7 +382,7 @@ func recordedOutcome(item turn.ExecutionEvidence) string {
 // path to this row.
 func (c *chatLog) callTarget(start uint64, item turn.ExecutionEvidence, width int) string {
 	if item.Command != "" {
-		return item.Command
+		return oneLine(item.Command)
 	}
 	for _, msg := range c.recordedTools {
 		if msg.id <= start || item.CallID == "" || msg.role != "tool" || msg.toolID != item.CallID {
@@ -385,9 +390,15 @@ func (c *chatLog) callTarget(start uint64, item turn.ExecutionEvidence, width in
 		}
 		// The row's own chrome -- glyph, icon, verb column, chip padding, outcome
 		// column -- takes the rest, so a preview is bounded to what the row shows.
-		return primaryArgLimit(msg.toolName, msg.toolArgs, max(toolPreviewMax, width-30))
+		return oneLine(primaryArgLimit(msg.toolName, msg.toolArgs, max(toolPreviewMax, width-30)))
 	}
 	return ""
+}
+
+// oneLine flattens a row target: whitespace runs become one space, and the
+// escaped quotes of arguments that did not parse as JSON read as plain quotes.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(s, `\"`, `"`)), " ")
 }
 
 // observedEvidence is UI-only fallback when a failed/canceled runner returns
