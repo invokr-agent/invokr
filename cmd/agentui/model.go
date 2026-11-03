@@ -752,7 +752,7 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		}
 		m.recordedWarning = executionWarning(msg.failures, msg.evidence)
 	}
-	m.recorded = m.chatLog.executionHistory(m.turnStart, msg.failures, msg.evidence)
+	m.recorded = m.chatLog.executionHistory(m.turnStart, msg.failures, msg.evidence, m.recordedRowsWidth())
 	if errors.Is(msg.err, context.Canceled) || strings.HasPrefix(m.recordedWarning, "Interrupted") {
 		m.recorded = "Interrupted — incomplete\n" + m.recorded
 	}
@@ -819,9 +819,9 @@ func (m *model) View() tea.View {
 	if m.overlay.IsOpen() && m.overlay.Title() == "tools" && m.toolDialog.open {
 		content = m.toolDialogView(content)
 	} else {
-		// The popup is sized against the space inside the YOLO border, so it
-		// cannot hang over the rule.
-		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset()/2)
+		// The popup floats inside the region above the input block, so it cannot
+		// cover the prompt or its frame.
+		content = m.floatOverlay(content)
 	}
 	content = m.settingsView(content)
 	// A YOLO session gets a rule round the whole UI: every call runs unprompted,
@@ -1021,8 +1021,20 @@ func (m *model) saveInterrupted() {
 func (m *model) showRecorded() {
 	// Titles are lowercase throughout, matching the overlay's own title row and
 	// the "Alt+R for recorded calls" hint that points at it.
+	// The footer notice points here, so opening the breakdown retires it for the
+	// turn rather than repeating the same fact under the input.
+	m.recordedWarning = ""
 	m.overlay.Open("recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
 }
+
+// recordedRowsWidth is the width Alt+R lays its rows out at. The box grows to
+// its content plus its own border and padding, and a row that reaches the frame
+// edge comes back re-wrapped inside the box, so rows keep a margin.
+func (m *model) recordedRowsWidth() int { return max(20, m.width-tuikitRowMargin) }
+
+// tuikitRowMargin is the columns a row keeps clear of the frame edge so the
+// box's border, padding and wrapping leave it on one line.
+const tuikitRowMargin = 14
 
 // executionWarning is the footer note after a turn whose calls did not all
 // complete cleanly: errors, denials, failures, non-zero exits ("flagged") and
@@ -1060,7 +1072,7 @@ func (m *model) appendSavedTranscript(item turn.TranscriptMessage) {
 	if item.Role == "assistant" {
 		m.recorded = "Historical call details unavailable"
 		if len(item.ExecutionEvidence) > 0 {
-			m.recorded = "Historical — not current verification\n" + m.chatLog.executionHistory(m.chatLog.nextID, item.ToolCalls, item.ExecutionEvidence)
+			m.recorded = "Historical — not current verification\n" + m.chatLog.executionHistory(m.chatLog.nextID, item.ToolCalls, item.ExecutionEvidence, m.recordedRowsWidth())
 		}
 	}
 	m.chatLog.appendTranscript(item)
@@ -1366,6 +1378,17 @@ func (m *model) updateChatViewportKey(msg tea.KeyPressMsg) bool {
 const scrollStep = 3
 
 func (m *model) updateMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	// While the popup is open it owns the wheel: the reader is scrolling the
+	// breakdown, and the transcript behind it has to stay where it was. The
+	// popup has no wheel bindings of its own, so a notch is handed over as its
+	// scroll keys — the same ones the arrow keys already drive.
+	if m.overlay.IsOpen() {
+		code, notch := wheelKey(msg.Button)
+		for i := 0; i < scrollStep && notch; i++ {
+			m.overlay.Update(code)
+		}
+		return m, nil
+	}
 	if m.logPanel.mode == modeLogs {
 		m.syncLogViewport()
 		switch msg.Button {
@@ -1389,6 +1412,19 @@ func (m *model) updateMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// wheelKey maps a wheel notch to the key the open popup scrolls on. A mouse
+// button that is not a notch gets no press.
+func wheelKey(button tea.MouseButton) (tea.KeyPressMsg, bool) {
+	switch button {
+	case tea.MouseWheelUp:
+		return tea.KeyPressMsg{Code: tea.KeyUp}, true
+	case tea.MouseWheelDown:
+		return tea.KeyPressMsg{Code: tea.KeyDown}, true
+	default:
+		return tea.KeyPressMsg{}, false
+	}
+}
+
 func (m *model) syncChatViewport(forceBottom bool) {
 	m.chat.SetItems(m.transcriptItems())
 	if forceBottom && !m.userScrolled {
@@ -1408,6 +1444,27 @@ func followViewport(v *viewport.Model, width, height int, content string, forceB
 	if forceBottom || atBottom || v.PastBottom() {
 		v.GotoBottom()
 	}
+}
+
+// floatOverlay composites the popup over the region above the input block: the
+// background is split at that row, the popup drawn over the part it may cover
+// (Render crops its background to the size it is given, hence the split) and the
+// input block rejoined underneath, so the frame keeps every row it had.
+func (m *model) floatOverlay(bg string) string {
+	areaWidth, areaHeight := m.overlayArea()
+	rows := strings.Split(bg, "\n")
+	if len(rows) <= areaHeight {
+		return m.overlay.Render(bg, areaWidth, areaHeight)
+	}
+	return m.overlay.Render(strings.Join(rows[:areaHeight], "\n"), areaWidth, areaHeight) + "\n" + strings.Join(rows[areaHeight:], "\n")
+}
+
+// overlayArea is the region the popup may draw in: the usable width, and the
+// rows above the input block. Bottom chrome is counted the same way chatVisible
+// Lines counts it, so the two blocks never compete for rows.
+func (m *model) overlayArea() (int, int) {
+	bottom := lipgloss.Height(m.inputArea()) + lipgloss.Height(m.statusRow())
+	return m.mainWidth(), max(1, m.height-m.frameInset()/2-bottom)
 }
 
 func (m *model) yoloFrame() bool { return m.policy.Mode() == approval.YOLO }

@@ -30,7 +30,7 @@ func TestRecordedToolsExposeCapturedEditDespiteFinalCreateLabel(t *testing.T) {
 		{CallID: readID, Tool: "read", Outcome: "completed", ReadOnly: true, Started: 3, Finished: 4},
 	}})
 	history := ansi.Strip(m.recorded)
-	for _, want := range []string{"Execution history", "edit \"qa-bot4-manual/queue-b.txt\"", "read \"qa-bot4-manual/queue-a.txt, qa-bot4-manual/queue-b.txt\"", "completed"} {
+	for _, want := range []string{"Execution history", "edit", "qa-bot4-manual/queue-b.txt", "read", "qa-bot4-manual/queue-a.txt", "completed"} {
 		if !strings.Contains(history, want) {
 			t.Fatalf("recorded history lacks %q: %s", want, history)
 		}
@@ -47,7 +47,7 @@ func TestRecordedToolsFallbackWithoutEventArgs(t *testing.T) {
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolCompleted, Tool: &tool})
 	m.updateResponse(responseMsg{text: "done", evidence: []turn.ExecutionEvidence{{CallID: "missing", Tool: "edit", Outcome: "completed", Finished: 2}}})
 	history := ansi.Strip(m.recorded)
-	if !strings.Contains(history, "edit \"arguments unavailable\": completed") || strings.Contains(history, "queue-b.txt") {
+	if !strings.Contains(history, "arguments unavailable") || !strings.Contains(history, "completed") || strings.Contains(history, "queue-b.txt") {
 		t.Fatalf("fallback invented a path: %s", history)
 	}
 }
@@ -86,7 +86,7 @@ func TestRecordedToolsLongPathsShowOmissionAndKeepRawArgs(t *testing.T) {
 	m.chatLog.ApplyEvent(events.Event{Type: events.EventToolCompleted, Tool: &tool})
 	m.updateResponse(responseMsg{text: "done", evidence: []turn.ExecutionEvidence{{CallID: tool.ID, Tool: "read", Outcome: "completed", Finished: 2}}})
 	history := ansi.Strip(m.recorded)
-	if !strings.Contains(history, "read \"...") {
+	if !strings.Contains(history, "...") {
 		t.Fatalf("long paths lack visible bounded elision: %s", history)
 	}
 	if m.chatLog.recordedTools[0].toolArgs != args {
@@ -115,7 +115,7 @@ func TestRecordedToolsWithReusedCallIDs(t *testing.T) {
 					if len(evidence) != 1 || evidence[0].Outcome != "completed" {
 						t.Fatalf("request evidence: %+v", evidence)
 					}
-					history := log.executionHistory(start, nil, evidence)
+					history := log.executionHistory(start, nil, evidence, 96)
 					if !strings.Contains(history, path) || (i > 0 && strings.Contains(history, "old.txt")) {
 						t.Fatalf("stale arguments: %s", history)
 					}

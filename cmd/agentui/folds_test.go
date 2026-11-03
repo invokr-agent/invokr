@@ -1,6 +1,7 @@
 package agentui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -152,6 +153,10 @@ func TestResponseHistoryOpensOnDemand(t *testing.T) {
 			t.Fatalf("overlay missing %q: %s", want, expanded)
 		}
 	}
+	// The failure and its evidence are one call: one row, carrying the reason.
+	if rows := slices.DeleteFunc(strings.Split(expanded, "\n"), func(row string) bool { return !strings.Contains(row, "missing.txt") }); len(rows) != 1 || !strings.Contains(rows[0], "old missing context") {
+		t.Fatalf("failed call rows = %q, want one row with its reason", rows)
+	}
 	if response.evidence[0].CallID != "opaque-check-id" || response.evidence[0].Outcome != "completed" || response.evidence[0].Command != "go test ./tools" {
 		t.Fatal("presentation changed the source ledger")
 	}
@@ -169,7 +174,7 @@ func TestResponseHistoryDoesNotInventVerification(t *testing.T) {
 	}{
 		{"legacy", responseMsg{text: "hello"}, "hello"},
 		{"empty", responseMsg{text: "hello", evidence: []turn.ExecutionEvidence{}}, "hello"},
-		{"failure without evidence", responseMsg{failures: []turn.ToolOutcome{{Tool: "read", Kind: "denied", Detail: "denial"}}}, "read denied"},
+		{"failure without evidence", responseMsg{failures: []turn.ToolOutcome{{Tool: "read", Kind: "denied", Detail: "denial"}}}, "denied"},
 		{"flagged latest", responseMsg{evidence: []turn.ExecutionEvidence{
 			{Tool: "shell", Outcome: "completed", ExitCode: new(0), Finished: 1},
 			{Tool: "shell", Outcome: "flagged", ExitCode: new(1), Finished: 2},
