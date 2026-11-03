@@ -218,6 +218,12 @@ agent-relay setup --apply telegram
 which writes, per transport, `"agent": ["invokr", "acp"]` — invokr carries no chat
 transport, no allowlist and no messaging config of its own.
 
+`invokr relay start|stop|status` drives that process from the shell, in the
+current directory. `/relay` in the TUI reports the same status — running or not,
+which directory it serves, and whether this session is the one chat reaches. It
+never is: chat always gets a fresh `invokr acp` session, so a TUI session in
+progress cannot be continued from a phone yet.
+
 ## Memory forgetting and the recall gate
 
 Two opt-in memory extensions (both default-off, see `docs/memory.md`):

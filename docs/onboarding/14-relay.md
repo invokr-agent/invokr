@@ -47,5 +47,11 @@ The relay spawns `invokr acp` in its configured `cwd`, which must be the
 workspace: `NewSession` refuses any other directory. While an `agent-relay`
 process runs, the TUI header shows a `relay ●` pill (polled every 15s).
 
+`/relay` in the TUI prints the same facts as `invokr relay status` — whether the
+relay runs, the directory it serves (agent-relay's own `status` text) and whether
+*this* session is the one chat reaches. It never is: the relay always drives its
+own `invokr acp`, so a TUI session in progress cannot be continued from Telegram,
+Signal or Matrix yet.
+
 The relay owns the allowlists, the credentials and the answer formatting;
 invokr only sees prompts and permission requests.
