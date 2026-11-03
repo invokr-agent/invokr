@@ -63,8 +63,8 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, bus events.Bus, new
 }
 
 // registerUsage forwards the runner's running usage to the client, so the editor
-// meters the context window while a prompt is still running. The events are not
-// session-scoped to this agent, so the handler lives for the whole process.
+// meters the context window while a prompt is still running. One handler serves
+// the process; publishUsage decides which sessions are this agent's.
 func (a *Agent) registerUsage(bus events.Bus) func() {
 	if bus == nil {
 		return func() {}

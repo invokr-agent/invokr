@@ -193,11 +193,7 @@ func newModelWithCommands(ctx context.Context, session turn.Session, commands Co
 	if approvalQueue != nil && approvalQueue.Policy != nil {
 		m.policy = approvalQueue.Policy
 	}
-	// The provider's window is known before any turn runs, so the context meter
-	// can start at 0 instead of appearing only once a turn has reported usage.
-	if usage, ok := sessionUsage(session); ok && usage.ContextWindowTokens > 0 {
-		m.usage, m.hasUsage = usage, true
-	}
+	m.adoptSessionWindow()
 	m.applyTheme()
 	return m
 }
@@ -1090,13 +1086,29 @@ func hintAffordance(binding key.Binding, label string) string {
 	return ui.Invokr.Warn.Render(binding.Help().Key) + " " + ui.Invokr.Muted.Render(label)
 }
 
+// adoptSessionWindow seeds the meter from the session: its provider window is
+// known before any turn runs, so the readout starts at 0 / window. The provider
+// probe answers asynchronously, so a window can arrive after the model was
+// built; adoption is one-shot, and a turn's own usage outranks it.
+func (m *model) adoptSessionWindow() {
+	if m.hasUsage {
+		return
+	}
+	usage, ok := sessionUsage(m.session)
+	if ok && usage.ContextWindowTokens > 0 {
+		m.usage, m.hasUsage = usage, true
+	}
+}
+
 // contextStatus is the statusline's right cell, empty only until a turn has
-// reported usage. It has no hide toggle: the readout is one cell on a row that
-// already exists, not the two full rows above the input it used to occupy.
+// reported usage or the provider's window is known. It has no hide toggle: the
+// readout is one cell on a row that already exists, not the two full rows above
+// the input it used to occupy.
 func (m *model) contextStatus(width int) string {
 	if !m.compactingAt.IsZero() {
 		return ui.Invokr.Muted.Render("compacting · " + formatDuration(time.Since(m.compactingAt)))
 	}
+	m.adoptSessionWindow()
 	if !m.hasUsage {
 		return ""
 	}
