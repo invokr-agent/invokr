@@ -34,7 +34,7 @@ func NewACPCmd(services ServicesProvider) *cobra.Command {
 			os.Stdout = os.Stderr
 			// Once: sessions read the registry concurrently, so new skills need a restart.
 			registerCustomCommands(cmd.Context(), s.Commands, s.Logger)
-			return acpagent.Serve(cmd.Context(), cmd.InOrStdin(), protocol, s.NewChatSession, acpCommands{s.Commands})
+			return acpagent.Serve(cmd.Context(), cmd.InOrStdin(), protocol, s.Events, s.NewChatSession, acpCommands{s.Commands})
 		},
 	}
 }

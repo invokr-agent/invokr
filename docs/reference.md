@@ -208,6 +208,12 @@ answers and tool calls go back as updates, and permission requests ask the clien
 (deny is the default: a failed or unanswered request grants nothing). Sessions live
 only as long as the process, in the workspace invokr was started in.
 
+Context is metered while a prompt runs, not only when it ends: after every model
+call invokr sends an ACP `usage_update` (`used` = prompt+completion in context,
+`size` = the provider's window). No `cost` is carried — invokr's `provider.pricing`
+is currency-free while ACP cost requires an ISO currency code. The prompt response
+that ends the turn is unchanged by these updates.
+
 Telegram, Signal and Matrix are handled by [agent-relay](https://github.com/invokr-agent/agent-relay)
 (v0.1.0), a separate repository that drives this command:
 

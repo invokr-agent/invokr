@@ -98,6 +98,14 @@ type plainResponseRenderer struct {
 }
 
 func (r *plainResponseRenderer) handleEvent(ev events.Event) {
+	if ev.Type == events.EventUsage {
+		// stdout carries the answer alone, so the running context line goes to
+		// stderr with the tool trace; a piped response stays byte-identical.
+		if ev.Usage != nil {
+			writePlain(r.errOut, contextUsageLine(*ev.Usage), "\n")
+		}
+		return
+	}
 	if ev.Type != events.EventAssistantDelta {
 		writePlain(r.errOut, renderToolEvent(ev), "\n")
 		return

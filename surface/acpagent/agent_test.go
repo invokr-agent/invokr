@@ -19,12 +19,16 @@ import (
 	"go.lsp.dev/jsonrpc2"
 
 	"github.com/invokr-agent/invokr/capability/approval"
+	"github.com/invokr-agent/invokr/platform/events"
 	"github.com/invokr-agent/invokr/platform/turn"
+
+	"go.uber.org/zap"
 )
 
 type stubSession struct {
 	id     string
 	broker *approval.Broker
+	bus    events.Bus // stands in for the runtime event bus the real session publishes to
 }
 
 func (s *stubSession) SessionID() string { return s.id }
@@ -36,6 +40,14 @@ func (s *stubSession) Send(ctx context.Context, text string) (turn.AgentResponse
 		return turn.AgentResponse{}, errors.New("model call aborted")
 	case "fail":
 		return turn.AgentResponse{}, errors.New("provider down")
+	case "usage probe":
+		// The real runner publishes the running usage after each model call; the
+		// stub does the same so the client sees it before the answer.
+		if s.bus != nil {
+			events.Usage(ctx, s.bus, s.id, "", &turn.TokenUsage{Available: true, ContextWindowTokens: 32_000,
+				LatestPromptTokens: 12_000, LatestCompletionTokens: 1_000})
+		}
+		return turn.AgentResponse{Message: "metered"}, nil
 	}
 	if strings.HasPrefix(text, "echo ") {
 		return turn.AgentResponse{Message: text}, nil
@@ -94,12 +106,13 @@ func connectWith(t *testing.T, client *stubClient, commands Commands) *acp.Clien
 	toAgentR, toAgentW := io.Pipe()
 	toClientR, toClientW := io.Pipe()
 	var n atomic.Int32
+	bus := events.NewOrderedDispatcher(zap.NewNop())
 	newSession := func(string) (turn.IdentifiedSession, *approval.Broker, error) {
 		broker := approval.NewBroker()
 		broker.Policy = approval.NewPolicy(approval.Manual, false)
-		return &stubSession{fmt.Sprintf("sess-%d", n.Add(1)), broker}, broker, nil
+		return &stubSession{fmt.Sprintf("sess-%d", n.Add(1)), broker, bus}, broker, nil
 	}
-	go func() { _ = Serve(ctx, toAgentR, toClientW, newSession, commands) }()
+	go func() { _ = Serve(ctx, toAgentR, toClientW, bus, newSession, commands) }()
 	cc := acp.Connect(ctx, client, toClientR, toAgentW)
 	t.Cleanup(func() { _ = cc.Close() })
 	init, err := cc.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: acp.V1})
@@ -282,6 +295,39 @@ func TestConcurrentSessionsHaveIndependentApprovals(t *testing.T) {
 	}
 	if len(got) != 2 {
 		t.Fatalf("tool call updates = %v, want 2", got)
+	}
+}
+
+// TestUsageUpdateArrivesMidTurn covers issue #82's ACP half: the client is
+// told the running context while the prompt is still in flight, so an editor
+// can meter the window instead of waiting for the prompt response.
+func TestUsageUpdateArrivesMidTurn(t *testing.T) {
+	client := &stubClient{decide: selectOption(0)}
+	cc := connect(t, client)
+	id := newSession(t, cc)
+	if _, err := prompt(cc, id, "usage probe"); err != nil {
+		t.Fatal(err)
+	}
+	if reply := lastReply(t, client); reply != "metered" {
+		t.Fatalf("reply = %q, want the stub answer", reply)
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	usageAt, replyAt := -1, -1
+	for i, u := range client.updates {
+		if u.UsageUpdate != nil && usageAt < 0 {
+			usageAt = i
+		}
+		if u.AgentMessageChunk != nil {
+			replyAt = i
+		}
+	}
+	if usageAt < 0 || usageAt >= replyAt {
+		t.Fatalf("usage update at %d, reply at %d: want usage before the answer", usageAt, replyAt)
+	}
+	sent := client.updates[usageAt].UsageUpdate
+	if sent.Used != 13_000 || sent.Size != 32_000 {
+		t.Fatalf("usage = %d / %d, want 13000 / 32000", sent.Used, sent.Size)
 	}
 }
 
@@ -468,9 +514,9 @@ func TestModelOptionShowsPendingSwitch(t *testing.T) {
 	factory := func(string) (turn.IdentifiedSession, *approval.Broker, error) {
 		broker := approval.NewBroker()
 		broker.Policy = approval.NewPolicy(approval.Manual, false)
-		return &modelStub{stubSession: &stubSession{"sess-1", broker}, model: "m1"}, broker, nil
+		return &modelStub{stubSession: &stubSession{"sess-1", broker, nil}, model: "m1"}, broker, nil
 	}
-	go func() { _ = Serve(ctx, toAgentR, toClientW, factory, nil) }()
+	go func() { _ = Serve(ctx, toAgentR, toClientW, nil, factory, nil) }()
 	cc := acp.Connect(ctx, &stubClient{decide: selectOption(0)}, toClientR, toAgentW)
 	defer func() { _ = cc.Close() }()
 	if _, err := cc.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: acp.V1}); err != nil {

@@ -331,7 +331,7 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (turnpkg.AgentResponse
 			r.logTurnFailed(ctx, turn, turnStarted, err)
 			return r.failedResponse(state), err
 		}
-		r.afterModelTurn(&modelTurn, &state)
+		r.afterModelTurn(ctx, req, &modelTurn, &state)
 		result, nextMessages, err := r.turnProcessor.Process(workCtx, turn, modelTurn)
 		if err = cmp.Or(ctx.Err(), err); err != nil {
 			r.logTurnFailed(ctx, turn, turnStarted, err)
@@ -403,8 +403,9 @@ func (r *Runner) turnAvailable(ctx context.Context, req RunRequest, budget *turn
 
 // afterModelTurn does the bookkeeping a completion needs before the turn is
 // processed: the local token estimate for providers that never report usage,
-// and dropping the trailing nudge, which was for the model's eyes only.
-func (r *Runner) afterModelTurn(modelTurn *ModelTurn, state *runState) {
+// dropping the trailing nudge, which was for the model's eyes only, and publishing
+// the running usage so a surface can meter the window mid-turn.
+func (r *Runner) afterModelTurn(ctx context.Context, req RunRequest, modelTurn *ModelTurn, state *runState) {
 	if !state.usage.Available {
 		// The estimate only backs providers that never report usage; once
 		// Available latches true it stays true, so skip the walk.
@@ -413,6 +414,21 @@ func (r *Runner) afterModelTurn(modelTurn *ModelTurn, state *runState) {
 	if state.nudgeAppended {
 		modelTurn.Messages, state.nudgeAppended = modelTurn.Messages[:len(modelTurn.Messages)-1], false
 	}
+	r.publishUsage(ctx, req, state, modelTurn.Completion.usage)
+}
+
+// publishUsage reports the context the request has spent so far, this completion
+// included, on a copy: RecordUsage would fold the unfinished turn into the
+// session totals every turn, and the request's own record would then count it
+// twice. Priced against SessionTotalsSoFar, so the number matches what the
+// final response will carry.
+func (r *Runner) publishUsage(ctx context.Context, req RunRequest, state *runState, usage turnpkg.TokenUsage) {
+	if !usage.Available {
+		return
+	}
+	window := state.usage.WithContextWindowTokens(r.providerContext.ContextWindowTokens())
+	published := r.spend.pricedLive(window.AccumulateTurnUsage(usage))
+	events.Usage(ctx, r.events, req.SessionID, r.parentSessionID, &published)
 }
 
 // modelTurn asks the model for the next turn. On a provider "context length
@@ -923,6 +939,7 @@ func (r *Runner) gracefulExhaustion(ctx context.Context, req RunRequest, state r
 		return r.failedResponse(state), fmt.Errorf("agent budget exhausted (%s): %w", reason, err)
 	}
 
+	r.publishUsage(ctx, req, &state, modelTurn.Completion.usage)
 	// Parse like a normal reply (forgiving: plain text or tagged reply both yield
 	// clean prose). Ignore any tool call the model emits — this is the give-up path.
 	// A wrap-up cut off by the output limit is a severed sentence, not an
