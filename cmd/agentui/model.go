@@ -91,7 +91,7 @@ type model struct {
 	heardAt         time.Time
 	compactingAt    time.Time
 	stopping        bool
-	recorded        string
+	recorded        func(width int) string
 	recordedWarning string
 	turnStart       uint64
 	quitArmed       time.Time
@@ -752,10 +752,11 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 		}
 		m.recordedWarning = executionWarning(msg.failures, msg.evidence)
 	}
-	m.recorded = m.chatLog.executionHistory(m.turnStart, msg.failures, msg.evidence)
+	prefix := ""
 	if errors.Is(msg.err, context.Canceled) || strings.HasPrefix(m.recordedWarning, "Interrupted") {
-		m.recorded = "Interrupted — incomplete\n" + m.recorded
+		prefix = "Interrupted — incomplete\n"
 	}
+	m.recorded = m.chatLog.historyView(prefix, m.turnStart, msg.failures, msg.evidence)
 	m.syncChatViewport(true)
 	// Only a clean turn end hands the queue its next message: a stop or an
 	// error leaves those messages queued until the user sends again.
@@ -819,8 +820,10 @@ func (m *model) View() tea.View {
 	if m.overlay.IsOpen() && m.overlay.Title() == "tools" && m.toolDialog.open {
 		content = m.toolDialogView(content)
 	} else {
-		// The popup is sized against the space inside the YOLO border, so it
-		// cannot hang over the rule.
+		if m.overlay.IsOpen() {
+			// The popup keeps clear of the input block, so it cannot cover the prompt.
+			m.overlay.Align.ReserveBottom = lipgloss.Height(m.inputArea()) + lipgloss.Height(m.statusRow())
+		}
 		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset()/2)
 	}
 	content = m.settingsView(content)
@@ -1021,7 +1024,14 @@ func (m *model) saveInterrupted() {
 func (m *model) showRecorded() {
 	// Titles are lowercase throughout, matching the overlay's own title row and
 	// the "Alt+R for recorded calls" hint that points at it.
-	m.overlay.Open("recorded calls", cmp.Or(m.recorded, "No tool calls recorded for this request"))
+	// The footer notice points here, so opening the breakdown retires it for the
+	// turn rather than repeating the same fact under the input.
+	m.recordedWarning = ""
+	view := m.recorded
+	if view == nil {
+		view = func(int) string { return "No tool calls recorded for this request" }
+	}
+	m.overlay.OpenFunc("recorded calls", view)
 }
 
 // executionWarning is the footer note after a turn whose calls did not all
@@ -1058,9 +1068,9 @@ func executionWarning(failures []turn.ToolOutcome, evidence []turn.ExecutionEvid
 
 func (m *model) appendSavedTranscript(item turn.TranscriptMessage) {
 	if item.Role == "assistant" {
-		m.recorded = "Historical call details unavailable"
+		m.recorded = func(int) string { return "Historical call details unavailable" }
 		if len(item.ExecutionEvidence) > 0 {
-			m.recorded = "Historical — not current verification\n" + m.chatLog.executionHistory(m.chatLog.nextID, item.ToolCalls, item.ExecutionEvidence)
+			m.recorded = m.chatLog.historyView("Historical — not current verification\n", m.chatLog.nextID, item.ToolCalls, item.ExecutionEvidence)
 		}
 	}
 	m.chatLog.appendTranscript(item)
@@ -1183,7 +1193,7 @@ func (m *model) submit() (*model, tea.Cmd) {
 func (m *model) sendPrompt(text string) tea.Cmd {
 	m.appendHistory(text)
 	m.lastPrompt, m.steeredTurn = text, nil
-	m.recorded, m.recordedWarning, m.turnStart = "", "", m.chatLog.nextID
+	m.recorded, m.recordedWarning, m.turnStart = nil, "", m.chatLog.nextID
 	m.chatLog.recordedTools = nil
 	m.chatLog.Append(message{role: "user", text: text})
 	m.sending = true
@@ -1366,6 +1376,9 @@ func (m *model) updateChatViewportKey(msg tea.KeyPressMsg) bool {
 const scrollStep = 3
 
 func (m *model) updateMouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	if m.overlay.Update(msg) {
+		return m, nil
+	}
 	if m.logPanel.mode == modeLogs {
 		m.syncLogViewport()
 		switch msg.Button {

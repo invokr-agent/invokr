@@ -283,23 +283,129 @@ func (m message) foldable() bool {
 	return m.role == "reasoning" || m.role == "tool" && m.text == "" && m.toolStatus != toolRunning
 }
 
-// Format the latest request for the existing modal, without changing the prose.
-func (c *chatLog) executionHistory(start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) string {
-	evidence = slices.Clone(evidence)
-	for i, item := range evidence {
-		preview := item.Command
-		if idx := slices.IndexFunc(c.recordedTools, func(m message) bool {
-			return m.id > start && item.CallID != "" && m.role == "tool" && m.toolID == item.CallID
-		}); idx >= 0 {
-			preview = cmp.Or(preview, primaryArgLimit(c.recordedTools[idx].toolName, c.recordedTools[idx].toolArgs, 160))
+// historyView is the Alt+R breakdown laid out at whatever width the overlay
+// gives it, so rows stay one line and re-flow on resize.
+func (c *chatLog) historyView(prefix string, start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) func(int) string {
+	// Built once per width: the overlay calls this on every frame it is open.
+	lastWidth, last := -1, ""
+	return func(width int) string {
+		if width != lastWidth {
+			lastWidth, last = width, prefix+c.executionHistory(start, failures, evidence, width)
 		}
-		evidence[i].CallID, evidence[i].Command = cmp.Or(preview, "arguments unavailable"), ""
+		return last
 	}
-	details := turn.AppendExecutionGuard(turn.AppendToolOutcomeGuard("", failures), evidence)
-	if details == "" {
+}
+
+// executionHistory renders one row per call, needs-a-look calls first and
+// identical neighbours collapsed with a count. "(stale)" is dropped: every row
+// comes from the same finished turn, so it would repeat on all of them.
+func (c *chatLog) executionHistory(start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence, width int) string {
+	// A failed call is in both lists: the evidence row carries the call, the
+	// failure its reason (first line only; the rest is format help). ToolOutcome
+	// has no call ID, so a tool's reasons join its failed rows in order. A reason
+	// with no row left to join gets a row of its own.
+	var rows []string
+	reasons := map[string][]string{}
+	for _, failure := range failures {
+		detail, _, _ := strings.Cut(failure.Detail, "\n")
+		reasons[failure.Tool] = append(reasons[failure.Tool], cmp.Or(detail, failure.Kind))
+	}
+	settled := slices.Clone(evidence)
+	// Needs-a-look calls first, the rest in the order they ran.
+	slices.SortStableFunc(settled, func(a, b turn.ExecutionEvidence) int {
+		_, aState := recordedGlyph(a)
+		_, bState := recordedGlyph(b)
+		return cmp.Compare(bState, aState)
+	})
+	var prevKey string
+	count := 0
+	for _, item := range settled {
+		target := cmp.Or(c.callTarget(start, item, width), "arguments unavailable")
+		outcome := recordedOutcome(item)
+		if pending := reasons[item.Tool]; item.Outcome != "completed" && len(pending) > 0 {
+			outcome, reasons[item.Tool] = outcome+": "+pending[0], pending[1:]
+		}
+		key := item.Tool + "\x1f" + target + "\x1f" + outcome
+		if key == prevKey {
+			count++
+		} else {
+			count = 1
+			rows = append(rows, "")
+			prevKey = key
+		}
+		// Re-rendered rather than marked up afterwards: renderToolLineWidth pads
+		// to the width it is given, so the count cannot push the row wider.
+		glyph, state := recordedGlyph(item)
+		if count > 1 {
+			outcome += fmt.Sprintf(" ×%d", count)
+		}
+		rows[len(rows)-1] = renderToolLineWidth(glyph, item.Tool, target, outcome, state, width)
+	}
+	for _, failure := range failures {
+		for _, reason := range reasons[failure.Tool] {
+			rows = append([]string{renderToolLineWidth(glyphFail, failure.Tool, reason, failure.Kind, toolFailed, width)}, rows...)
+		}
+		delete(reasons, failure.Tool)
+	}
+	if len(rows) == 0 {
 		return "No tool calls recorded for this request"
 	}
-	return details
+	return ansi.Truncate(historyHeader, width, "…") + "\n" + strings.Join(rows, "\n")
+}
+
+const historyHeader = "Execution history — not final task status; does not establish full task verification"
+
+// recordedGlyph marks and colours a row the way the transcript blocks do:
+// anything that did not complete reads as a failure.
+func recordedGlyph(item turn.ExecutionEvidence) (string, toolStatus) {
+	switch item.Outcome {
+	case "completed":
+		return glyphOK, toolDone
+	case "incomplete":
+		return glyphRun, toolFailed // the call never settled; it is not a verdict
+	default:
+		return glyphFail, toolFailed
+	}
+}
+
+// recordedOutcome is the row's right column: what the call ended as, plus its
+// reason and exit codes when the ledger has them.
+func recordedOutcome(item turn.ExecutionEvidence) string {
+	out := cmp.Or(item.Outcome, "unknown")
+	// An exit code already names the failure, so a code that only restates it
+	// ("exit 2", "exit_1") is dropped.
+	if item.Code != "" && item.Code != item.Outcome && (item.ExitCode == nil || !strings.HasPrefix(item.Code, "exit")) {
+		out += " " + item.Code
+	}
+	if item.ExitCode != nil {
+		out += fmt.Sprintf(" exit=%d", *item.ExitCode)
+	}
+	return out
+}
+
+// callTarget is the row's target: the ledger's command when it carries one,
+// otherwise the call's own recorded arguments. Arguments are only read for a
+// call ID recorded after start, so a reused ID cannot lend an earlier request's
+// path to this row.
+func (c *chatLog) callTarget(start uint64, item turn.ExecutionEvidence, width int) string {
+	if item.Command != "" {
+		return oneLine(item.Command)
+	}
+	for _, msg := range c.recordedTools {
+		if msg.id <= start || item.CallID == "" || msg.role != "tool" || msg.toolID != item.CallID {
+			continue
+		}
+		// The row's own chrome -- glyph, icon, verb column, chip padding, outcome
+		// column -- takes the rest, so a preview is bounded to what the row shows.
+		return oneLine(primaryArgLimit(msg.toolName, msg.toolArgs, max(toolPreviewMax, width-30)))
+	}
+	return ""
+}
+
+// oneLine flattens a row target: whitespace runs become one space, and the
+// escaped quotes of arguments that did not parse as JSON read as plain quotes.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(strings.ReplaceAll(s, `\"`, `"`)), " ")
 }
 
 // observedEvidence is UI-only fallback when a failed/canceled runner returns
