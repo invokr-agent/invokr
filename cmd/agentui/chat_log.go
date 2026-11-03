@@ -434,21 +434,101 @@ func renderThinkingBlock(text string, width int, expanded bool) string {
 	// The gutter belongs to the thinking itself: drawn in the frame colour it
 	// reads as panel chrome, unconnected to the reasoning it wraps.
 	gutter := ui.Invokr.Thinking.Render(thinkingGutter)
-	// Laid out as markdown (lists, code, no stray backticks), then dimmed as
-	// one: thinking is read past, so it takes no colours of its own.
-	body := ansi.Strip(renderMarkdown(strings.TrimSpace(text), max(10, width-len(answerIndent)-len([]rune(thinkingGutter)))))
-	// Blank lines between paragraphs are dropped: the gutter already sets the
-	// block apart, and a folded preview should spend its rows on text.
-	lines := slices.DeleteFunc(strings.Split(body, "\n"), func(line string) bool { return strings.TrimSpace(line) == "" })
+	body := max(10, width-len(answerIndent)-len([]rune(thinkingGutter)))
+	lines := thinkingLines(strings.TrimSpace(text), body)
 	// Long thinking folds like tool output: a few lines, then a count that
 	// alt+x or a click on the label expands.
 	if hidden := len(lines) - thinkingPreviewLines; hidden > 0 && !expanded {
-		lines = append(lines[:thinkingPreviewLines:thinkingPreviewLines], "▸ "+moreLines(hidden))
+		lines = append(lines[:thinkingPreviewLines:thinkingPreviewLines], ui.Invokr.Thinking.Render("▸ "+moreLines(hidden)))
 	}
 	for i, line := range lines {
-		lines[i] = answerIndent + gutter + ui.Invokr.Thinking.Render(line)
+		lines[i] = answerIndent + gutter + line
 	}
 	return answerIndent + ui.Invokr.Muted.Render("thinking") + "\n" + strings.Join(lines, "\n")
+}
+
+// thinkingLines lays reasoning out as markdown, then dims it as one block —
+// except fenced code, which keeps chroma's colours pulled toward the panel ground
+// so a diff or a snippet inside thinking still reads as code.
+func thinkingLines(text string, body int) []string {
+	var out []string
+	for _, segment := range splitFenced(text) {
+		if segment.code {
+			out = append(out, cappedLines(strings.TrimRight(segment.text, "\n"), body, 0,
+				codeStyle(codeFileFor(segment.language), true))...)
+			continue
+		}
+		// Blank lines between paragraphs are dropped: the gutter already sets
+		// the block apart, and a folded preview should spend its rows on text.
+		for _, line := range strings.Split(ansi.Strip(renderMarkdown(segment.text, body)), "\n") {
+			if strings.TrimSpace(line) != "" {
+				out = append(out, ui.Invokr.Thinking.Render(line))
+			}
+		}
+	}
+	return out
+}
+
+// thinkingSegment is one run of reasoning: prose, or fenced code with the
+// language its fence named.
+type thinkingSegment struct {
+	code     bool
+	language string
+	text     string
+}
+
+// splitFenced cuts fenced code out of reasoning markdown. A fence opens on up to
+// three spaces of indent plus ``` or ~~~, and closes on the same marker; an
+// unterminated fence runs to the end of the text, which is how a truncated
+// reasoning block still reads as code.
+func splitFenced(text string) []thinkingSegment {
+	var segments []thinkingSegment
+	open, language := "", ""
+	for _, line := range strings.Split(text, "\n") {
+		marker, info := fenceMarker(line)
+		if open != "" && marker == open {
+			open = ""
+			continue
+		}
+		if open == "" && marker != "" {
+			open, language = marker, info
+			continue
+		}
+		inCode := open != ""
+		if !inCode {
+			language = ""
+		}
+		segments = appendThinkingLine(segments, inCode, language, line)
+	}
+	return segments
+}
+
+func appendThinkingLine(segments []thinkingSegment, code bool, language, line string) []thinkingSegment {
+	if len(segments) > 0 && segments[len(segments)-1].code == code {
+		segments[len(segments)-1].text += line + "\n"
+		return segments
+	}
+	return append(segments, thinkingSegment{code: code, language: language, text: line + "\n"})
+}
+
+// fenceMarker returns a fence's marker and its info string, or two empty strings
+// for a prose line.
+func fenceMarker(line string) (string, string) {
+	body := strings.TrimLeft(line, " \t")
+	if len(line)-len(body) > 3 {
+		return "", ""
+	}
+	for _, marker := range []string{"```", "~~~"} {
+		if !strings.HasPrefix(body, marker) {
+			continue
+		}
+		fields := strings.Fields(strings.TrimPrefix(body, marker))
+		if len(fields) == 0 {
+			return marker, ""
+		}
+		return marker, fields[0]
+	}
+	return "", ""
 }
 
 const thinkingGutter = "│ "

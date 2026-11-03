@@ -12,6 +12,8 @@ import (
 	"github.com/invokr-agent/invokr/surface/ui"
 	toolcore "github.com/invokr-agent/invokr/tools/core"
 
+	"github.com/antonikliment/tuikit"
+
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -58,7 +60,8 @@ func (genericRenderer) Summary(m message, width int) string {
 }
 
 func (genericRenderer) Detail(m message, width int) string {
-	return withOutputBlock(settledToolLine(m, width), m.toolOutput, width, 0)
+	text, file := resultBlock(m)
+	return withOutputBlock(settledToolLine(m, width), text, file, width, 0)
 }
 
 // shellRenderer shows the command line (exit glyph from the ledger flags) and
@@ -70,17 +73,36 @@ type shellRenderer struct{}
 // shows. The rest hides behind the fold indicator.
 const shellTailLines = 5
 
+// A shell result that parses as a unified diff gets the git diff renderer rather
+// than a text tail: `git diff`, `git show` and `diff -u` run through the shell
+// then read like the native git tool and like an applied edit, with the same
+// preview cap when collapsed and the whole diff when expanded.
 func (shellRenderer) Summary(m message, width int) string {
 	line := settledToolLine(m, width)
-	tail, hidden := tailLines(shellText(m.toolOutput), shellTailLines)
+	text := shellText(m.toolOutput)
+	if isUnifiedDiff(text) {
+		return line + "\n" + renderGitDiff(text, width, maxDiffLines)
+	}
+	tail, hidden := tailLines(text, shellTailLines)
 	if hidden > 0 {
 		line += "\n" + foldIndicator(hidden, width)
 	}
-	return withOutputBlock(line, strings.Join(tail, "\n"), width, 0)
+	return withOutputBlock(line, strings.Join(tail, "\n"), "", width, 0)
 }
 
 func (shellRenderer) Detail(m message, width int) string {
-	return withOutputBlock(settledToolLine(m, width), shellText(m.toolOutput), width, 0)
+	line := settledToolLine(m, width)
+	text := shellText(m.toolOutput)
+	if isUnifiedDiff(text) {
+		return line + "\n" + renderGitDiff(text, width, 0)
+	}
+	return withOutputBlock(line, text, "", width, 0)
+}
+
+// isUnifiedDiff reports whether recorded output parses as a unified diff, which
+// is what tuikit's DiffView needs to number and colour it per file.
+func isUnifiedDiff(text string) bool {
+	return len(tuikit.ParseUnifiedDiff(text)) > 0
 }
 
 // shellText unwraps the shell tool's recorded JSON envelope into the streams a
@@ -120,7 +142,7 @@ func (patchRenderer) Summary(m message, width int) string {
 func (patchRenderer) Detail(m message, width int) string {
 	line := settledToolLine(m, width)
 	if m.toolDiff == "" {
-		return withOutputBlock(line, m.toolOutput, width, 0)
+		return withOutputBlock(line, m.toolOutput, "", width, 0)
 	}
 	return line + "\n" + renderEditDiff(m.editFile, m.toolDiff, width, 0)
 }
@@ -136,19 +158,19 @@ func (gitReadRenderer) Summary(m message, width int) string {
 	line := settledToolLine(m, width)
 	stat, diff, plain := gitReadParts(m.toolOutput)
 	if diff == "" {
-		return withOutputBlock(line, plain, width, maxDiffLines)
+		return withOutputBlock(line, plain, "", width, maxDiffLines)
 	}
 	if hidden := strings.Count(diff, "\n") + 1; hidden > 0 {
 		line += "\n" + foldIndicator(hidden, width) + " " + ui.Invokr.Muted.Render("(diff)")
 	}
-	return withOutputBlock(line, stat, width, maxDiffLines)
+	return withOutputBlock(line, stat, "", width, maxDiffLines)
 }
 
 func (gitReadRenderer) Detail(m message, width int) string {
 	line := settledToolLine(m, width)
 	_, diff, plain := gitReadParts(m.toolOutput)
 	if diff == "" {
-		return withOutputBlock(line, plain, width, 0)
+		return withOutputBlock(line, plain, "", width, 0)
 	}
 	return line + "\n" + renderGitDiff(diff, width, 0)
 }
@@ -239,11 +261,62 @@ func foldIndicator(hidden, width int) string {
 	return "    " + ui.Invokr.Muted.Render(ansi.Truncate("▸ "+moreLines(hidden), max(1, width-4), "…"))
 }
 
-func withOutputBlock(line, output string, width, maxLines int) string {
+func withOutputBlock(line, output, file string, width, maxLines int) string {
 	if output = strings.TrimRight(output, "\n"); output == "" {
 		return line
 	}
-	return line + "\n" + strings.Join(cappedLines(output, width, maxLines, func(s string) string { return ui.Invokr.Muted.Render(s) }), "\n")
+	if len(output) > maxCodeBytes {
+		file = "" // too big to lex every frame: plain text is the fallback
+	}
+	return line + "\n" + strings.Join(cappedLines(output, width, maxLines, codeStyle(file, false)), "\n")
+}
+
+// resultBlock unwraps a settled tool result into the text to show and the file
+// its code should be highlighted as: the tool's own path argument when it names
+// one, otherwise the info string of a code fence wrapping the result. Neither
+// known leaves the block plain muted text, exactly as before.
+func resultBlock(m message) (text, file string) {
+	text, file = m.toolOutput, outputFile(m.toolArgs)
+	var lang string
+	if text, lang = stripFence(text); lang != "" {
+		file = cmp.Or(file, codeFileFor(lang))
+	}
+	return text, file
+}
+
+// outputFile names the file a tool result belongs to, so chroma picks the lexer
+// from its extension. Tools spell the argument several ways.
+func outputFile(argsJSON string) string {
+	var fields struct {
+		Path     string `json:"path"`
+		FilePath string `json:"file_path"`
+		Filename string `json:"filename"`
+		File     string `json:"file"`
+	}
+	if json.Unmarshal([]byte(argsJSON), &fields) != nil {
+		return ""
+	}
+	path := cmp.Or(fields.Path, fields.FilePath, fields.Filename, fields.File)
+	if !strings.Contains(path, ".") {
+		return ""
+	}
+	return path
+}
+
+// stripFence drops a wrapping code fence and reports its info string ("" when
+// the text is not fenced), so a fenced result is highlighted rather than showing
+// backticks.
+func stripFence(text string) (string, string) {
+	lines := strings.Split(text, "\n")
+	if len(lines) < 2 {
+		return text, ""
+	}
+	open, lang := fenceMarker(lines[0])
+	last, _ := fenceMarker(lines[len(lines)-1])
+	if open == "" || last != open {
+		return text, ""
+	}
+	return strings.Join(lines[1:len(lines)-1], "\n"), lang
 }
 
 // cappedLines indents and styles each line of text, truncating to the pane
