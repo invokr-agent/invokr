@@ -242,6 +242,8 @@ func (s *Session) Usage() turn.TokenUsage {
 
 func (s *Session) RequestCompaction() { s.runner.budget.RequestCompaction() }
 
+func (s *Session) CompactNow(ctx context.Context) { s.runner.compactNow(ctx, s.sessionID) }
+
 func (s *Session) CompactionThreshold() int { return s.runner.budget.compactThreshold() }
 
 // CompactionEstimate reports roughly how many prompt tokens /compact would

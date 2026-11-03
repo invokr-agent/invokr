@@ -76,7 +76,7 @@ func init() {
 		{name: "network", usage: "/network [ask|allow]", summary: "network access without asking for this Auto session", handler: voidCmd((*model).setAutoNetwork)},
 		{name: "reads", usage: "/reads [workspace|ask]", summary: "reads outside the workspace: refuse, or ask each time (this session)", handler: voidCmd((*model).setReads)},
 		{name: "clear", usage: "/clear", summary: "start a new session (keep saved history and memory)", handler: runClearCommand},
-		{name: "compact", usage: "/compact", summary: "compact context before next turn", handler: sessionCmd(compactCommandText), plain: sessionText(compactCommandText)},
+		{name: "compact", usage: "/compact", summary: "compact context now (mid-turn: before the next model call)", handler: runCompactCommand, plain: compactPlain},
 		{name: "usage", usage: "/usage", summary: "show token usage", handler: runContextCommand, plain: sessionText(plainContextText)},
 		{name: "grants", usage: grantUsageLine, summary: "manage standing approval grants and denials", handler: textCmd((*model).grantsCommand)},
 		{name: "help", usage: "/help", summary: "show this help", handler: runHelpCommand},
@@ -362,6 +362,29 @@ func plainModelText(session turn.Session, args []string) string {
 func compactCommandText(session turn.Session, _ []string) string {
 	requestContextCompaction(session)
 	return compactFeedback(session)
+}
+
+type immediateCompactor interface{ CompactNow(context.Context) }
+
+func runCompactCommand(m *model, _ string, _ []string) tea.Cmd {
+	compactor, ok := m.session.(immediateCompactor)
+	if m.sending || !ok {
+		m.commandMessage(compactCommandText(m.session, nil))
+		return nil
+	}
+	m.commandMessage(compactFeedback(m.session))
+	ctx := m.ctx
+	return func() tea.Msg { compactor.CompactNow(ctx); return nil }
+}
+
+func compactPlain(ctx context.Context, _ CommandBackend, session turn.Session, _ string, _ []string) (string, bool) {
+	compactor, ok := session.(immediateCompactor)
+	if !ok {
+		return compactCommandText(session, nil), true
+	}
+	feedback := compactFeedback(session)
+	compactor.CompactNow(ctx)
+	return feedback, true
 }
 
 func runPlainBackend(ctx context.Context, backend CommandBackend, _ turn.Session, name string, args []string) (string, bool) {
