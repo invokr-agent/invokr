@@ -219,6 +219,7 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 		if !readOnlyGit {
 			sb.PinnedRW = mountDirs
 			sb.RW = append(sb.RW, mountDirs...)
+			sb.Sealed = append(sb.Sealed, siblingWorktreeEntries(plan.workspaceRoot, gitDirs)...)
 		}
 		// HOME is forwarded but the home directory itself is not mounted, so
 		// git inside the sandbox finds no global config and therefore no
@@ -245,6 +246,15 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 // Plan mode, and for read-only git probes.
 func (p preparedShellCommand) readOnlyGit() bool { return p.mode == approval.Plan || p.gitReadOnly }
 
+// siblingWorktreeEntries lists the repository's other linked-worktree entries.
+// Their checkouts are not mounted, so `git worktree prune` in the sandbox
+// takes them for stale and deletes them; sealed entries survive it.
+func siblingWorktreeEntries(workspaceRoot string, gitDirs []string) []string {
+	common := slices.Concat(gitDirs, []string{filepath.Join(workspaceRoot, ".git")})[0] // gitDirs leads with the shared repository.
+	dirs, _ := filepath.Glob(filepath.Join(common, "worktrees", "*"))
+	return slices.DeleteFunc(dirs, func(dir string) bool { return slices.Contains(gitDirs, dir) })
+}
+
 func sealReadOnly(sb sandbox.Plan, sources []string) sandbox.Plan {
 	sb.Sealed, sb.RO = append(sb.Sealed, sources...), append(sb.RO, sources...)
 	sb.RW = slices.DeleteFunc(sb.RW, func(path string) bool {
@@ -260,10 +270,7 @@ func sealReadOnly(sb sandbox.Plan, sources []string) sandbox.Plan {
 // is nothing to share, so the sandbox keeps its private tmpfs.
 func sharedTmpDir(workspaceRoot string) string {
 	dir := fsutil.SharedTmpDir(workspaceRoot)
-	if dir == "" {
-		return ""
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if dir == "" || os.MkdirAll(dir, 0o700) != nil {
 		return ""
 	}
 	return dir
@@ -346,11 +353,8 @@ func userToolFiles(allowed []string) []string {
 			continue
 		}
 		for _, bin := range UserBinDirs() {
-			path, err := exec.LookPath(filepath.Join(bin, name))
-			if err != nil {
-				continue
-			}
-			if target, err := filepath.EvalSymlinks(path); err == nil && target != path {
+			path, lookErr := exec.LookPath(filepath.Join(bin, name))
+			if target, err := filepath.EvalSymlinks(path); lookErr == nil && err == nil && target != path {
 				files = append(files, target)
 			}
 		}
