@@ -224,3 +224,21 @@ func TestPathMustBeAnExistingDirectory(t *testing.T) {
 		t.Fatalf("workspace root: err %v, want it refused as already granted", err)
 	}
 }
+
+// A read grant is sealed read-only, so one asked for after a write grant on
+// the same folder must not take the write back.
+func TestReadGrantKeepsAnEarlierWriteGrantWritable(t *testing.T) {
+	root, cache := t.TempDir(), t.TempDir()
+	caller := sessionCaller(t, root, true)
+	if _, err := request(t, caller, cache, "write", "session"); err != nil {
+		t.Fatalf("write grant: %v", err)
+	}
+	out, err := request(t, caller, cache, "read", "session")
+	if err != nil {
+		t.Fatalf("read grant: %v", err)
+	}
+	path := grantedPath(t, out)
+	if slices.Contains(ro(), path) || !slices.Contains(rw(), path) {
+		t.Fatalf("rw %v ro %v: %s should stay writable", rw(), ro(), path)
+	}
+}

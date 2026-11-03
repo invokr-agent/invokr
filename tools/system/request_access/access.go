@@ -96,6 +96,11 @@ func (s *grantStore) rootsFor(sessionID string) (rw, ro []string) {
 		}
 		ro = append(ro, record.path)
 	}
+	// A read grant is sealed read-only in the sandbox, so one inside a write
+	// grant would silently take that write back.
+	ro = slices.DeleteFunc(ro, func(path string) bool {
+		return slices.ContainsFunc(rw, func(root string) bool { return under(path, root) })
+	})
 	return rw, ro
 }
 
@@ -162,15 +167,12 @@ func refused(path string) error {
 	if path == "/" {
 		return errors.New("the filesystem root cannot be opened to the agent")
 	}
-	home, _ := os.UserHomeDir()
-	home = filepath.Clean(home)
-	if home != "" && path == home {
+	if home, _ := os.UserHomeDir(); home != "" && path == filepath.Clean(home) {
 		return errors.New("the home directory itself cannot be opened to the agent; ask for the one directory inside it that you need")
 	}
 	ownDirs := []string{config.InvokrHomeDir(), filepath.Dir(config.DefaultConfigPath())}
 	for _, dir := range ownDirs {
-		dir = filepath.Clean(dir)
-		if dir != "" && under(path, dir) {
+		if dir = filepath.Clean(dir); dir != "" && under(path, dir) {
 			return fmt.Errorf("path is inside Invokr's own configuration directory %s, which cannot be opened to the agent", dir)
 		}
 	}
