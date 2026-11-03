@@ -11,6 +11,7 @@ import (
 type countingWriter struct{ buf strings.Builder }
 
 func (w *countingWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
+func (w *countingWriter) text() string                { return w.buf.String() }
 
 func TestWritePlainSerializesConcurrentWrites(t *testing.T) {
 	w := &countingWriter{}

@@ -193,6 +193,11 @@ func newModelWithCommands(ctx context.Context, session turn.Session, commands Co
 	if approvalQueue != nil && approvalQueue.Policy != nil {
 		m.policy = approvalQueue.Policy
 	}
+	// The provider's window is known before any turn runs, so the context meter
+	// can start at 0 instead of appearing only once a turn has reported usage.
+	if usage, ok := sessionUsage(session); ok && usage.ContextWindowTokens > 0 {
+		m.usage, m.hasUsage = usage, true
+	}
 	m.applyTheme()
 	return m
 }
@@ -803,6 +808,7 @@ func (m *model) drainToolEvents() {
 			m.chatLog.ApplyEvent(ev)
 			m.trackSteered(ev)
 			m.trackCompaction(ev)
+			m.trackUsage(ev)
 			m.noteToolSuggestion(ev)
 		}
 	}

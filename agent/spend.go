@@ -179,3 +179,13 @@ func (s spendCap) priced(usage turnpkg.TokenUsage) turnpkg.TokenUsage {
 	}
 	return usage
 }
+
+// pricedLive prices a turn that has not been recorded into the session yet, so
+// a mid-turn usage reading carries the cost the final response will.
+func (s spendCap) pricedLive(usage turnpkg.TokenUsage) turnpkg.TokenUsage {
+	if s.pricing.Configured() {
+		prompt, cached, completion := usage.SessionTotalsSoFar()
+		usage.SessionCost = s.pricing.Cost(prompt, cached, completion)
+	}
+	return usage
+}

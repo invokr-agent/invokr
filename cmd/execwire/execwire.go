@@ -17,6 +17,8 @@ const (
 	KeySystem = "system"
 	// KeyReasoning carries the TypeReasoning payload.
 	KeyReasoning = "reasoning"
+	// KeyUsage carries the TypeUsage payload.
+	KeyUsage = "usage"
 )
 
 // Event-type values emitted on the `type` field.
@@ -36,4 +38,9 @@ const (
 	// TypeReasoning records one turn's full reasoning text. A consumer that
 	// does not know it can ignore it, same as TypeSystemPrompt.
 	TypeReasoning = "reasoning"
+	// TypeUsage reports the turn's running token usage after each model call, so
+	// a caller can meter the context window while the run is still going. Like
+	// the other observation-only types it carries no "item" and no thread
+	// outcome, and the thread.completed usage line is unchanged by it.
+	TypeUsage = "usage"
 )
