@@ -34,7 +34,7 @@ func TestTUIClearStartsNewSession(t *testing.T) {
 	s.submit("new conversation")
 	s.waitFor(regexp.MustCompile(`new turn done`), 10*time.Second)
 	s.send("M-r")
-	s.waitFor(regexp.MustCompile(`read "README.md"`), 5*time.Second)
+	s.waitFor(regexp.MustCompile(`read\s+README\.md`), 5*time.Second)
 	s.send("q")
 	requests := provider.Snapshot().CompletionRequests
 	data, err := json.Marshal(requests[len(requests)-1])
