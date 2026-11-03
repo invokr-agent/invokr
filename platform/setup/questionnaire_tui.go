@@ -135,7 +135,7 @@ func finishQuestionnaire(out io.Writer, answers Answers, homeDisplay string) (Qu
 // installDefaultSkills installs the curated set from the default hub. Setup
 // must complete even offline, so every failure is a printed warning, not an
 // error.
-func installDefaultSkills(homeDir string, out io.Writer) {
+var installDefaultSkills = func(homeDir string, out io.Writer) {
 	ctx, cancel := context.WithTimeout(context.Background(), skillsInstallTimeout)
 	defer cancel()
 	svc := hub.NewService(config.AppConfig{Skills: config.SkillsConfig{
