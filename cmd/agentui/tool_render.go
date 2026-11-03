@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/invokr-agent/invokr/support/strutil"
@@ -404,12 +405,20 @@ func printedFile(command string) string {
 		if len(words) == 0 || !printers[words[0]] {
 			continue
 		}
-		for _, w := range words[1:] {
-			if w[0] == '-' || w[0] == '+' || w[0] == '\'' || w[0] == '"' || w[0] == '$' || w[0] == '*' || strings.ContainsAny(w, "<>*;&") {
-				continue
+		for i, w := range words[1:] {
+			if !notAFile(words[i], w) {
+				return w
 			}
-			return w
 		}
 	}
 	return ""
+}
+
+// notAFile reports a printer argument that cannot be the file: a flag, a flag's
+// numeric value (-n 20), a quoted script (sed '1,20p'), or shell syntax.
+func notAFile(prev, w string) bool {
+	if _, err := strconv.Atoi(w); err == nil && strings.HasPrefix(prev, "-") {
+		return true
+	}
+	return strings.ContainsAny(w[:1], "-+'\"$*") || strings.ContainsAny(w, "<>*;&")
 }

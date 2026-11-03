@@ -1101,7 +1101,9 @@ func hintAffordance(binding key.Binding, label string) string {
 // probe answers asynchronously, so a window can arrive after the model was
 // built; adoption is one-shot, and a turn's own usage outranks it.
 func (m *model) adoptSessionWindow() {
-	if m.hasUsage {
+	// A turn in flight publishes its own usage; polling the runner's lock from
+	// View while it runs would contend with it every frame.
+	if m.hasUsage || m.sending {
 		return
 	}
 	usage, ok := sessionUsage(m.session)

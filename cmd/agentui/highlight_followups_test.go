@@ -61,6 +61,8 @@ func TestPrintedFileIsHighlightedAsItsSource(t *testing.T) {
 		{`cat cmd/agentui/markdown.go`, "cmd/agentui/markdown.go"},
 		{`cat cmd/agentui/markdown.go | head -20`, "cmd/agentui/markdown.go"},
 		{`head -40 cmd/agentui/tool_render.go`, "cmd/agentui/tool_render.go"},
+		{`head -n 20 a.go`, "a.go"},
+		{`tail -c 100 x.go`, "x.go"},
 		{`tail -n +30 cmd/agentui/render.go`, "cmd/agentui/render.go"},
 		{`sed -n '1,20p' cmd/agentui/format.go`, "cmd/agentui/format.go"},
 		{`go test ./cmd/...`, ""},
