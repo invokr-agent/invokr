@@ -820,8 +820,10 @@ func (m *model) View() tea.View {
 	if m.overlay.IsOpen() && m.overlay.Title() == "tools" && m.toolDialog.open {
 		content = m.toolDialogView(content)
 	} else {
-		// The popup keeps clear of the input block, so it cannot cover the prompt.
-		m.overlay.Align.ReserveBottom = lipgloss.Height(m.inputArea()) + lipgloss.Height(m.statusRow())
+		if m.overlay.IsOpen() {
+			// The popup keeps clear of the input block, so it cannot cover the prompt.
+			m.overlay.Align.ReserveBottom = lipgloss.Height(m.inputArea()) + lipgloss.Height(m.statusRow())
+		}
 		content = m.overlay.Render(content, m.width-m.frameInset(), m.height-m.frameInset()/2)
 	}
 	content = m.settingsView(content)

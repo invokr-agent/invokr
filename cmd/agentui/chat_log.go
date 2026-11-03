@@ -286,7 +286,14 @@ func (m message) foldable() bool {
 // historyView is the Alt+R breakdown laid out at whatever width the overlay
 // gives it, so rows stay one line and re-flow on resize.
 func (c *chatLog) historyView(prefix string, start uint64, failures []turn.ToolOutcome, evidence []turn.ExecutionEvidence) func(int) string {
-	return func(width int) string { return prefix + c.executionHistory(start, failures, evidence, width) }
+	// Built once per width: the overlay calls this on every frame it is open.
+	lastWidth, last := -1, ""
+	return func(width int) string {
+		if width != lastWidth {
+			lastWidth, last = width, prefix+c.executionHistory(start, failures, evidence, width)
+		}
+		return last
+	}
 }
 
 // executionHistory renders one row per call, needs-a-look calls first and
