@@ -44,57 +44,32 @@ func putRelayOnPath(t *testing.T, body string) {
 	t.Setenv("PATH", dir)
 }
 
-// keepRelayAlive pins the liveness probe, then puts the real probe back.
-func keepRelayAlive(t *testing.T, up bool) {
-	t.Helper()
-	orig := relayAlive
-	t.Cleanup(func() { relayAlive = orig })
-	relayAlive = func(context.Context) bool { return up }
-}
-
-// /relay answers all three questions at once: running or not, the directory the
-// relay serves, and whether this session is the one chat reaches. agent-relay's
-// own status text carries the directory, so it is shown verbatim.
-func TestRelayCommandShowsRunningRelayAndItsDirectory(t *testing.T) {
-	keepRelayAlive(t, true)
-	putRelayOnPath(t, "printf '%s\\n' 'relay running in /home/me/proj for telegram'")
-	m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, nil, nil)
-	if _, handled := m.runCommand("/relay"); !handled {
-		t.Fatal("/relay not handled")
-	}
-	reply := m.chatLog.messages[len(m.chatLog.messages)-1].text
-	for _, want := range []string{"/home/me/proj", "not shared"} {
-		if !strings.Contains(reply, want) {
-			t.Fatalf("/relay reply = %q, want %q", reply, want)
-		}
-	}
-}
-
-// A relay that is down is reported as such, without asking agent-relay.
-func TestRelayCommandReportsARelayThatIsDown(t *testing.T) {
-	keepRelayAlive(t, false)
-	t.Setenv("PATH", t.TempDir())
-	m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, nil, nil)
-	if _, handled := m.runCommand("/relay"); !handled {
-		t.Fatal("/relay not handled")
-	}
-	reply := m.chatLog.messages[len(m.chatLog.messages)-1].text
-	if !strings.HasPrefix(reply, "chat relay: not running") {
-		t.Fatalf("/relay reply = %q, want not running", reply)
-	}
-}
-
-// agent-relay can be up and still refuse to report: its status command may fail.
-// The failure is shown, never dressed up as "not running".
-func TestRelayCommandSurfacesStatusFailure(t *testing.T) {
-	keepRelayAlive(t, true)
-	putRelayOnPath(t, "echo 'no status for this directory' >&2; exit 3")
-	m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, nil, nil)
-	if _, handled := m.runCommand("/relay"); !handled {
-		t.Fatal("/relay not handled")
-	}
-	got := m.chatLog.messages[len(m.chatLog.messages)-1].text
-	if !strings.HasPrefix(got, "error: ") {
-		t.Fatalf("/relay reply = %q, want the failure surfaced", got)
+// /relay shows agent-relay's own status, whatever state it reports, and says
+// this session is not shared. Not installed, a status that fails with its own
+// reason and one that hangs are each answered rather than swallowed.
+func TestRelayCommandReportsAgentRelayStatus(t *testing.T) {
+	t.Cleanup(func() { relayStatusTimeout = 2 * time.Second })
+	relayStatusTimeout = 200 * time.Millisecond
+	for _, c := range []struct{ name, script, want string }{
+		{"running", "echo 'relay running in /home/me/proj'", "relay running in /home/me/proj"},
+		{"down", "echo 'agent-relay is not running'; exit 1", "agent-relay is not running"},
+		{"failure reason", "echo 'no status for this directory' >&2; exit 3", "no status for this directory"},
+		{"hung", "while :; do :; done", "agent-relay status: signal: killed"},
+		{"not installed", "", "agent-relay is not installed"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if c.script == "" {
+				t.Setenv("PATH", t.TempDir())
+			} else {
+				putRelayOnPath(t, c.script)
+			}
+			m := newModel(context.Background(), &fakeSession{}, nil, nil, nil, false, nil, nil)
+			if _, handled := m.runCommand("/relay"); !handled {
+				t.Fatal("/relay not handled")
+			}
+			if reply := m.chatLog.messages[len(m.chatLog.messages)-1].text; !strings.HasPrefix(reply, c.want) || !strings.HasSuffix(reply, "this session: not shared") {
+				t.Fatalf("/relay reply = %q, want %q then the shared line", reply, c.want)
+			}
+		})
 	}
 }

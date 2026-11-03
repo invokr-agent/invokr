@@ -2,6 +2,7 @@ package agentui
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"strings"
 	"sync/atomic"
@@ -9,6 +10,8 @@ import (
 )
 
 const relayPollInterval = 15 * time.Second
+
+var relayStatusTimeout = 2 * time.Second
 
 // relayRunning is whether an agent-relay process is up, as of the last poll.
 var relayRunning atomic.Bool
@@ -18,17 +21,21 @@ var relayAlive = func(ctx context.Context) bool {
 	return exec.CommandContext(ctx, "pgrep", "-x", "agent-relay").Run() == nil
 }
 
-// relayStatusText answers /relay. agent-relay's own status names the directory
-// it serves; no transport shares a live TUI session with it yet.
+// relayStatusText answers /relay with agent-relay's own status for this
+// directory. It runs inside Update, so a hung agent-relay must not freeze the
+// UI; the status exits non-zero when the relay is down, and its text says so.
 func (m *model) relayStatusText([]string) string {
-	if !relayAlive(m.ctx) {
-		return "chat relay: not running\nthis session: not shared"
+	ctx, cancel := context.WithTimeout(m.ctx, relayStatusTimeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "agent-relay", "status").CombinedOutput()
+	status := strings.TrimSpace(string(out))
+	switch {
+	case errors.Is(err, exec.ErrNotFound):
+		status = "agent-relay is not installed; see `invokr relay status`"
+	case status == "" && err != nil:
+		status = "agent-relay status: " + err.Error()
 	}
-	out, err := exec.CommandContext(m.ctx, "agent-relay", "status").Output()
-	if err != nil {
-		return "error: agent-relay status: " + err.Error()
-	}
-	return strings.TrimSpace(string(out)) + "\nthis session: not shared"
+	return status + "\nthis session: not shared"
 }
 
 // watchRelay polls for agent-relay until ctx ends, calling changed when the
