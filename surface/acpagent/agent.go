@@ -16,6 +16,7 @@ import (
 
 	"github.com/invokr-agent/invokr/capability/approval"
 	"github.com/invokr-agent/invokr/constants"
+	"github.com/invokr-agent/invokr/platform/events"
 	"github.com/invokr-agent/invokr/platform/runtime"
 	"github.com/invokr-agent/invokr/platform/turn"
 	"github.com/invokr-agent/invokr/platform/version"
@@ -51,12 +52,46 @@ type Agent struct {
 // latestVersion is the newer invokr release tag, "" when none is known; tests replace it.
 var latestVersion = version.LatestVersion
 
-func Serve(ctx context.Context, in io.Reader, out io.Writer, newSession runtime.ChatSessionFunc, commands Commands) error {
+func Serve(ctx context.Context, in io.Reader, out io.Writer, bus events.Bus, newSession runtime.ChatSessionFunc, commands Commands) error {
 	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}
+	stopUsage := a.registerUsage(bus)
+	defer stopUsage()
 	latestVersion() // starts the background lookup so the first reply can carry its answer
 	a.conn.Serve(ctx, a)
 	<-a.conn.Done()
 	return a.conn.Err()
+}
+
+// registerUsage forwards the runner's running usage to the client, so the editor
+// meters the context window while a prompt is still running. One handler serves
+// the process; publishUsage decides which sessions are this agent's.
+func (a *Agent) registerUsage(bus events.Bus) func() {
+	if bus == nil {
+		return func() {}
+	}
+	return bus.Register(events.HandlerFunc(func(ctx context.Context, ev events.Event) error {
+		a.publishUsage(ctx, ev)
+		return nil
+	}))
+}
+
+// publishUsage sends the running context as an ACP usage_update. No Cost: invokr's
+// provider.pricing is currency-free and ACP Cost requires an ISO currency code.
+func (a *Agent) publishUsage(ctx context.Context, ev events.Event) {
+	if ev.Type != events.EventUsage || ev.Usage == nil {
+		return
+	}
+	id := acp.SessionID(ev.SessionID)
+	if _, served := a.sessions.Load(id); !served {
+		return
+	}
+	usage := *ev.Usage
+	if !usage.Available || usage.ContextWindowTokens <= 0 {
+		return
+	}
+	used := usage.LatestPromptTokens + usage.LatestCompletionTokens
+	_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{UsageUpdate: &acp.UsageUpdate{
+		Used: uint64(used), Size: uint64(usage.ContextWindowTokens)}})
 }
 
 func (a *Agent) Initialize(context.Context, acp.InitializeRequest) (acp.InitializeResponse, error) {

@@ -300,6 +300,8 @@ func writeExecEvent(out io.Writer, event events.Event) error {
 		return writeJSONLine(out, map[string]any{execwire.KeyType: execwire.TypeTurnCompleted})
 	case events.EventNotice:
 		return writeJSONLine(out, map[string]any{execwire.KeyType: execwire.TypeNotice, "notice": event.Notice})
+	case events.EventUsage:
+		return writeJSONLine(out, map[string]any{execwire.KeyType: execwire.TypeUsage, execwire.KeyUsage: event.Usage})
 	case events.EventSystemPrompt:
 		return writeJSONLine(out, map[string]any{execwire.KeyType: execwire.TypeSystemPrompt, execwire.KeySystem: event.System})
 	case events.EventReasoning:

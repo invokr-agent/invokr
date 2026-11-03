@@ -693,7 +693,7 @@ const contextMeterWidth = 16
 // It replaces the pre-redesign full-width bar plus "context: …" line, which
 // together took two rows above the input.
 func renderContextStatus(usage turn.TokenUsage, width, compactPercent int) string {
-	if !usage.Available {
+	if !usage.Available && usage.ContextWindowTokens <= 0 {
 		return ""
 	}
 	used := usage.LatestPromptTokens + usage.LatestCompletionTokens

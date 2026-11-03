@@ -28,6 +28,10 @@ const (
 	// EventSteered carries its text as a Notice.
 	EventSteered        EventType = "steered"
 	EventAssistantDelta EventType = "assistant_delta"
+	// EventUsage carries the turn's running token usage, dispatched after every
+	// model call so a surface can meter the context window before the turn ends.
+	// It never replaces the final per-turn usage on EventAfterResponse.
+	EventUsage EventType = "usage"
 	// EventReasoning carries one turn's full reasoning text, when the model
 	// returned any. Distinct from EventAssistantDelta (streamed answer chunks):
 	// this fires once per turn with the whole thing, so a recorded run keeps
@@ -55,6 +59,10 @@ type Event struct {
 	Delta     *AssistantDeltaPayload `json:"delta,omitempty"`
 	System    *SystemPromptPayload   `json:"system,omitempty"`
 	Reasoning *ReasoningPayload      `json:"reasoning,omitempty"`
+	// Usage is the running turn usage as the runner holds it: the context window
+	// set and the session priced, but not yet folded into the session totals
+	// (RecordUsage still happens once, at the end of the request).
+	Usage *turn.TokenUsage `json:"usage,omitempty"`
 }
 
 // SystemPromptPayload records the system message the model was actually given,
@@ -195,6 +203,12 @@ func emit(ctx context.Context, d Dispatcher, event Event) {
 	}
 	event.Timestamp = time.Now()
 	d.Dispatch(ctx, event)
+}
+
+// Usage dispatches the turn's running token usage. Callers hold the provider's
+// reported usage before calling it, so there is no nil-usage case here.
+func Usage(ctx context.Context, d Dispatcher, sessionID, parentSessionID string, usage *turn.TokenUsage) {
+	emit(ctx, d, Event{Type: EventUsage, SessionID: sessionID, ParentSessionID: parentSessionID, Usage: usage})
 }
 
 // Delta dispatches an assistant streaming delta carrying text, stamped with

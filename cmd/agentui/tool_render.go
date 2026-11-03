@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/invokr-agent/invokr/support/strutil"
@@ -80,23 +81,23 @@ const shellTailLines = 5
 func (shellRenderer) Summary(m message, width int) string {
 	line := settledToolLine(m, width)
 	text := shellText(m.toolOutput)
-	if isUnifiedDiff(text) {
-		return line + "\n" + renderGitDiff(text, width, maxDiffLines)
+	if diff := shellDiffText(text); diff != "" {
+		return line + "\n" + renderGitDiff(diff, width, maxDiffLines)
 	}
 	tail, hidden := tailLines(text, shellTailLines)
 	if hidden > 0 {
 		line += "\n" + foldIndicator(hidden, width)
 	}
-	return withOutputBlock(line, strings.Join(tail, "\n"), "", width, 0)
+	return withOutputBlock(line, strings.Join(tail, "\n"), commandFile(m.toolArgs), width, 0)
 }
 
 func (shellRenderer) Detail(m message, width int) string {
 	line := settledToolLine(m, width)
 	text := shellText(m.toolOutput)
-	if isUnifiedDiff(text) {
-		return line + "\n" + renderGitDiff(text, width, 0)
+	if diff := shellDiffText(text); diff != "" {
+		return line + "\n" + renderGitDiff(diff, width, 0)
 	}
-	return withOutputBlock(line, text, "", width, 0)
+	return withOutputBlock(line, text, commandFile(m.toolArgs), width, 0)
 }
 
 // isUnifiedDiff reports whether recorded output parses as a unified diff, which
@@ -114,10 +115,10 @@ func shellText(output string) string {
 		Stderr string  `json:"stderr"`
 	}
 	if err := json.Unmarshal([]byte(output), &res); err != nil || res.Stdout == nil {
-		return exitCodeLine.ReplaceAllString(output, "")
+		return plainTokfMarker(exitCodeLine.ReplaceAllString(output, ""))
 	}
 	streams := []string{strings.TrimRight(*res.Stdout, "\n"), strings.TrimRight(res.Stderr, "\n")}
-	return strings.Join(slices.DeleteFunc(streams, func(s string) bool { return s == "" }), "\n")
+	return plainTokfMarker(strings.Join(slices.DeleteFunc(streams, func(s string) bool { return s == "" }), "\n"))
 }
 
 // exitCodeLine is the shell tool's "[exit code N]" fact for the model. The
@@ -296,11 +297,9 @@ func outputFile(argsJSON string) string {
 	if json.Unmarshal([]byte(argsJSON), &fields) != nil {
 		return ""
 	}
-	path := cmp.Or(fields.Path, fields.FilePath, fields.Filename, fields.File)
-	if !strings.Contains(path, ".") {
-		return ""
-	}
-	return path
+	// Any non-empty name reaches chroma: it matches whole filenames too, so an
+	// extensionless Makefile or Dockerfile is worth trying rather than dropping.
+	return cmp.Or(fields.Path, fields.FilePath, fields.Filename, fields.File)
 }
 
 // stripFence drops a wrapping code fence and reports its info string ("" when
@@ -341,4 +340,85 @@ func moreLines(n int) string {
 		return "1 more line"
 	}
 	return fmt.Sprintf("%d more lines", n)
+}
+
+// shellDiffText returns the unified-diff region of recorded shell output, or
+// "" when it has none. The text reaches the transcript with the result filter's
+// decoration in it — a marker line, and a filler line where the middle of a
+// long result was cut — which ParseUnifiedDiff rejects, so a real `git diff |
+// head -30` fell back to a dimmed tail. Starting at the first header line and
+// dropping the filler leaves the hunks intact.
+func shellDiffText(text string) string {
+	lines := strings.Split(text, "\n")
+	start := -1
+	for i, l := range lines {
+		if diffHeaderLine.MatchString(l) {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		return ""
+	}
+	var kept []string
+	for _, l := range lines[start:] {
+		if !filterFiller.MatchString(l) {
+			kept = append(kept, l)
+		}
+	}
+	region := strings.Join(kept, "\n")
+	if !isUnifiedDiff(region) {
+		return ""
+	}
+	return region
+}
+
+var diffHeaderLine = regexp.MustCompile(`^(diff --git |index [0-9a-f]{6,}|--- [ab]/|--- /dev/null)`)
+var filterFiller = regexp.MustCompile(`^(compressed — run .tokf raw \d+.|--- \d+ lines omitted|… truncated)`)
+
+// plainTokfMarker drops the 🗜️ glyph tokf (an external output filter) puts
+// in front of its "compressed" notes: terminals disagree on its width, which
+// pushes stray cells past overlay borders. The words stay.
+func plainTokfMarker(text string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(text, tokfMarker+" ", ""), tokfMarker, "")
+}
+
+const tokfMarker = "\U0001F5DC\uFE0F"
+
+// commandFile names the file a printing command read (cat/head/tail/sed -n),
+// so its recorded output is highlighted as that file instead of muted prose.
+func commandFile(argsJSON string) string {
+	var fields struct {
+		Command string `json:"command"`
+	}
+	if json.Unmarshal([]byte(argsJSON), &fields) != nil {
+		return ""
+	}
+	return printedFile(fields.Command)
+}
+
+var printers = map[string]bool{"cat": true, "head": true, "tail": true, "sed": true, "bat": true, "nl": true, "less": true, "more": true}
+
+func printedFile(command string) string {
+	for _, segment := range strings.Split(command, "|") {
+		words := strings.Fields(segment)
+		if len(words) == 0 || !printers[words[0]] {
+			continue
+		}
+		for i, w := range words[1:] {
+			if !notAFile(words[i], w) {
+				return w
+			}
+		}
+	}
+	return ""
+}
+
+// notAFile reports a printer argument that cannot be the file: a flag, a flag's
+// numeric value (-n 20), a quoted script (sed '1,20p'), or shell syntax.
+func notAFile(prev, w string) bool {
+	if _, err := strconv.Atoi(w); err == nil && strings.HasPrefix(prev, "-") {
+		return true
+	}
+	return strings.ContainsAny(w[:1], "-+'\"$*") || strings.ContainsAny(w, "<>*;&")
 }

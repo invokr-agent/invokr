@@ -33,6 +33,19 @@ invokr version               # same as --version
 invokr setup                 # first-run configuration
 ```
 
+## Exec JSONL ledger
+
+`invokr exec --json` writes one JSON object per line to stdout: `thread.started`
+(the session the run owns), `item.started` / `item.completed` / `item.progress`
+and `error` for tool calls, `notice`, `turn.completed`, `system_prompt`, `reasoning`,
+and finally `thread.completed` with the answer, model, usage and outcome ledger. `usage`
+is emitted after every model call with the turn's running token usage, so a caller
+can meter the context window while the run is still going: the context window is
+set and the session is priced the way `thread.completed` will report it. Like the
+other observation-only types it carries no `item` and no thread outcome, and it
+never changes the final per-turn usage. Events from a delegated subagent's session
+(its runner shares the bus) stay out of this ledger.
+
 ## Approvals
 
 `exec` (including `--resume`/`--last` runs) auto-denies tool approvals by
@@ -207,6 +220,12 @@ whole agent (distinct from the per-toolbox-tool sandbox).
 answers and tool calls go back as updates, and permission requests ask the client
 (deny is the default: a failed or unanswered request grants nothing). Sessions live
 only as long as the process, in the workspace invokr was started in.
+
+Context is metered while a prompt runs, not only when it ends: after every model
+call invokr sends an ACP `usage_update` (`used` = prompt+completion in context,
+`size` = the provider's window). No `cost` is carried — invokr's `provider.pricing`
+is currency-free while ACP cost requires an ISO currency code. The prompt response
+that ends the turn is unchanged by these updates.
 
 Telegram, Signal and Matrix are handled by [agent-relay](https://github.com/invokr-agent/agent-relay)
 (v0.1.0), a separate repository that drives this command:
