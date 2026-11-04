@@ -44,3 +44,17 @@ func TestFooterShowsServedModel(t *testing.T) {
 		t.Fatalf("statusline = %q, want the served model", row)
 	}
 }
+
+func TestResponseFooterNamesServedModel(t *testing.T) {
+	served, configured := "ornith-9b-mtp-kl-Q8_0", "cyber-tiel/ornith"
+	serving := servingSession{configured: configured, served: served}
+	m := &model{session: &serving}
+	line := renderResponseFooter(m.responseMeta(turn.TokenUsage{Available: true, LatestCompletionTokens: 412}), 80)
+	if !strings.Contains(line, served) || strings.Contains(line, configured) {
+		t.Fatalf("provenance line = %q, want the served model and not the configured pin", line)
+	}
+	silent := servingSession{configured: configured}
+	if got := (&model{session: &silent}).responseMeta(turn.TokenUsage{}).model; got != configured {
+		t.Fatalf("provenance model = %q, want the configured name until the backend reports one", got)
+	}
+}

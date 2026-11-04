@@ -45,7 +45,7 @@ func TestOutsideReadAsksThenDirectoryGrantCovers(t *testing.T) {
 	s.waitFor(regexp.MustCompile(`outside_read`), 10*time.Second)
 	s.send("a")
 	s.waitFor(regexp.MustCompile(`first read done`), 10*time.Second)
-	s.waitFor(regexp.MustCompile(`e2e-scripted · \d+ms`), 10*time.Second)
+	s.waitFor(regexp.MustCompile(`fixture-model · \d+ms`), 10*time.Second)
 	s.submit("read the other one")
 	s.waitFor(regexp.MustCompile(`second read done`), 10*time.Second)
 
