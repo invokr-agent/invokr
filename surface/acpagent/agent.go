@@ -305,7 +305,6 @@ func evidenceMark(e turn.ExecutionEvidence, pending, labels *[]turn.ToolOutcome)
 	return label, "✗ " + outcome
 }
 
-// available lists the commands an ACP client may run in a chat turn.
 func (a *Agent) available() []acp.AvailableCommand {
 	commands := []acp.AvailableCommand{modeCommand}
 	if a.commands != nil {
@@ -314,8 +313,6 @@ func (a *Agent) available() []acp.AvailableCommand {
 	return commands
 }
 
-// pinned is the context a chat contact's turn runs in: the host session lends
-// it nothing (see approval.Pin).
 func (a *Agent) pinned(ctx context.Context) context.Context {
 	if a.bound == nil {
 		return ctx

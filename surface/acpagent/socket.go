@@ -25,9 +25,6 @@ const (
 	maxSocketPath = 107
 )
 
-// SocketPath is where a share listens: $XDG_RUNTIME_DIR/invokr/relay.sock,
-// or ~/.invokr/run/relay.sock with no runtime directory; agent-relay dials
-// the same path.
 func SocketPath() string {
 	runtime := config.Env("XDG_RUNTIME_DIR")
 	if runtime == "" {
@@ -37,15 +34,11 @@ func SocketPath() string {
 	return filepath.Join(runtime, socketDirName, socketName)
 }
 
-// Socket is the listener one session holds. Only one session can hold a path
-// at a time, which is what makes "another session already shares" reportable.
 type Socket struct {
 	Path string
 	fd   int
 }
 
-// Listen binds path after clearing a socket nobody answers. A socket that
-// answers belongs to a live session, and this one refuses to take the path.
 func Listen(path string) (Socket, error) {
 	if len(path) > maxSocketPath {
 		return Socket{}, fmt.Errorf("%s is %d bytes; a unix socket path fits %d", path, len(path), maxSocketPath)
@@ -82,8 +75,6 @@ func Listen(path string) (Socket, error) {
 	return Socket{Path: path, fd: fd}, nil
 }
 
-// peerUID is a package var so a test can pretend a peer runs as someone else:
-// no test can run an invokr under another uid.
 var peerUID = peerCredentialUID
 
 // Accept returns a connection only when the process behind it runs as this
@@ -181,7 +172,6 @@ func answers(path string) bool {
 	return err == nil || errors.Is(err, unix.EINPROGRESS)
 }
 
-// blame names which uid the peer check wanted and whose it found.
 func blame(err error, uid int) string {
 	if err != nil {
 		return "cannot tell whose uid the peer is: " + err.Error()

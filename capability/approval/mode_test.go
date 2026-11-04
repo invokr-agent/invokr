@@ -209,7 +209,6 @@ func TestStructuredDenialPathsKeepSpaces(t *testing.T) {
 	}
 }
 
-// A pinned turn inherits nothing the host session granted or allowed.
 func TestPinnedTurnApprovals(t *testing.T) {
 	for _, tc := range []struct {
 		name                  string

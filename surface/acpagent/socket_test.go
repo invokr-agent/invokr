@@ -43,7 +43,6 @@ func TestListenAcceptsOwnPeer(t *testing.T) {
 	}
 }
 
-// bind refuses a path a dead listener left behind, so listening must clear it.
 func TestListenClearsStaleSocket(t *testing.T) {
 	path := socketPathIn(t)
 	if err := leaveStaleSocket(path); err != nil {
@@ -68,8 +67,6 @@ func leaveStaleSocket(path string) error {
 	return unix.Close(fd)
 }
 
-// A live socket belongs to another shared session: taking the path would point
-// that session's chat here.
 func TestListenRefusesLiveSocket(t *testing.T) {
 	held, err := Listen(socketPathIn(t))
 	if err != nil {
@@ -85,8 +82,6 @@ func TestListenRefusesLiveSocket(t *testing.T) {
 	}
 }
 
-// agent-relay dials only a socket it owns with no group or other write bit,
-// in a directory others cannot write; otherwise it answers "socket not used".
 func TestListenSocketIsTrustedByTheRelay(t *testing.T) {
 	s, err := Listen(socketPathIn(t))
 	if err != nil {
@@ -112,8 +107,6 @@ func TestListenSocketIsTrustedByTheRelay(t *testing.T) {
 	}
 }
 
-// No test can run an invokr under another uid, so the credential read is
-// replaced.
 func TestAcceptRefusesForeignPeer(t *testing.T) {
 	own := peerUID
 	peerUID = func(fd int) (int, error) {
@@ -136,8 +129,6 @@ func TestAcceptRefusesForeignPeer(t *testing.T) {
 	}
 }
 
-// AF_UNIX caps a socket name at 107 bytes, so a long temp root is not always
-// usable.
 func socketPathIn(t *testing.T) string {
 	dir := filepath.Join(t.TempDir(), "r")
 	if err := os.Mkdir(dir, 0o700); err != nil {
