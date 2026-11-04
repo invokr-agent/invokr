@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/antonikliment/tuikit"
 	"github.com/invokr-agent/invokr/capability/approval"
@@ -367,15 +368,21 @@ func compactCommandText(session turn.Session, _ []string) string {
 
 type immediateCompactor interface{ CompactNow(context.Context) }
 
+// compactionMsg closes a background /compact. The compaction's own notices say
+// what it did; this is what lets the UI settle and release the prompts that
+// queued behind the turn lock.
+type compactionMsg struct{}
+
 func runCompactCommand(m *model, _ string, _ []string) tea.Cmd {
 	compactor, ok := m.session.(immediateCompactor)
-	if m.sending || !ok {
+	if m.busy() || !ok {
 		m.commandMessage(compactCommandText(m.session, nil))
 		return nil
 	}
 	m.commandMessage(compactFeedback(m.session))
-	ctx := m.ctx
-	return func() tea.Msg { compactor.CompactNow(ctx); return nil }
+	sendCtx, cancel := context.WithCancel(m.ctx)
+	m.compacting, m.cancelSend, m.compactingAt = true, cancel, time.Now()
+	return func() tea.Msg { compactor.CompactNow(sendCtx); return compactionMsg{} }
 }
 
 func compactPlain(ctx context.Context, _ CommandBackend, session turn.Session, _ string, _ []string) (string, bool) {

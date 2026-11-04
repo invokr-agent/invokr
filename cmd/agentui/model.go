@@ -74,10 +74,10 @@ type model struct {
 	historyPos int
 	// lastPrompt is what /retry replays; draft is the half-typed line the
 	// history walk displaced, and browsing says the walk is in progress.
-	lastPrompt, draft               string
-	recordInterrupted               func(sessionID string, prompts ...string)
-	steeredTurn                     []string // taken by the turn in flight
-	browsing, sending, userScrolled bool
+	lastPrompt, draft                           string
+	recordInterrupted                           func(sessionID string, prompts ...string)
+	steeredTurn                                 []string // taken by the turn in flight
+	browsing, sending, userScrolled, compacting bool
 	// queued holds messages Enter submitted while a turn was in flight: they
 	// render dimmed above the input with a count, go out in order when the turn
 	// ends, and up-arrow on an empty input pulls the newest back for editing.
@@ -278,6 +278,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, next := m.update(msg)
 		return updated, tea.Batch(cmd, next)
 	}
+	// A background /compact ends with this: it settles the compaction flags and
+	// releases any prompt that queued behind the turn lock.
+	if _, isCompaction := msg.(compactionMsg); isCompaction {
+		return m.updateCompaction()
+	}
 	return m.update(msg)
 }
 
@@ -369,7 +374,7 @@ func (m *model) updateControlKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool)
 		m.selection.Clear()
 		return m, nil, true
 	}
-	if m.sending {
+	if m.sending || m.compacting {
 		updated, cmd := m.handleInterrupt()
 		return updated, cmd, true
 	}
@@ -494,7 +499,7 @@ func (m *model) handleInterrupt() (tea.Model, tea.Cmd) {
 		m.syncChatViewport(true)
 		return m, nil
 	}
-	if !m.sending {
+	if !m.sending && !m.compacting {
 		// Idle: quitting takes two presses, so a stray ctrl+c doesn't kill the
 		// session. The first arms the footer hint, a second within the window
 		// exits.
@@ -1000,7 +1005,7 @@ func (m *model) helpHint() string {
 
 func (m *model) keyHints() string {
 	if m.focusMode {
-		return focusHint(m.keys)
+		return ui.Invokr.Warn.Render("BROWSE DETAILS") + "  " + ui.Invokr.Muted.Render("↑/↓ select · enter/space expand/collapse · esc/"+m.keys.FocusTranscript.Help().Key+" back to prompt")
 	}
 	// The copy notice lives as long as the highlight it belongs to: whatever
 	// takes the selection down takes the message with it, so it never goes
@@ -1187,12 +1192,10 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	// A turn is in flight: the run takes it after a tool round, else the flush sends it.
-	if m.sending {
-		m.queued = append(m.queued, text)
-		m.appendHistory(text)
-		m.steer(text)
-		return m, nil
+	// The turn lock is held - by a turn in flight or by a background compaction:
+	// the run takes it after a tool round, else the flush sends it.
+	if m.busy() {
+		return m, m.queueWhileBusy(text)
 	}
 
 	if text == "exit" || text == "quit" {
@@ -1205,6 +1208,21 @@ func (m *model) submit() (*model, tea.Cmd) {
 	}
 
 	return m, m.sendPrompt(text)
+}
+
+// busy is whether the turn lock is held, by a turn in flight or by a background
+// compaction, so a submitted prompt has to queue behind it.
+func (m *model) busy() bool { return m.sending || m.compacting }
+
+// queueWhileBusy parks the prompt until the lock frees. Only a turn in flight
+// can take a mid-turn steer, so a compaction just holds the queue.
+func (m *model) queueWhileBusy(text string) tea.Cmd {
+	m.queued = append(m.queued, text)
+	m.appendHistory(text)
+	if m.sending {
+		m.steer(text)
+	}
+	return nil
 }
 
 // sendPrompt starts the turn for text the caller has already accepted. submit
@@ -1245,6 +1263,19 @@ func (m *model) flushQueued(turnInterrupted bool, err error) tea.Cmd {
 	text := m.queued[0]
 	m.queued = m.queued[1:]
 	return m.sendPrompt(text)
+}
+
+// updateCompaction settles a background /compact. The compaction's own notices
+// are already in the transcript, so this only closes the wait: esc owns the
+// cancel, and a prompt that queued behind the turn lock goes out now unless
+// the compaction was stopped, where the queue waits for the user to confirm.
+func (m *model) updateCompaction() (tea.Model, tea.Cmd) {
+	cancelled := m.stopping
+	m.compacting, m.compactingAt, m.cancelSend, m.stopping = false, time.Time{}, nil, false
+	if cancelled {
+		m.chatLog.Append(message{role: "tool", text: "⏹ compaction cancelled"})
+	}
+	return m, m.flushQueued(cancelled, nil)
 }
 
 type contextCompactor interface{ RequestCompaction() }

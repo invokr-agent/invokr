@@ -140,7 +140,7 @@ func renderToolLine(lead, name, preview, trailing string, state toolStatus) stri
 func renderToolLineWidth(lead, name, preview, trailing string, state toolStatus, width int) string {
 	g := glyphFor(name)
 	head := statusStyle(state).Render(lead) + " " + ui.Invokr.Muted.Render(g.icon) + " " + ui.Invokr.Text.Render(fmt.Sprintf("%-*s", verbWidth, g.verb))
-	meta := metaStyle(state).Render(trailing)
+	meta := map[bool]lipgloss.Style{false: ui.Invokr.Muted, true: ui.Invokr.Danger}[state == toolFailed].Render(trailing)
 	if width <= 0 {
 		return strings.TrimRight(head+" "+preview+"  "+trailing, " ")
 	}
@@ -168,11 +168,4 @@ func statusStyle(state toolStatus) lipgloss.Style {
 	default:
 		return ui.Invokr.Info
 	}
-}
-
-func metaStyle(state toolStatus) lipgloss.Style {
-	if state == toolFailed {
-		return ui.Invokr.Danger
-	}
-	return ui.Invokr.Muted
 }
