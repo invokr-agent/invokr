@@ -767,15 +767,15 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 
 // responseMeta assembles the provenance line for an answer that just landed.
 // Nothing new is plumbed through the runner: the token count is already on the
-// usage delta, and the elapsed time is the wall clock since the send started.
+// usage delta, the elapsed time is the wall clock since the send started, and
+// the model comes from the same reader as the model cell so the two can never
+// name different models.
 func (m *model) responseMeta(usage turn.TokenUsage) responseMeta {
 	meta := responseMeta{tokens: usage.LatestCompletionTokens}
 	if !m.sentAt.IsZero() {
 		meta.elapsed = time.Since(m.sentAt)
 	}
-	if sw, ok := m.session.(modelSwitcher); ok {
-		meta.model = sw.Model()
-	}
+	meta.model = m.modelName()
 	return meta
 }
 
