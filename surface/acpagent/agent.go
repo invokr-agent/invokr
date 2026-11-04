@@ -56,10 +56,10 @@ type Agent struct {
 var latestVersion = version.LatestVersion
 
 func Serve(ctx context.Context, in io.Reader, out io.Writer, bus events.Bus, newSession runtime.ChatSessionFunc, commands Commands) error {
-	return serve(&Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}, bus, ctx)
+	return serve(ctx, &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}, bus)
 }
 
-func serve(a *Agent, bus events.Bus, ctx context.Context) error {
+func serve(ctx context.Context, a *Agent, bus events.Bus) error {
 	stopUsage := a.registerUsage(bus)
 	defer stopUsage()
 	latestVersion() // starts the background lookup so the first reply can carry its answer
@@ -124,9 +124,10 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 		if _, already := a.sessions.Load(bound); !already {
 			a.sessions.Store(bound, a.bound)
 			listModels(ctx, a.bound)
+			commands := a.available()
 			go func() {
 				_ = a.update(context.WithoutCancel(ctx), bound, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{
-					AvailableCommands: a.available()}})
+					AvailableCommands: commands}})
 			}()
 		}
 		return acp.NewSessionResponse{SessionID: bound, Modes: modeState(a.bound.approvals.Policy), ConfigOptions: configOptions(a.bound)}, nil
@@ -182,8 +183,14 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	sess.turnMu.Lock()
 	defer sess.turnMu.Unlock()
 	input := strings.Join(text, "\n")
+	// Pin before commands run: a skill, tool command or job a chat turn starts
+	// inherits this context, and an unwrapped one is the host's to answer.
+	ctx = a.pinned(ctx)
 	if reply, ok := a.modeText(ctx, req.SessionID, sess, input); ok {
 		return a.reply(ctx, req.SessionID, reply)
+	}
+	if a.bound != nil && spawnsDetachedSession(input) {
+		return a.reply(ctx, req.SessionID, "a shared session cannot start this command: it runs detached, with its own approvals")
 	}
 	if a.commands != nil {
 		if reply, prompt, ok := a.commands.Run(ctx, sess.IdentifiedSession, input); ok {
@@ -354,3 +361,13 @@ func toolKind(req approval.Request) acp.ToolKind {
 }
 
 func (a *Agent) Cancel(context.Context, acp.CancelNotification) error { return nil }
+
+// detachedSessions are slash commands whose work outlives the turn that asked:
+// a scheduled job runs on its own context with a fresh session and approvals,
+// so the pin cannot carry into it.
+var detachedSessions = []string{"/jobs"}
+
+func spawnsDetachedSession(input string) bool {
+	fields := strings.Fields(input)
+	return len(fields) > 0 && slices.Contains(detachedSessions, strings.ToLower(fields[0]))
+}

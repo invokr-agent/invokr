@@ -5,9 +5,9 @@ package acpagent
 import (
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 
 	"golang.org/x/sys/unix"
 
@@ -19,7 +19,6 @@ const (
 	socketName    = "relay.sock"
 	socketDirMode = 0o700
 	socketMode    = 0o600
-	listenBacklog = 2
 	// AF_UNIX names a path in 107 bytes; bind reports a bare EINVAL, so say
 	// which end is wrong before the socket is created.
 	maxSocketPath = 107
@@ -35,8 +34,8 @@ func SocketPath() string {
 }
 
 type Socket struct {
-	Path string
-	fd   int
+	Path     string
+	listener *net.UnixListener
 }
 
 func Listen(path string) (Socket, error) {
@@ -55,24 +54,18 @@ func Listen(path string) (Socket, error) {
 	if err := clearStale(path); err != nil {
 		return Socket{}, err
 	}
-	fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM, 0)
+	// Package net sets the backlog itself (SOMAXCONN), which is what keeps a
+	// dial from being refused while another connection is served.
+	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	if err != nil {
-		return Socket{}, err
-	}
-	if err := unix.Bind(fd, &unix.SockaddrUnix{Name: path}); err != nil {
-		_ = unix.Close(fd)
-		return Socket{}, err
-	}
-	if err := unix.Listen(fd, listenBacklog); err != nil {
-		_ = unix.Close(fd)
 		return Socket{}, err
 	}
 	// Bind honours the umask; the socket must not be writable by group or others.
 	if err := os.Chmod(path, socketMode); err != nil {
-		_ = unix.Close(fd)
+		_ = listener.Close()
 		return Socket{}, err
 	}
-	return Socket{Path: path, fd: fd}, nil
+	return Socket{Path: path, listener: listener}, nil
 }
 
 var peerUID = peerCredentialUID
@@ -80,75 +73,59 @@ var peerUID = peerCredentialUID
 // Accept returns a connection only when the process behind it runs as this
 // uid; an unreadable credential refuses, since that check is the whole
 // trust boundary.
-func (s Socket) Accept() (*Conn, error) {
-	fd, _, err := unix.Accept(s.fd)
+func (s Socket) Accept() (*net.UnixConn, error) {
+	conn, err := s.listener.AcceptUnix()
 	if err != nil {
 		return nil, err
 	}
-	uid, err := peerUID(fd)
-	if err != nil || uid != os.Getuid() {
-		defer func() { _ = unix.Close(fd) }()
-		return nil, fmt.Errorf("%s: %s", s.Path, blame(err, uid))
+	uid, failed := peerOf(conn)
+	if failed != nil || uid != os.Getuid() {
+		defer func() { _ = conn.Close() }()
+		return nil, fmt.Errorf("%s: %s", s.Path, blame(failed, uid))
 	}
-	conn := &Conn{}
-	conn.fd.Store(int32(fd))
 	return conn, nil
 }
 
-// Go cannot adopt an accepted descriptor as a net.UnixConn (only the side that
-// connected owns one), so Conn's stream reads and writes the fd.
-type Conn struct {
-	fd atomic.Int32
-}
-
-func (c *Conn) Read(into []byte) (int, error) {
-	fd := int(c.fd.Load())
-	if fd < 0 {
-		return -1, errors.New("socket connection closed")
-	}
-	n, err := unix.Read(fd, into)
+// peerOf asks the connected socket whose uid is on the other end; a credential
+// it cannot read is a refusal, never a pass.
+func peerOf(conn *net.UnixConn) (int, error) {
+	raw, err := conn.SyscallConn()
 	if err != nil {
-		return -1, err
+		return 0, err
 	}
-	return n, nil
+	var uid int
+	var failed error
+	if control := raw.Control(func(fd uintptr) { uid, failed = peerUID(int(fd)) }); control != nil {
+		return 0, control
+	}
+	if failed != nil {
+		return 0, failed
+	}
+	return uid, nil
 }
 
-func (c *Conn) Write(from []byte) (int, error) {
-	fd := int(c.fd.Load())
-	if fd < 0 {
-		return -1, errors.New("socket connection closed")
-	}
-	n, err := unix.Write(fd, from)
-	if err != nil {
-		return -1, err
-	}
-	return n, nil
-}
-
-// Close releases the descriptor once: acp closes both the reader and writer,
-// and a second close would report a failed session where the stream ended.
-func (c *Conn) Close() error {
-	fd := int(c.fd.Swap(-1))
-	if fd < 0 {
-		return nil
-	}
-	return unix.Close(fd)
-}
-
-func (s Socket) Close() error {
-	closed := unix.Close(s.fd)
-	removed := os.Remove(s.Path)
-	if os.IsNotExist(removed) {
-		removed = nil
-	}
-	return errors.Join(closed, removed)
-}
+// Package net created the socket file and unlinks it on Close, which also
+// unblocks a pending Accept; a bare descriptor would leave the watcher parked
+// in accept() with the fd number free for reuse.
+func (s Socket) Close() error { return s.listener.Close() }
 
 // clearStale removes a socket file nobody answers; taking the path from one
 // that answers would point another session's chat here.
 func clearStale(path string) error {
 	if answers(path) {
 		return fmt.Errorf("%s is already serving a shared session; close it there first", path)
+	}
+	// Anything but a socket file here is someone else's: replacing it, or the
+	// symlink's target, would follow their hand.
+	found, err := os.Lstat(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
+	if found.Mode()&os.ModeSocket == 0 {
+		return fmt.Errorf("%s is %s, not a socket file; refusing to replace it", path, found.Mode())
 	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
@@ -169,7 +146,8 @@ func answers(path string) bool {
 		return false
 	}
 	err = unix.Connect(fd, &unix.SockaddrUnix{Name: path})
-	return err == nil || errors.Is(err, unix.EINPROGRESS)
+	// EAGAIN means the accept queue is full, so someone is answering it.
+	return err == nil || errors.Is(err, unix.EINPROGRESS) || errors.Is(err, unix.EAGAIN)
 }
 
 func blame(err error, uid int) string {

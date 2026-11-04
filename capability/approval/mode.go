@@ -149,7 +149,8 @@ func (p *Policy) PriorWork() int {
 type callKey struct{}
 type callState struct {
 	approver Approver
-	policy   *Policy
+	policy   *Policy // what this call's tools may assume
+	host     *Policy // whose activity counter this call occupies
 	mode     Mode
 	request  Request
 	pinned   bool
@@ -161,6 +162,9 @@ type pinnedKey struct{}
 
 func Pin(ctx context.Context) context.Context { return context.WithValue(ctx, pinnedKey{}, true) }
 
+// Pinned is whether this context came from a turn nobody local started.
+func Pinned(ctx context.Context) bool { return ctx.Value(pinnedKey{}) != nil }
+
 // forPinnedCall is the policy a pinned call's tools see: Manual, no Auto toggles.
 // The store stays so standing denials still refuse; the pinned branch of decide
 // never consults its grants.
@@ -170,7 +174,7 @@ func (p *Policy) forPinnedCall() *Policy {
 
 func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) (context.Context, func()) {
 	p.mu.Lock()
-	s := &callState{policy: p, mode: p.mode, request: req, pinned: ctx.Value(pinnedKey{}) != nil}
+	s := &callState{policy: p, host: p, mode: p.mode, request: req, pinned: Pinned(ctx)}
 	if s.pinned {
 		s.policy = p.forPinnedCall()
 		s.mode = Manual
@@ -187,9 +191,9 @@ func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) 
 }
 
 func (s *callState) release() {
-	s.policy.mu.Lock()
-	defer s.policy.mu.Unlock()
-	s.policy.active[s.mode]--
+	s.host.mu.Lock()
+	defer s.host.mu.Unlock()
+	s.host.active[s.mode]--
 }
 
 // Retain keeps background work visible after its initiating tool has returned.
@@ -199,9 +203,9 @@ func Retain(ctx context.Context) func() {
 	if s == nil {
 		return func() {}
 	}
-	s.policy.mu.Lock()
-	s.policy.active[s.mode]++
-	s.policy.mu.Unlock()
+	s.host.mu.Lock()
+	s.host.active[s.mode]++
+	s.host.mu.Unlock()
 	return sync.OnceFunc(s.release)
 }
 
@@ -255,7 +259,8 @@ func Authorize(ctx context.Context, approver Approver, req Request, ask bool) (b
 		return true, err
 	}
 	recheck := *s
-	recheck.mode = s.policy.Mode()
+	recheck.policy = s.host
+	recheck.mode = s.host.Mode()
 	if current, resolved := recheck.decide(req, ask); resolved && !current.Approved {
 		return true, decisionError(req, current)
 	}

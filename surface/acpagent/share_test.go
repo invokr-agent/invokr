@@ -83,6 +83,142 @@ func (a *askingApprover) RequestApproval(context.Context, approval.Request) (app
 	return approval.Decision{Approved: false, Reason: "not now"}, nil
 }
 
+func TestSharedConnectionCannotWidenTheHostMode(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.Manual, false)
+	agent, chat := boundAgent(t, &recordingSession{}, broker)
+	agent.sessions.Store(acp.SessionID("host-1"), chat)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for _, widen := range []string{"auto", "yolo", "manual"} {
+		if _, err := agent.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionID: acp.SessionID("host-1"), ModeID: acp.SessionModeID(widen)}); err == nil {
+			t.Fatalf("a shared connection set the host's mode to %s", widen)
+		}
+	}
+	if broker.Policy.Mode() != approval.Manual {
+		t.Fatalf("the host's mode became %s", broker.Policy.Mode())
+	}
+	if _, err := agent.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionID: acp.SessionID("host-1"), ModeID: "plan"}); err != nil {
+		t.Fatalf("narrowing the host to plan = %v", err)
+	}
+	if broker.Policy.Mode() != approval.Plan {
+		t.Fatalf("plan was refused: the host is in %s", broker.Policy.Mode())
+	}
+}
+
+// A shared turn's commands must not be able to hand work to the host unpinned:
+// the turn is a chat contact's, and its approvals are the human's.
+func TestSharedTurnPinsWhatItsCommandsStart(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.YOLO, false)
+	agent, _ := boundAgent(t, &recordingSession{}, broker)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	commands := pinProbe{}
+	agent.commands = &commands
+	if _, err := agent.NewSession(ctx, acp.NewSessionRequest{Cwd: wd}); err != nil {
+		t.Fatalf("session/new = %v", err)
+	}
+	if _, err := agent.Prompt(ctx, acp.PromptRequest{SessionID: acp.SessionID("host-1"), Prompt: []acp.ContentBlock{
+		{Text: &acp.TextContent{Text: "/usage hi"}}}}); err != nil {
+		t.Fatalf("prompt = %v", err)
+	}
+	if !commands.pinned {
+		t.Fatal("a shared turn handed its commands an unpinned context")
+	}
+}
+
+func TestSharedConnectionCannotStartScheduledJobs(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.Manual, false)
+	agent, _ := boundAgent(t, &recordingSession{}, broker)
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	commands := pinProbe{}
+	agent.commands = &commands
+	if _, err := agent.NewSession(ctx, acp.NewSessionRequest{Cwd: wd}); err != nil {
+		t.Fatalf("session/new = %v", err)
+	}
+	if _, err := agent.Prompt(ctx, acp.PromptRequest{SessionID: acp.SessionID("host-1"), Prompt: []acp.ContentBlock{
+		{Text: &acp.TextContent{Text: "/jobs run nightly"}}}}); err != nil {
+		t.Fatalf("prompt = %v", err)
+	}
+	if commands.called {
+		t.Fatal("the shared turn reached the command backend")
+	}
+
+	// The human at the terminal still runs their own jobs.
+	agent.bound = nil
+	if _, err := agent.Prompt(ctx, acp.PromptRequest{SessionID: acp.SessionID("host-1"), Prompt: []acp.ContentBlock{
+		{Text: &acp.TextContent{Text: "/jobs run nightly"}}}}); err != nil {
+		t.Fatalf("prompt = %v", err)
+	}
+	if !commands.called {
+		t.Fatal("a job stopped reaching the host's own command backend")
+	}
+}
+
+type pinProbe struct {
+	pinned bool
+	called bool
+}
+
+func (pinProbe) Available() []acp.AvailableCommand { return nil }
+
+func (p *pinProbe) Run(ctx context.Context, _ turn.Session, _ string) (string, string, bool) {
+	p.pinned = approval.Pinned(ctx)
+	p.called = true
+	return "command ran", "", true
+}
+
+func TestWatchStopsWhenTheSharerCloses(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.Manual, false)
+	sharer, err := OpenShare(socketPathIn(t), nil, &recordingSession{}, broker, nil)
+	if err != nil {
+		t.Fatalf("open share = %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stopped := make(chan bool, 1)
+	go func() {
+		sharer.Watch(ctx, func(error) {})
+		stopped <- true
+	}()
+	peer := dial(t, sharer.socket.Path)
+	deadline := time.Now().Add(5 * time.Second)
+	for sharer.Status() != "shared" {
+		if time.Now().After(deadline) {
+			t.Fatal("the connection was never served")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	_ = peer.Close()
+	deadline = time.Now().Add(5 * time.Second)
+	for sharer.Status() != "listening" {
+		if time.Now().After(deadline) {
+			t.Fatal("the served connection never ended")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := sharer.Close(); err != nil {
+		t.Fatalf("close = %v", err)
+	}
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Watch is still accepting after the sharer closed")
+	}
+}
+
 func TestChatTurnIsPinned(t *testing.T) {
 	broker := approval.NewBroker()
 	broker.Policy = approval.NewPolicy(approval.YOLO, false)
