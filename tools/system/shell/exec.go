@@ -250,8 +250,8 @@ func (p preparedShellCommand) readOnlyGit() bool { return p.mode == approval.Pla
 // Their checkouts are not mounted, so `git worktree prune` in the sandbox
 // takes them for stale and deletes them; sealed entries survive it.
 func siblingWorktreeEntries(workspaceRoot string, gitDirs []string) []string {
-	common := slices.Concat(gitDirs, []string{filepath.Join(workspaceRoot, ".git")})[0] // gitDirs leads with the shared repository.
-	dirs, _ := filepath.Glob(filepath.Join(common, "worktrees", "*"))
+	shared := append(gitDirs, filepath.Join(workspaceRoot, ".git"))[0] // gitDirs leads with the shared repository.
+	dirs, _ := filepath.Glob(filepath.Join(shared, "worktrees", "*"))
 	return slices.DeleteFunc(dirs, func(dir string) bool { return slices.Contains(gitDirs, dir) })
 }
 

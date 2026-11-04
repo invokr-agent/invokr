@@ -41,8 +41,13 @@ func TestMissingSealsRequireScopedApproval(t *testing.T) {
 			}
 		}
 		release()
-		if len(a.requests) != 2 || !a.requests[0].Protected || !a.requests[0].PolicyChecked || !strings.Contains(a.requests[0].Details, missing) {
-			t.Fatalf("missing per-call protected-path prompt: %+v", a.requests)
+		// A grant is remembered for the rest of the process; a refusal is not.
+		wants := 2
+		if allow {
+			wants = 1
+		}
+		if len(a.requests) != wants || !a.requests[0].Protected || !a.requests[0].PolicyChecked || !strings.Contains(a.requests[0].Details, missing) {
+			t.Fatalf("allow=%v approvals=%d want=%d: %+v", allow, len(a.requests), wants, a.requests)
 		}
 	}
 	if _, _, err := Command(context.Background(), plan, root, nil); err == nil {

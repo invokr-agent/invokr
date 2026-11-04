@@ -18,11 +18,13 @@ type missingSeal struct {
 	*fsutil.AbsentPath
 	root  string
 	epoch uint64
+	asked bool // this call would repeat a consent question already answered
 }
 
 type sealOwner struct {
 	epoch  uint64
 	active int
+	asked  bool // the process already consented to creating names under this root
 }
 
 // ponytail: process-wide bookkeeping; keep epochs after exit so an overlapping
@@ -104,7 +106,8 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 			return existing, missing, statErr
 		}
 		if absent != nil {
-			missing = append(missing, missingSeal{absent, root, sealOwners.roots[root].epoch})
+			owner := sealOwners.roots[root]
+			missing = append(missing, missingSeal{absent, root, owner.epoch, owner.asked})
 			continue
 		}
 		existing = append(existing, path)
@@ -113,13 +116,19 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 }
 
 func approveSeals(ctx context.Context, missing []missingSeal) error {
+	// Consent is remembered per writable root for the whole process: the same
+	// absent names reappear on every call, and a second prompt after the
+	// tool's own made every write in a worktree look like a hang (#91). A
+	// refusal is not remembered, and the policy check still runs once the
+	// answer is on record, so a session with no approver still refuses.
 	if len(missing) == 0 {
 		return nil
 	}
-	paths := core.MapSlice(missing, func(m missingSeal) string { return m.Path })
 	req := approval.CallRequest(ctx)
-	req.Protected, req.Confined, req.Writes, req.ReadOnly = true, true, true, false
-	req.Summary = "Let this command create protected paths (.git hooks or config, .invokr) that do not exist yet"
+	req.Confined, req.Writes, req.ReadOnly = true, true, false
+	req.Protected = slices.ContainsFunc(missing, func(m missingSeal) bool { return !m.asked })
+	paths := core.MapSlice(missing, func(m missingSeal) string { return m.Path })
+	req.Summary = "Let this workspace create protected paths (.git hooks or config, .invokr) that do not exist yet"
 	req.Details = "These paths do not exist and cannot be sealed. This process and its children could create or modify them:\n" + strings.Join(paths, "\n")
 	handled, err := approval.Authorize(ctx, nil, req, true)
 	if !handled {
@@ -136,6 +145,10 @@ func retainSeals(missing []missingSeal, delta int) {
 		state.active += delta
 		if delta > 0 {
 			state.epoch++
+			// Reaching this point means the call was approved or auto-approved,
+			// so the answer about creating these names is on record for the
+			// rest of the process (#91). A refusal never gets here.
+			state.asked = true
 		}
 		sealOwners.roots[m.root] = state
 	}
