@@ -107,3 +107,22 @@ func TestCompactionReleasesQueuedPrompt(t *testing.T) {
 		t.Fatalf("queued=%v flushed=%v, want the queued prompt sent once compaction ends", m.queued, next != nil)
 	}
 }
+
+func TestCtrlCCancelsCompactionWithoutQuitting(t *testing.T) {
+	session := slowSession()
+	m := newModel(context.Background(), &session, nil, nil, nil, false, nil, nil)
+	cmd, _ := m.runCommand("/compact")
+	go func() { _ = cmd() }()
+	<-session.entered
+	if _, quit := m.updateKey(testModifiedKey('c', tea.ModCtrl)); isQuit(quit) {
+		t.Fatal("ctrl+c during a compaction quit, want it to cancel the compaction")
+	}
+	select {
+	case <-session.finished:
+	case <-time.After(5 * time.Second):
+		t.Fatal("ctrl+c did not cancel the compaction")
+	}
+	if session.cancelled != 1 {
+		t.Fatalf("cancelled=%d, want 1", session.cancelled)
+	}
+}

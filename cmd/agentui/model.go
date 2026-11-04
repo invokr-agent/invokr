@@ -1001,7 +1001,7 @@ func (m *model) helpHint() string {
 
 func (m *model) keyHints() string {
 	if m.focusMode {
-		return ui.Invokr.Warn.Render("BROWSE DETAILS") + "  " + ui.Invokr.Muted.Render("↑/↓ select · enter/space expand/collapse · esc/"+m.keys.FocusTranscript.Help().Key+" back to prompt")
+		return focusHint(m.keys)
 	}
 	// The copy notice lives as long as the highlight it belongs to: whatever
 	// takes the selection down takes the message with it, so it never goes

@@ -120,5 +120,12 @@ func (m *model) setMouseMode(args []string) {
 	m.mouseMode = mode
 	m.selection.Clear()
 	m.savePrefs()
-	m.commandMessage("mouse: " + mode.String() + map[bool]string{true: " (terminal selection, no wheel scroll)", false: " (drag to select, release to copy)"}[mode == mouseOff])
+	m.commandMessage("mouse: " + mode.String() + mouseModeHint(mode))
+}
+
+func mouseModeHint(mode mouseMode) string {
+	if mode == mouseOff {
+		return " (terminal selection, no wheel scroll)"
+	}
+	return " (drag to select, release to copy)"
 }

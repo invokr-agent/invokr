@@ -4,6 +4,8 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"github.com/invokr-agent/invokr/surface/ui"
 )
 
 // Transcript folds: every settled tool block can collapse (its renderer's
@@ -119,4 +121,8 @@ func (m *model) clickFold(y int) bool {
 		return true
 	}
 	return false
+}
+
+func focusHint(keys keyMap) string {
+	return ui.Invokr.Warn.Render("BROWSE DETAILS") + "  " + ui.Invokr.Muted.Render("↑/↓ select · enter/space expand/collapse · esc/"+keys.FocusTranscript.Help().Key+" back to prompt")
 }
