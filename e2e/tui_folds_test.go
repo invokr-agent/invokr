@@ -38,7 +38,7 @@ func TestTUITranscriptFolds(t *testing.T) {
 	s.waitFor(regexp.MustCompile(`fold turn done`), 10*time.Second)
 	// The answer text can show while it still streams; the meta line only
 	// lands with the finished turn, which is when the recorded calls exist.
-	s.waitFor(regexp.MustCompile(`e2e-scripted · \d+`), 10*time.Second)
+	s.waitFor(regexp.MustCompile(`fixture-model · \d+`), 10*time.Second)
 
 	s.send("M-r")
 	s.waitFor(regexp.MustCompile(`Execution history`), 5*time.Second)
