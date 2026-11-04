@@ -101,9 +101,7 @@ func (g *resultGate) spillResult(tool, result string, args json.RawMessage) (str
 	return string(envelope), ref, nil
 }
 
-// sourceNote names the paths the call was about, so a spilled file read points
-// back at the real file: the saved copy is read-only, and editing it never
-// changes the source (#92).
+// A spill copy is read-only, so the note points a spilled read back at the real file.
 func sourceNote(args json.RawMessage) string {
 	var call struct {
 		Path  string   `json:"path"`

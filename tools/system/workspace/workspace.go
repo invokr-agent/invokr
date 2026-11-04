@@ -262,9 +262,7 @@ func (p Policy) ResolveWrite(path string) (string, error) {
 		return "", err
 	}
 	if root, ok := p.ReadOnlyRoot(resolved); ok {
-		// A spill copy is a saved answer, not a file the workspace holds: writing
-		// it leaves the real file untouched, so name the path the model asked
-		// for, which may be a relative one (#92).
+		// Name the path as asked (maybe relative), so the model can write the real file.
 		if root == SpillRoot() {
 			return "", fmt.Errorf("path %q is a spilled tool-result copy at %s; spill files are read-only, and editing one leaves the file it came from unchanged. Write the real workspace file instead", path, resolved)
 		}
@@ -275,8 +273,7 @@ func (p Policy) ResolveWrite(path string) (string, error) {
 	return resolved, nil
 }
 
-// SpillRoot is the directory under the Invokr home where oversized tool results
-// are saved for reading. Config mounts it as a read-only workspace root.
+// SpillRoot is where oversized tool results are saved; config mounts it read-only.
 func SpillRoot() string { return filepath.Join(config.InvokrHomeDir(), constants.SpillDirName) }
 
 func underRoot(path, root string) bool {

@@ -10,10 +10,6 @@ import (
 	"github.com/invokr-agent/invokr/constants"
 )
 
-// A spill file is a saved copy of a tool result, not a file the workspace
-// holds: an edit to one used to succeed while the source stayed unchanged
-// (#92). Reading it stays allowed so a paged result remains reachable, and
-// the refusal names the path so the model can write the real file.
 func TestSpillCopiesRefuseWritesButStayReadable(t *testing.T) {
 	root, home := t.TempDir(), t.TempDir()
 	t.Setenv("INVOKR_HOME", home)
