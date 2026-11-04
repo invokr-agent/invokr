@@ -45,8 +45,6 @@ func TestFooterShowsServedModel(t *testing.T) {
 	}
 }
 
-// TestResponseFooterNamesServedModel: the provenance line under an answer names
-// the model that answered, not the configured pin the router never serves.
 func TestResponseFooterNamesServedModel(t *testing.T) {
 	served, configured := "ornith-9b-mtp-kl-Q8_0", "cyber-tiel/ornith"
 	serving := servingSession{configured: configured, served: served}

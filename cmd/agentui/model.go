@@ -278,8 +278,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		updated, next := m.update(msg)
 		return updated, tea.Batch(cmd, next)
 	}
-	// A background /compact ends with this: it settles the compaction flags and
-	// releases any prompt that queued behind the turn lock.
 	if _, isCompaction := msg.(compactionMsg); isCompaction {
 		return m.updateCompaction()
 	}
@@ -772,9 +770,7 @@ func (m *model) updateResponse(msg responseMsg) (tea.Model, tea.Cmd) {
 
 // responseMeta assembles the provenance line for an answer that just landed.
 // Nothing new is plumbed through the runner: the token count is already on the
-// usage delta, the elapsed time is the wall clock since the send started, and
-// the model comes from the same reader as the model cell so the two can never
-// name different models.
+// usage delta, and the elapsed time is the wall clock since the send started.
 func (m *model) responseMeta(usage turn.TokenUsage) responseMeta {
 	meta := responseMeta{tokens: usage.LatestCompletionTokens}
 	if !m.sentAt.IsZero() {
@@ -1192,8 +1188,6 @@ func (m *model) submit() (*model, tea.Cmd) {
 	if text == "" {
 		return m, nil
 	}
-	// The turn lock is held - by a turn in flight or by a background compaction:
-	// the run takes it after a tool round, else the flush sends it.
 	if m.busy() {
 		return m, m.queueWhileBusy(text)
 	}
@@ -1210,12 +1204,9 @@ func (m *model) submit() (*model, tea.Cmd) {
 	return m, m.sendPrompt(text)
 }
 
-// busy is whether the turn lock is held, by a turn in flight or by a background
-// compaction, so a submitted prompt has to queue behind it.
 func (m *model) busy() bool { return m.sending || m.compacting }
 
-// queueWhileBusy parks the prompt until the lock frees. Only a turn in flight
-// can take a mid-turn steer, so a compaction just holds the queue.
+// Only a turn in flight can take a mid-turn steer; a compaction just holds the queue.
 func (m *model) queueWhileBusy(text string) tea.Cmd {
 	m.queued = append(m.queued, text)
 	m.appendHistory(text)
@@ -1265,10 +1256,7 @@ func (m *model) flushQueued(turnInterrupted bool, err error) tea.Cmd {
 	return m.sendPrompt(text)
 }
 
-// updateCompaction settles a background /compact. The compaction's own notices
-// are already in the transcript, so this only closes the wait: esc owns the
-// cancel, and a prompt that queued behind the turn lock goes out now unless
-// the compaction was stopped, where the queue waits for the user to confirm.
+// A stopped compaction leaves the queue for the user to confirm.
 func (m *model) updateCompaction() (tea.Model, tea.Cmd) {
 	cancelled := m.stopping
 	m.compacting, m.compactingAt, m.cancelSend, m.stopping = false, time.Time{}, nil, false

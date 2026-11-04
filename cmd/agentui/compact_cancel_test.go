@@ -10,8 +10,6 @@ import (
 	"github.com/invokr-agent/invokr/platform/turn"
 )
 
-// slowCompactSession models a summarizer that runs until esc cancels it or the
-// test lets it finish, and reports which happened.
 type slowCompactSession struct {
 	liveCommandSession
 	started, cancelled         int
@@ -38,8 +36,6 @@ func slowSession() slowCompactSession {
 	}
 }
 
-// TestBackgroundCompactReportsDoneAndEscCancels: /compact used to end with no
-// message at all, and only quitting could stop a slow summarizer.
 func TestBackgroundCompactReportsDoneAndEscCancels(t *testing.T) {
 	session := slowSession()
 	m := newModel(context.Background(), &session, nil, nil, nil, false, nil, nil)
@@ -75,8 +71,6 @@ func TestBackgroundCompactReportsDoneAndEscCancels(t *testing.T) {
 	}
 }
 
-// TestCompactionReleasesQueuedPrompt: a prompt submitted while the turn lock is
-// held by a compaction queues, and goes out once the compaction ends.
 func TestCompactionReleasesQueuedPrompt(t *testing.T) {
 	session := slowSession()
 	m := newModel(context.Background(), &session, nil, nil, nil, false, nil, nil)

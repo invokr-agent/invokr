@@ -368,9 +368,6 @@ func compactCommandText(session turn.Session, _ []string) string {
 
 type immediateCompactor interface{ CompactNow(context.Context) }
 
-// compactionMsg closes a background /compact. The compaction's own notices say
-// what it did; this is what lets the UI settle and release the prompts that
-// queued behind the turn lock.
 type compactionMsg struct{}
 
 func runCompactCommand(m *model, _ string, _ []string) tea.Cmd {
