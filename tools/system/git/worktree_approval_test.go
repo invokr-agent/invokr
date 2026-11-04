@@ -11,10 +11,7 @@ import (
 	"github.com/invokr-agent/invokr/tools/core"
 )
 
-// A linked worktree keeps hooks and shared config in the shared repository, so
-// nothing protected is missing for that layout: the write itself is auto-approved
-// in Auto, hence any prompt is the seal question that used to follow every
-// git_write (#91).
+// Writes are auto-approved in Auto, so any prompt here is the seal question.
 func TestGitWriteInAWorktreeAsksOnce(t *testing.T) {
 	repo := newRepo(t)
 	worktree := filepath.Join(t.TempDir(), "wt")

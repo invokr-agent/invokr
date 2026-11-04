@@ -36,12 +36,8 @@ func (p Policy) ProtectedPaths() []string {
 	paths := append([]string{config.InvokrHomeDir(), config.DefaultConfigPath()}, p.protected...)
 	for _, root := range p.roots {
 		paths = append(paths, filepath.Join(root, ".invokr"))
-		// Git reads hooks and shared config from the checkout's common git dir
-		// only: a linked worktree's own git dir holds neither, so sealing them
-		// there asks the user to consent to names that layout never creates.
-		// GitDirs leads with that shared dir for a linked worktree or an
-		// absorbed submodule; appending the workspace's own .git answers a
-		// plain clone or a non-repository with itself.
+		// Git reads hooks and shared config only from the common git dir, which GitDirs
+		// lists first; a linked worktree's own git dir holds neither.
 		git := filepath.Join(root, ".git")
 		dirs := append(GitDirs(root), git) // len > 1 iff .git is a pointer to a shared repository.
 		if _, err := os.Stat(git); err != nil && len(dirs) == 1 {

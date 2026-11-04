@@ -41,7 +41,6 @@ func TestMissingSealsRequireScopedApproval(t *testing.T) {
 			}
 		}
 		release()
-		// A grant is remembered for the rest of the process; a refusal is not.
 		wants := 2
 		if allow {
 			wants = 1

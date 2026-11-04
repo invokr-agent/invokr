@@ -116,11 +116,8 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 }
 
 func approveSeals(ctx context.Context, missing []missingSeal) error {
-	// Consent is remembered per writable root for the whole process: the same
-	// absent names reappear on every call, and a second prompt after the
-	// tool's own made every write in a worktree look like a hang (#91). A
-	// refusal is not remembered, and the policy check still runs once the
-	// answer is on record, so a session with no approver still refuses.
+	// Consent is remembered per writable root for the process; a refusal is not, and
+	// the policy check still runs, so a session with no approver still refuses.
 	if len(missing) == 0 {
 		return nil
 	}
@@ -145,9 +142,6 @@ func retainSeals(missing []missingSeal, delta int) {
 		state.active += delta
 		if delta > 0 {
 			state.epoch++
-			// Reaching this point means the call was approved or auto-approved,
-			// so the answer about creating these names is on record for the
-			// rest of the process (#91). A refusal never gets here.
 			state.asked = true
 		}
 		sealOwners.roots[m.root] = state

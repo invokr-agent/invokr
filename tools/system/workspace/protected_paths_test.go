@@ -9,8 +9,6 @@ import (
 	"github.com/invokr-agent/invokr/config"
 )
 
-// linkedWorktree builds the layout git uses for `git worktree add`: the
-// worktree's .git is a pointer file, and the shared repository sits outside it.
 func linkedWorktree(t *testing.T) (main, worktree string) {
 	t.Helper()
 	main, worktree = t.TempDir(), filepath.Join(t.TempDir(), "wt")
@@ -31,9 +29,6 @@ func linkedWorktree(t *testing.T) (main, worktree string) {
 	return main, worktree
 }
 
-// A linked worktree reads hooks and shared config from the shared repository
-// and has neither in its own git dir; sealing names the layout never creates
-// asked for consent on every sandboxed write (#91).
 func TestProtectedPathsFollowTheWorktreeLayout(t *testing.T) {
 	main, worktree := linkedWorktree(t)
 	paths := NewWorkspacePolicy(config.WorkspaceConfig{Root: worktree}).ProtectedPaths()
@@ -52,8 +47,6 @@ func TestProtectedPathsFollowTheWorktreeLayout(t *testing.T) {
 	}
 }
 
-// A plain clone keeps .git inside the workspace; a workspace with no repository
-// still consents to one a sandboxed command might create.
 func TestProtectedPathsSealAPlainCloneAndAnAbsentRepository(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, ".git", "hooks"), 0o755); err != nil {
