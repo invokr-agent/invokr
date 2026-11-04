@@ -47,13 +47,23 @@ type Agent struct {
 	newSession runtime.ChatSessionFunc
 	commands   Commands
 	sessions   sync.Map
+	// bound is the host's own session: a shared TUI serves its chat contacts
+	// from it rather than making a fresh one, so the transcript, the mode and
+	// the approval queue are the ones the human sees. A turn a chat contact
+	// starts is pinned: it answers for its own approvals.
+	bound *chatSession
 }
 
 // latestVersion is the newer invokr release tag, "" when none is known; tests replace it.
 var latestVersion = version.LatestVersion
 
 func Serve(ctx context.Context, in io.Reader, out io.Writer, bus events.Bus, newSession runtime.ChatSessionFunc, commands Commands) error {
-	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}
+	return serve(&Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}, bus, ctx)
+}
+
+// serve registers the usage forwarder, starts the release lookup and runs the
+// connection until the client or ctx ends.
+func serve(a *Agent, bus events.Bus, ctx context.Context) error {
 	stopUsage := a.registerUsage(bus)
 	defer stopUsage()
 	latestVersion() // starts the background lookup so the first reply can carry its answer
@@ -112,6 +122,21 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 	if !sameDir(req.Cwd, wd) {
 		return acp.NewSessionResponse{}, fmt.Errorf("acp: cwd %q differs from the workspace invokr was started in (%q); start invokr acp in that directory", req.Cwd, wd)
 	}
+	if a.bound != nil {
+		// One shared TUI has one session: the chat contact gets that one, so
+		// its turns land in the transcript, mode and approval queue the human
+		// is looking at.
+		bound := acp.SessionID(a.bound.SessionID())
+		if _, already := a.sessions.Load(bound); !already {
+			a.sessions.Store(bound, a.bound)
+			listModels(ctx, a.bound)
+			go func() {
+				_ = a.update(context.WithoutCancel(ctx), bound, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{
+					AvailableCommands: a.available()}})
+			}()
+		}
+		return acp.NewSessionResponse{SessionID: bound, Modes: modeState(a.bound.approvals.Policy), ConfigOptions: configOptions(a.bound)}, nil
+	}
 	sess, broker, err := a.newSession("")
 	if err != nil {
 		return acp.NewSessionResponse{}, err
@@ -120,10 +145,7 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 	chat := &chatSession{IdentifiedSession: sess, approvals: broker}
 	listModels(ctx, chat)
 	a.sessions.Store(id, chat)
-	commands := []acp.AvailableCommand{modeCommand}
-	if a.commands != nil {
-		commands = append(commands, a.commands.Available()...)
-	}
+	commands := a.available()
 	go func() {
 		_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{AvailableCommands: commands}})
 	}()
@@ -186,16 +208,23 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 func (a *Agent) send(ctx context.Context, id acp.SessionID, sess *chatSession, input string) (acp.PromptResponse, error) {
 	var denied []turn.ToolOutcome
 	var approved []acp.ToolCallID
-	stopDrain := approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
-		d := a.ask(ctx, id, r)
-		if d.Approved {
-			approved = append(approved, acp.ToolCallID(r.ID))
-		} else {
-			denied = append(denied, turn.ToolOutcome{Tool: r.Tool, Detail: strings.TrimPrefix(cmp.Or(r.Summary, r.Tool), "Run ")})
-		}
-		return d
-	})
-	resp, err := sess.Send(ctx, input)
+	// A bound session belongs to the host: its approvals are raised by the
+	// host's own queue, which mirrors them to this connection. Draining the
+	// broker here would split each request between two consumers, so one
+	// answer would silently win over the other surface.
+	stopDrain := func() {}
+	if a.bound == nil {
+		stopDrain = approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
+			d := a.ask(ctx, id, r)
+			if d.Approved {
+				approved = append(approved, acp.ToolCallID(r.ID))
+			} else {
+				denied = append(denied, turn.ToolOutcome{Tool: r.Tool, Detail: strings.TrimPrefix(cmp.Or(r.Summary, r.Tool), "Run ")})
+			}
+			return d
+		})
+	}
+	resp, err := sess.Send(a.pinned(ctx), input)
 	stopDrain()
 	final := acp.ToolCallStatusCompleted
 	if err != nil {
@@ -282,6 +311,25 @@ func evidenceMark(e turn.ExecutionEvidence, pending, labels *[]turn.ToolOutcome)
 		return label, fmt.Sprintf("✗ %s exit=%d", outcome, *e.ExitCode)
 	}
 	return label, "✗ " + outcome
+}
+
+// available lists the commands an ACP client may run in a chat turn.
+func (a *Agent) available() []acp.AvailableCommand {
+	commands := []acp.AvailableCommand{modeCommand}
+	if a.commands != nil {
+		commands = append(commands, a.commands.Available()...)
+	}
+	return commands
+}
+
+// pinned is the context a turn started for a chat contact carries: pinned, so
+// the host session's mode, grants and toggles lend the turn nothing (see
+// approval.Pin).
+func (a *Agent) pinned(ctx context.Context) context.Context {
+	if a.bound == nil {
+		return ctx
+	}
+	return approval.Pin(ctx)
 }
 
 func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request) approval.Decision {

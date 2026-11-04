@@ -208,3 +208,61 @@ func TestStructuredDenialPathsKeepSpaces(t *testing.T) {
 		t.Fatal("structured denied path split at whitespace")
 	}
 }
+
+// A pinned turn is how a chat relay's message runs inside a session a human
+// started. Nothing the session granted or allowed may reach it: the issue's bar
+// is that a YOLO session still asks, and that Auto's confined-work and network
+// shortcuts do not answer for a stranger.
+func TestPinnedTurnApprovals(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		mode                  Mode
+		req                   Request
+		ask, publish, network bool
+		rule                  string // "grant", "deny": a standing rule for git status
+		prompt, denied        bool
+	}{
+		{"yolo-asks", YOLO, Request{Writes: true, Publishes: true, Protected: true}, true, false, false, "", true, false},
+		{"auto-confined-asks", Auto, Request{Writes: true, Confined: true}, true, false, false, "", true, false},
+		{"auto-network-toggle-asks", Auto, Request{Network: true, Confined: true}, true, false, true, "", true, false},
+		{"auto-publish-asks", Auto, Request{Publishes: true, Network: true, Confined: true}, true, true, false, "", true, false},
+		{"standing-grant-asks", Auto, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "grant", true, false},
+		{"standing-denial-denies", Manual, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "deny", false, true},
+		{"plan-write-blocked", Plan, Request{Confined: true, Writes: true}, true, false, false, "", false, true},
+		{"plan-read-asks", Plan, Request{ReadOnly: true}, true, false, false, "", true, false},
+		// A call the tool declares automatic (ask=false: a read, a dry run) runs
+		// without a prompt, exactly as in a Manual session.
+		{"automatic-runs", YOLO, Request{ReadOnly: true}, false, false, false, "", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewPolicy(tc.mode, tc.publish)
+			p.SetAutoNetwork(tc.network)
+			if tc.rule != "" {
+				s := newTestStore(t)
+				g := testGrant(t, "git status*")
+				if tc.rule == "deny" {
+					g = denial(t, "git status*")
+				}
+				mustAdd(t, s, g)
+				p.SetStore(s, nil)
+			}
+			ctx, done := p.Begin(Pin(context.Background()), tc.req)
+			defer done()
+			called, checked := false, false
+			approver := modeApprover(func(_ context.Context, req Request) (Decision, error) {
+				called, checked = true, req.PolicyChecked
+				return Decision{Approved: true}, nil
+			})
+			_, err := Authorize(ctx, approver, tc.req, tc.ask)
+			if (err != nil) != tc.denied || called != tc.prompt {
+				t.Fatalf("err=%v prompted=%v, want denied=%v prompted=%v", err, called, tc.denied, tc.prompt)
+			}
+			if tc.prompt && !checked {
+				t.Fatal("a pinned request could be auto-decided by the queue's standing grants")
+			}
+			if p.Mode() != tc.mode {
+				t.Fatalf("pinning changed the session mode to %s", p.Mode())
+			}
+		})
+	}
+}
