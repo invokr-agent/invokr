@@ -90,7 +90,10 @@ func (g *resultGate) spillResult(tool, result string, args json.RawMessage) (str
 	if err != nil {
 		return "", "", fmt.Errorf("spill %s result: %w", tool, err)
 	}
-	stub := spillStub(payload, ref, g.budget) + sourceNote(args)
+	stub := spillStub(payload, ref, g.budget)
+	if tool == "read_file" {
+		stub += sourceNote(args)
+	}
 	if !enveloped {
 		return stub, ref, nil
 	}
