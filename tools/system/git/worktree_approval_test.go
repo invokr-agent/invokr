@@ -9,10 +9,14 @@ import (
 
 	"github.com/invokr-agent/invokr/capability/approval"
 	"github.com/invokr-agent/invokr/tools/core"
+	"github.com/invokr-agent/invokr/tools/core/sandbox"
 )
 
 // Writes are auto-approved in Auto, so any prompt here is the seal question.
 func TestGitWriteInAWorktreeAsksOnce(t *testing.T) {
+	if !sandbox.Available() {
+		t.Skip("namespace sandbox unavailable")
+	}
 	repo := newRepo(t)
 	worktree := filepath.Join(t.TempDir(), "wt")
 	gitIn(t, repo, "worktree", "add", "-q", worktree)
