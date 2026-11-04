@@ -116,7 +116,7 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 }
 
 func approveSeals(ctx context.Context, missing []missingSeal) error {
-	// Consent is remembered per writable root for the process; a refusal is not, and
+	// Consent is remembered per path for the process; a refusal is not, and
 	// the policy check still runs, so a session with no approver still refuses.
 	if len(missing) == 0 {
 		return nil
