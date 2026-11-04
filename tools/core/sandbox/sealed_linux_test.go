@@ -24,6 +24,30 @@ func (a *sealApprover) RequestApproval(_ context.Context, req approval.Request) 
 	return approval.Decision{Approved: a.allow, Reason: "test decision"}, nil
 }
 
+// Consent must not spread: agreeing to create one missing name says nothing
+// about a different missing name under the same writable root.
+func TestConsentIsRememberedPerMissingPath(t *testing.T) {
+	root := t.TempDir()
+	first, second := filepath.Join(root, ".invokr"), filepath.Join(root, ".git")
+	one := Plan{RW: []string{root}, Sealed: []string{first}, CommandPath: "/bin/sh"}
+	two := Plan{RW: []string{root}, Sealed: []string{second}, CommandPath: "/bin/sh"}
+	a := &sealApprover{allow: true}
+	ctx, release := approval.NewPolicy(approval.Auto, false).Begin(context.Background(), approval.Request{Tool: "shell", Subject: "touch written"}, a)
+	defer release()
+	for _, plan := range []Plan{one, two} {
+		_, cleanup, err := Command(ctx, plan, root, nil)
+		if cleanup != nil {
+			cleanup()
+		}
+		if err != nil {
+			t.Fatalf("%v", err)
+		}
+	}
+	if len(a.requests) != 2 {
+		t.Fatalf("approvals = %d, want one per missing path: %+v", len(a.requests), a.requests)
+	}
+}
+
 func TestMissingSealsRequireScopedApproval(t *testing.T) {
 	root := t.TempDir()
 	missing := filepath.Join(root, ".invokr")
@@ -41,8 +65,12 @@ func TestMissingSealsRequireScopedApproval(t *testing.T) {
 			}
 		}
 		release()
-		if len(a.requests) != 2 || !a.requests[0].Protected || !a.requests[0].PolicyChecked || !strings.Contains(a.requests[0].Details, missing) {
-			t.Fatalf("missing per-call protected-path prompt: %+v", a.requests)
+		wants := 2
+		if allow {
+			wants = 1
+		}
+		if len(a.requests) != wants || !a.requests[0].Protected || !a.requests[0].PolicyChecked || !strings.Contains(a.requests[0].Details, missing) {
+			t.Fatalf("allow=%v approvals=%d want=%d: %+v", allow, len(a.requests), wants, a.requests)
 		}
 	}
 	if _, _, err := Command(context.Background(), plan, root, nil); err == nil {

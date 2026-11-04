@@ -36,14 +36,18 @@ func (p Policy) ProtectedPaths() []string {
 	paths := append([]string{config.InvokrHomeDir(), config.DefaultConfigPath()}, p.protected...)
 	for _, root := range p.roots {
 		paths = append(paths, filepath.Join(root, ".invokr"))
-		for _, dir := range GitDirs(root) {
-			paths = append(paths, filepath.Join(dir, "config"), filepath.Join(dir, "hooks"))
-		}
+		// Git reads hooks and shared config only from the checkout's common git
+		// dir, which GitDirs names first when it can verify the layout.
 		git := filepath.Join(root, ".git")
-		if info, err := os.Stat(git); err == nil && info.IsDir() {
+		dirs := GitDirs(root)
+		if info, err := os.Stat(git); err != nil {
+			paths = append(paths, git) // Absent: consent covers a repository the command might create.
+		} else if info.IsDir() {
 			paths = append(paths, filepath.Join(git, "hooks"), filepath.Join(git, "config"))
+		} else if len(dirs) > 0 {
+			paths = append(paths, git, filepath.Join(dirs[0], "hooks"), filepath.Join(dirs[0], "config"))
 		} else {
-			paths = append(paths, git)
+			paths = append(paths, git) // An unverified pointer must not be rewritable.
 		}
 	}
 	for i, path := range paths {

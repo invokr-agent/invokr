@@ -18,6 +18,7 @@ type missingSeal struct {
 	*fsutil.AbsentPath
 	root  string
 	epoch uint64
+	asked bool // this call would repeat a consent question already answered
 }
 
 type sealOwner struct {
@@ -30,7 +31,8 @@ type sealOwner struct {
 var sealOwners = struct {
 	sync.Mutex
 	roots map[string]sealOwner
-}{roots: make(map[string]sealOwner)}
+	asked map[string]bool // paths whose creation the process already consented to
+}{roots: make(map[string]sealOwner), asked: make(map[string]bool)}
 
 // ProcessSpec opts foreground execution into Auto's post-run protected-name check.
 // Other callers use Command and retain per-launch approval for absent seals.
@@ -104,7 +106,8 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 			return existing, missing, statErr
 		}
 		if absent != nil {
-			missing = append(missing, missingSeal{absent, root, sealOwners.roots[root].epoch})
+			owner := sealOwners.roots[root]
+			missing = append(missing, missingSeal{absent, root, owner.epoch, sealOwners.asked[path]})
 			continue
 		}
 		existing = append(existing, path)
@@ -113,13 +116,16 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 }
 
 func approveSeals(ctx context.Context, missing []missingSeal) error {
+	// Consent is remembered per path for the process; a refusal is not, and
+	// the policy check still runs, so a session with no approver still refuses.
 	if len(missing) == 0 {
 		return nil
 	}
-	paths := core.MapSlice(missing, func(m missingSeal) string { return m.Path })
 	req := approval.CallRequest(ctx)
-	req.Protected, req.Confined, req.Writes, req.ReadOnly = true, true, true, false
-	req.Summary = "Let this command create protected paths (.git hooks or config, .invokr) that do not exist yet"
+	req.Confined, req.Writes, req.ReadOnly = true, true, false
+	req.Protected = req.Protected || slices.ContainsFunc(missing, func(m missingSeal) bool { return !m.asked })
+	paths := core.MapSlice(missing, func(m missingSeal) string { return m.Path })
+	req.Summary = "Let this workspace create protected paths (.git hooks or config, .invokr) that do not exist yet"
 	req.Details = "These paths do not exist and cannot be sealed. This process and its children could create or modify them:\n" + strings.Join(paths, "\n")
 	handled, err := approval.Authorize(ctx, nil, req, true)
 	if !handled {
@@ -136,6 +142,7 @@ func retainSeals(missing []missingSeal, delta int) {
 		state.active += delta
 		if delta > 0 {
 			state.epoch++
+			sealOwners.asked[m.Path] = true
 		}
 		sealOwners.roots[m.root] = state
 	}
