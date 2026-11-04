@@ -48,9 +48,7 @@ type Agent struct {
 	commands   Commands
 	sessions   sync.Map
 	// bound is the host's own session: a shared TUI serves its chat contacts
-	// from it rather than making a fresh one, so the transcript, the mode and
-	// the approval queue are the ones the human sees. A turn a chat contact
-	// starts is pinned: it answers for its own approvals.
+	// from it, so turns land in the transcript, mode and approvals the human sees.
 	bound *chatSession
 }
 
@@ -61,8 +59,6 @@ func Serve(ctx context.Context, in io.Reader, out io.Writer, bus events.Bus, new
 	return serve(&Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}, bus, ctx)
 }
 
-// serve registers the usage forwarder, starts the release lookup and runs the
-// connection until the client or ctx ends.
 func serve(a *Agent, bus events.Bus, ctx context.Context) error {
 	stopUsage := a.registerUsage(bus)
 	defer stopUsage()
@@ -123,9 +119,7 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 		return acp.NewSessionResponse{}, fmt.Errorf("acp: cwd %q differs from the workspace invokr was started in (%q); start invokr acp in that directory", req.Cwd, wd)
 	}
 	if a.bound != nil {
-		// One shared TUI has one session: the chat contact gets that one, so
-		// its turns land in the transcript, mode and approval queue the human
-		// is looking at.
+		// One shared TUI has one session: a contact gets the host's, not a fresh one.
 		bound := acp.SessionID(a.bound.SessionID())
 		if _, already := a.sessions.Load(bound); !already {
 			a.sessions.Store(bound, a.bound)
@@ -208,10 +202,8 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 func (a *Agent) send(ctx context.Context, id acp.SessionID, sess *chatSession, input string) (acp.PromptResponse, error) {
 	var denied []turn.ToolOutcome
 	var approved []acp.ToolCallID
-	// A bound session belongs to the host: its approvals are raised by the
-	// host's own queue, which mirrors them to this connection. Draining the
-	// broker here would split each request between two consumers, so one
-	// answer would silently win over the other surface.
+	// A bound session's approvals go to the host's queue, which mirrors them
+	// here; draining the broker too would split each request between consumers.
 	stopDrain := func() {}
 	if a.bound == nil {
 		stopDrain = approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
@@ -322,9 +314,8 @@ func (a *Agent) available() []acp.AvailableCommand {
 	return commands
 }
 
-// pinned is the context a turn started for a chat contact carries: pinned, so
-// the host session's mode, grants and toggles lend the turn nothing (see
-// approval.Pin).
+// pinned is the context a chat contact's turn runs in: the host session lends
+// it nothing (see approval.Pin).
 func (a *Agent) pinned(ctx context.Context) context.Context {
 	if a.bound == nil {
 		return ctx

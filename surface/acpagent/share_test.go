@@ -1,6 +1,5 @@
-// A connection agent-relay dials in gets the host's own session, and the
-// turn it starts carries a pin: the host session's permissive mode must not
-// answer for a message a chat contact sent.
+// The host's own session serves a share connection, and its turns carry a pin:
+// a permissive host mode must not answer for a chat contact's message.
 
 package acpagent
 
@@ -17,8 +16,7 @@ import (
 	"github.com/invokr-agent/invokr/platform/turn"
 )
 
-// recordingSession keeps the context a turn arrived with, which is where the
-// pin lives.
+// recordingSession keeps the context a turn arrived with, where the pin lives.
 type recordingSession struct {
 	ctx context.Context
 }
@@ -30,8 +28,8 @@ func (s *recordingSession) Send(ctx context.Context, _ string) (turn.AgentRespon
 	return turn.AgentResponse{Message: "done"}, nil
 }
 
-// boundAgent is the agent a shared connection gets: the host session, and a
-// factory that fails the test if the connection is ever handed a fresh session.
+// boundAgent is the agent a shared connection gets, with a factory that fails
+// the test if it is ever handed a fresh session.
 func boundAgent(t *testing.T, host turn.IdentifiedSession, broker *approval.Broker) (*Agent, *chatSession) {
 	chat := &chatSession{IdentifiedSession: host, approvals: broker}
 	orig := latestVersion
@@ -43,8 +41,7 @@ func boundAgent(t *testing.T, host turn.IdentifiedSession, broker *approval.Brok
 		_ = toAgentW.Close()
 		_ = toClientW.Close()
 	})
-	// Nothing speaks ACP back here, so the agent's own writes must not block:
-	// drain them.
+	// Nothing speaks ACP back here, so drain the agent's writes to avoid blocking.
 	go func() {
 		into := [4096]byte{}
 		for {
@@ -84,8 +81,8 @@ func TestSharedConnectionGetsTheHostSession(t *testing.T) {
 	}
 }
 
-// askingApprover records that a call reached a human instead of being answered
-// by the host session's mode.
+// askingApprover records that a call reached a human rather than the host
+// session's mode.
 type askingApprover struct {
 	asked bool
 }
@@ -95,9 +92,8 @@ func (a *askingApprover) RequestApproval(context.Context, approval.Request) (app
 	return approval.Decision{Approved: false, Reason: "not now"}, nil
 }
 
-// TestChatTurnIsPinned is the issue's security bar from the surface's side: the
-// context a chat turn runs in is pinned, so a YOLO host session still asks
-// before a call that message started.
+// TestChatTurnIsPinned: a pinned chat turn still asks when the host session is
+// YOLO.
 func TestChatTurnIsPinned(t *testing.T) {
 	broker := approval.NewBroker()
 	broker.Policy = approval.NewPolicy(approval.YOLO, false)

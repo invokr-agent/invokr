@@ -209,17 +209,14 @@ func TestStructuredDenialPathsKeepSpaces(t *testing.T) {
 	}
 }
 
-// A pinned turn is how a chat relay's message runs inside a session a human
-// started. Nothing the session granted or allowed may reach it: the issue's bar
-// is that a YOLO session still asks, and that Auto's confined-work and network
-// shortcuts do not answer for a stranger.
+// A pinned turn inherits nothing the host session granted or allowed.
 func TestPinnedTurnApprovals(t *testing.T) {
 	for _, tc := range []struct {
 		name                  string
 		mode                  Mode
 		req                   Request
 		ask, publish, network bool
-		rule                  string // "grant", "deny": a standing rule for git status
+		rule                  string
 		prompt, denied        bool
 	}{
 		{"yolo-asks", YOLO, Request{Writes: true, Publishes: true, Protected: true}, true, false, false, "", true, false},
@@ -230,8 +227,6 @@ func TestPinnedTurnApprovals(t *testing.T) {
 		{"standing-denial-denies", Manual, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "deny", false, true},
 		{"plan-write-blocked", Plan, Request{Confined: true, Writes: true}, true, false, false, "", false, true},
 		{"plan-read-asks", Plan, Request{ReadOnly: true}, true, false, false, "", true, false},
-		// A call the tool declares automatic (ask=false: a read, a dry run) runs
-		// without a prompt, exactly as in a Manual session.
 		{"automatic-runs", YOLO, Request{ReadOnly: true}, false, false, false, "", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

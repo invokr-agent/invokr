@@ -11,7 +11,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// dial connects to path the way agent-relay does: a bounded unix dial.
 func dial(t *testing.T, path string) net.Conn {
 	t.Helper()
 	conn, err := net.DialTimeout("unix", path, 2*time.Second)
@@ -44,8 +43,7 @@ func TestListenAcceptsOwnPeer(t *testing.T) {
 	}
 }
 
-// A socket file nobody answers is left behind by a crash, and bind refuses
-// the path: listening must clear it rather than fail.
+// bind refuses a path a dead listener left behind, so listening must clear it.
 func TestListenClearsStaleSocket(t *testing.T) {
 	path := socketPathIn(t)
 	if err := leaveStaleSocket(path); err != nil {
@@ -59,8 +57,6 @@ func TestListenClearsStaleSocket(t *testing.T) {
 	_ = dial(t, path).Close()
 }
 
-// leaveStaleSocket binds a socket and closes the descriptor without removing
-// the file, which is what a killed listener leaves behind.
 func leaveStaleSocket(path string) error {
 	fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {
@@ -89,9 +85,8 @@ func TestListenRefusesLiveSocket(t *testing.T) {
 	}
 }
 
-// agent-relay dials only a socket file it owns, with no group or other write
-// bit, in a directory others cannot write. The listener creates exactly that,
-// or the relay answers "socket not used" and spawns its own agent.
+// agent-relay dials only a socket it owns with no group or other write bit,
+// in a directory others cannot write; otherwise it answers "socket not used".
 func TestListenSocketIsTrustedByTheRelay(t *testing.T) {
 	s, err := Listen(socketPathIn(t))
 	if err != nil {
@@ -117,8 +112,8 @@ func TestListenSocketIsTrustedByTheRelay(t *testing.T) {
 	}
 }
 
-// A peer that does not run as us never reaches ACP. No test can run under
-// another uid, so the credential read is replaced, as in agent-relay.
+// No test can run an invokr under another uid, so the credential read is
+// replaced.
 func TestAcceptRefusesForeignPeer(t *testing.T) {
 	own := peerUID
 	peerUID = func(fd int) (int, error) {
@@ -141,8 +136,8 @@ func TestAcceptRefusesForeignPeer(t *testing.T) {
 	}
 }
 
-// socketPathIn returns a path under a private directory. AF_UNIX caps the
-// name at 107 bytes, so a long temp root is not always usable.
+// AF_UNIX caps a socket name at 107 bytes, so a long temp root is not always
+// usable.
 func socketPathIn(t *testing.T) string {
 	dir := filepath.Join(t.TempDir(), "r")
 	if err := os.Mkdir(dir, 0o700); err != nil {

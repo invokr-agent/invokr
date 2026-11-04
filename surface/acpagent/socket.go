@@ -1,11 +1,5 @@
-// The socket half of sharing a live session with agent-relay: where the TUI
-// listens, and the checks that make answering it safe. agent-relay dials the
-// same path and trusts it only when the file and its directory deny group and
-// other writes, the file belongs to its uid, and the process on the other end
-// of the connection runs as its uid. This listener keeps the same promises for
-// the socket it creates and makes the peer check its own, because whoever can
-// create, replace or write this socket can put words into a chat and act in a
-// workspace.
+// Whoever can create, replace or write the share socket can put words into a
+// chat and act in a workspace, so both ends verify the file and the peer uid.
 package acpagent
 
 import (
@@ -31,9 +25,9 @@ const (
 	maxSocketPath = 107
 )
 
-// SocketPath is where a shared session listens: $XDG_RUNTIME_DIR/invokr/relay
-// .sock, falling back to ~/.invokr/run/relay.sock for a session with no runtime
-// directory. agent-relay's agent_socket is set to the same path.
+// SocketPath is where a share listens: $XDG_RUNTIME_DIR/invokr/relay.sock,
+// or ~/.invokr/run/relay.sock with no runtime directory; agent-relay dials
+// the same path.
 func SocketPath() string {
 	runtime := config.Env("XDG_RUNTIME_DIR")
 	if runtime == "" {
@@ -92,9 +86,9 @@ func Listen(path string) (Socket, error) {
 // no test can run an invokr under another uid.
 var peerUID = peerCredentialUID
 
-// Accept waits for the next connection and returns it only when the process
-// behind it runs as this process's uid. A peer whose uid cannot be read is
-// refused: the credential check is the whole trust boundary, so it fails closed.
+// Accept returns a connection only when the process behind it runs as this
+// uid; an unreadable credential refuses, since that check is the whole
+// trust boundary.
 func (s Socket) Accept() (*Conn, error) {
 	fd, _, err := unix.Accept(s.fd)
 	if err != nil {
@@ -110,9 +104,8 @@ func (s Socket) Accept() (*Conn, error) {
 	return conn, nil
 }
 
-// Conn is one accepted connection: the descriptor both directions speak ACP
-// over. Go cannot adopt an accepted descriptor as a net.UnixConn (only the
-// side that connected owns one), so the stream reads and writes the fd.
+// Go cannot adopt an accepted descriptor as a net.UnixConn (only the side that
+// connected owns one), so Conn's stream reads and writes the fd.
 type Conn struct {
 	fd atomic.Int32
 }
@@ -141,9 +134,8 @@ func (c *Conn) Write(from []byte) (int, error) {
 	return n, nil
 }
 
-// Close releases the descriptor once: acp joins a reader and a writer and
-// closes both, and a second close of a closed fd would report a failed session
-// where the stream simply ended.
+// Close releases the descriptor once: acp closes both the reader and writer,
+// and a second close would report a failed session where the stream ended.
 func (c *Conn) Close() error {
 	fd := int(c.fd.Swap(-1))
 	if fd < 0 {
@@ -152,8 +144,6 @@ func (c *Conn) Close() error {
 	return unix.Close(fd)
 }
 
-// Close stops listening and removes the socket file, so a later session can
-// take the path.
 func (s Socket) Close() error {
 	closed := unix.Close(s.fd)
 	removed := os.Remove(s.Path)
@@ -163,9 +153,8 @@ func (s Socket) Close() error {
 	return errors.Join(closed, removed)
 }
 
-// clearStale removes a socket file nobody answers. One that answers belongs to
-// another session's shared TUI, and taking the path would point that session's
-// chat at this one.
+// clearStale removes a socket file nobody answers; taking the path from one
+// that answers would point another session's chat here.
 func clearStale(path string) error {
 	if answers(path) {
 		return fmt.Errorf("%s is already serving a shared session; close it there first", path)
@@ -177,9 +166,8 @@ func clearStale(path string) error {
 }
 
 // answers is a non-blocking dial: a listener accepts us (EINPROGRESS counts as
-// accepted, the connection is then closed unread), and nothing listening gives
-// ECONNREFUSED. Bounded by the socket's backlog rather than a clock, which is
-// why agent-relay bounds its own dial at 3s.
+// accepted, then closed unread), and nothing listening gives ECONNREFUSED.
+// Bounded by the socket's backlog, not a clock.
 func answers(path string) bool {
 	fd, err := unix.Socket(unix.AF_UNIX, unix.SOCK_STREAM, 0)
 	if err != nil {

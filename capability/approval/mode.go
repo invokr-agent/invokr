@@ -152,25 +152,18 @@ type callState struct {
 	policy   *Policy
 	mode     Mode
 	request  Request
-	// pinned calls answer for themselves: see Pin.
-	pinned bool
+	pinned   bool
 }
 
-// Pin marks the turn this context carries as one nobody local started: a chat
-// contact on a shared TUI session sent the message. Nothing the session granted
-// or allowed reaches such a turn — no standing rules, no permissive mode, no
-// Auto publishing or network toggle — because the local human answered for a
-// different request. The chat that started it answers every call the turn
-// raises allow-once or reject-once, and an unanswered call denies.
+// Pin marks a turn nobody local started: a chat contact on a shared TUI sent
+// the message, so nothing this session granted or allowed may answer for it.
 type pinnedKey struct{}
 
 func Pin(ctx context.Context) context.Context { return context.WithValue(ctx, pinnedKey{}, true) }
 
-// forPinnedCall is the policy a pinned call's tools see. Manual keeps tools from
-// declaring a call automatic on the session's behalf, and the Auto toggles are
-// off. The store stays so a standing denial still refuses the call: only the
-// grant half of it is unreachable, because the pinned branch of decide never
-// consults it.
+// forPinnedCall is the policy a pinned call's tools see: Manual, no Auto toggles.
+// The store stays so standing denials still refuse; the pinned branch of decide
+// never consults its grants.
 func (p *Policy) forPinnedCall() *Policy {
 	return &Policy{mode: Manual, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
 }
@@ -182,7 +175,7 @@ func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) 
 		s.policy = p.forPinnedCall()
 		s.mode = Manual
 		if p.mode == Plan {
-			s.mode = Plan // a planning session still refuses writes to a chat
+			s.mode = Plan
 		}
 	}
 	if len(approvers) > 0 {
@@ -295,9 +288,8 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 	}
 	if s.pinned {
 		// Plan's block and standing denials above still apply, and a call the
-		// tool itself declares automatic (a dry run) still runs; every call that
-		// needs a human is asked, because only the party that pinned the turn
-		// may answer it.
+		// tool itself declares automatic still runs; only the party that pinned
+		// the turn may answer it.
 		if !ask {
 			return Decision{Approved: true}, true
 		}

@@ -8,7 +8,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// peerUID is the uid of the process at the other end of the accepted socket.
 // BSD-family sockets report LOCAL_PEERCRED rather than Linux's SO_PEERCRED.
 func peerCredentialUID(fd int) (int, error) {
 	cred, err := unix.GetsockoptXucred(fd, unix.SOL_LOCAL, unix.LOCAL_PEERCRED)
