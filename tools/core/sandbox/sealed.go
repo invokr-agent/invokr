@@ -24,7 +24,6 @@ type missingSeal struct {
 type sealOwner struct {
 	epoch  uint64
 	active int
-	asked  bool // the process already consented to creating names under this root
 }
 
 // ponytail: process-wide bookkeeping; keep epochs after exit so an overlapping
@@ -32,7 +31,8 @@ type sealOwner struct {
 var sealOwners = struct {
 	sync.Mutex
 	roots map[string]sealOwner
-}{roots: make(map[string]sealOwner)}
+	asked map[string]bool // paths whose creation the process already consented to
+}{roots: make(map[string]sealOwner), asked: make(map[string]bool)}
 
 // ProcessSpec opts foreground execution into Auto's post-run protected-name check.
 // Other callers use Command and retain per-launch approval for absent seals.
@@ -107,7 +107,7 @@ func snapshotSeals(plan Plan) (existing []string, missing []missingSeal, err err
 		}
 		if absent != nil {
 			owner := sealOwners.roots[root]
-			missing = append(missing, missingSeal{absent, root, owner.epoch, owner.asked})
+			missing = append(missing, missingSeal{absent, root, owner.epoch, sealOwners.asked[path]})
 			continue
 		}
 		existing = append(existing, path)
@@ -123,7 +123,7 @@ func approveSeals(ctx context.Context, missing []missingSeal) error {
 	}
 	req := approval.CallRequest(ctx)
 	req.Confined, req.Writes, req.ReadOnly = true, true, false
-	req.Protected = slices.ContainsFunc(missing, func(m missingSeal) bool { return !m.asked })
+	req.Protected = req.Protected || slices.ContainsFunc(missing, func(m missingSeal) bool { return !m.asked })
 	paths := core.MapSlice(missing, func(m missingSeal) string { return m.Path })
 	req.Summary = "Let this workspace create protected paths (.git hooks or config, .invokr) that do not exist yet"
 	req.Details = "These paths do not exist and cannot be sealed. This process and its children could create or modify them:\n" + strings.Join(paths, "\n")
@@ -142,7 +142,7 @@ func retainSeals(missing []missingSeal, delta int) {
 		state.active += delta
 		if delta > 0 {
 			state.epoch++
-			state.asked = true
+			sealOwners.asked[m.Path] = true
 		}
 		sealOwners.roots[m.root] = state
 	}
