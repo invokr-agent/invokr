@@ -36,17 +36,18 @@ func (p Policy) ProtectedPaths() []string {
 	paths := append([]string{config.InvokrHomeDir(), config.DefaultConfigPath()}, p.protected...)
 	for _, root := range p.roots {
 		paths = append(paths, filepath.Join(root, ".invokr"))
-		// Git reads hooks and shared config only from the common git dir, which GitDirs
-		// lists first; a linked worktree's own git dir holds neither.
+		// Git reads hooks and shared config only from the checkout's common git
+		// dir, which GitDirs names first when it can verify the layout.
 		git := filepath.Join(root, ".git")
-		dirs := append(GitDirs(root), git) // len > 1 iff .git is a pointer to a shared repository.
-		if _, err := os.Stat(git); err != nil && len(dirs) == 1 {
+		dirs := GitDirs(root)
+		if info, err := os.Stat(git); err != nil {
 			paths = append(paths, git) // Absent: consent covers a repository the command might create.
+		} else if info.IsDir() {
+			paths = append(paths, filepath.Join(git, "hooks"), filepath.Join(git, "config"))
+		} else if len(dirs) > 0 {
+			paths = append(paths, git, filepath.Join(dirs[0], "hooks"), filepath.Join(dirs[0], "config"))
 		} else {
-			paths = append(paths, filepath.Join(dirs[0], "hooks"), filepath.Join(dirs[0], "config"))
-			if len(dirs) > 1 {
-				paths = append(paths, git) // A linked worktree's pointer file stays read-only.
-			}
+			paths = append(paths, git) // An unverified pointer must not be rewritable.
 		}
 	}
 	for i, path := range paths {
