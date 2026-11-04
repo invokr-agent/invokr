@@ -1,33 +1,28 @@
 package workspace
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/invokr-agent/invokr/config"
-	"github.com/invokr-agent/invokr/constants"
 )
 
-func TestSpillCopiesRefuseWritesButStayReadable(t *testing.T) {
+// The policy comes from the app config's real defaults, so the spill root is
+// registered the way the runtime registers it rather than by the test asserting
+// on a policy it built itself.
+func TestSpillCopyWriteRefusal(t *testing.T) {
 	root, home := t.TempDir(), t.TempDir()
-	t.Setenv("INVOKR_HOME", home)
-	spill := filepath.Join(home, constants.SpillDirName)
-	if err := os.MkdirAll(filepath.Join(spill, "f1"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(spill, "f1", "share.go")
-	if err := os.WriteFile(target, []byte("package p\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	policy := NewWorkspacePolicy(config.WorkspaceConfig{Root: root, ExtraRoots: []string{spill}, ReadonlyRoots: []string{spill}})
+	t.Setenv("HOME", home)
+	app := config.AppConfig{Workspace: config.WorkspaceConfig{Root: root}}
+	policy := NewWorkspacePolicy(app.WithDefaults().Workspace)
+	target := filepath.Join(home, ".invokr", "spill", "f1", "share.go")
 	if _, err := policy.Resolve(target); err != nil {
 		t.Fatalf("reading a spill copy refused: %v", err)
 	}
 	_, err := policy.ResolveWrite(target)
-	if err == nil || !strings.Contains(err.Error(), target) {
-		t.Fatalf("err = %v, want a refusal naming %s", err, target)
+	if err == nil || !strings.Contains(err.Error(), "spilled tool-result copy") {
+		t.Fatalf("err = %v, want the spill refusal naming the copy", err)
 	}
 	if _, ok := policy.ReadOnlyRoot(target); !ok {
 		t.Fatalf("the spill root is writable: %v", err)
