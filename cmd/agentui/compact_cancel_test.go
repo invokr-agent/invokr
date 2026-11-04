@@ -63,11 +63,31 @@ func TestBackgroundCompactReportsDoneAndEscCancels(t *testing.T) {
 	if _, ok := msg.(compactionMsg); !ok {
 		t.Fatalf("command finished with %v, want a completion message", msg)
 	}
-	if _, next := m.updateCompaction(); next != nil {
+	if _, next := m.Update(compactionMsg{}); next != nil {
 		t.Fatalf("flush=%v, want a cancelled compaction to leave the queue alone", next != nil)
 	}
 	if m.compacting || !m.compactingAt.IsZero() || m.stopping {
 		t.Fatalf("compacting=%v compactingAt=%v stopping=%v, want the compaction state closed", m.compacting, !m.compactingAt.IsZero(), m.stopping)
+	}
+}
+
+// A compaction that finishes while the settings form is open must still close
+// the compaction state, or every later Enter queues behind a stuck flag.
+func TestCompactionEndsWhileSettingsOpen(t *testing.T) {
+	session := slowSession()
+	m := newModel(context.Background(), &session, nil, nil, nil, false, nil, nil)
+	cmd, _ := m.runCommand("/compact")
+	produced := make(chan tea.Msg)
+	go func() { produced <- cmd() }()
+	<-session.entered
+	m.settings.open = true
+	m.queued = []string{"queued while settings open"}
+	session.unblock <- struct{}{}
+	<-session.finished
+	<-produced
+	_, next := m.Update(compactionMsg{})
+	if m.compacting || next == nil || len(m.queued) != 0 {
+		t.Fatalf("compacting=%v flushed=%v queued=%v, want the compaction closed and the queue released", m.compacting, next != nil, m.queued)
 	}
 }
 
@@ -82,7 +102,7 @@ func TestCompactionReleasesQueuedPrompt(t *testing.T) {
 	session.unblock <- struct{}{}
 	<-session.finished
 	<-produced
-	_, next := m.updateCompaction()
+	_, next := m.Update(compactionMsg{})
 	if next == nil || len(m.queued) != 0 {
 		t.Fatalf("queued=%v flushed=%v, want the queued prompt sent once compaction ends", m.queued, next != nil)
 	}

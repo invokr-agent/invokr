@@ -273,13 +273,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	// huh's own messages (field focus, blink) come back through here, so an
 	// open settings form sees every non-key message as well as the model.
+	if _, isCompaction := msg.(compactionMsg); isCompaction {
+		return m.updateCompaction()
+	}
 	if _, isKey := msg.(tea.KeyPressMsg); m.settings.open && !isKey {
 		cmd := m.updateSettings(msg)
 		updated, next := m.update(msg)
 		return updated, tea.Batch(cmd, next)
-	}
-	if _, isCompaction := msg.(compactionMsg); isCompaction {
-		return m.updateCompaction()
 	}
 	return m.update(msg)
 }
@@ -1259,6 +1259,9 @@ func (m *model) flushQueued(turnInterrupted bool, err error) tea.Cmd {
 // A stopped compaction leaves the queue for the user to confirm.
 func (m *model) updateCompaction() (tea.Model, tea.Cmd) {
 	cancelled := m.stopping
+	if m.cancelSend != nil {
+		m.cancelSend()
+	}
 	m.compacting, m.compactingAt, m.cancelSend, m.stopping = false, time.Time{}, nil, false
 	if cancelled {
 		m.chatLog.Append(message{role: "tool", text: "⏹ compaction cancelled"})
