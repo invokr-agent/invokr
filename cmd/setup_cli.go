@@ -3,6 +3,7 @@ package cmd
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/invokr-agent/invokr/config"
@@ -12,11 +13,11 @@ import (
 )
 
 func NewSetupCmd() *cobra.Command {
-	return &cobra.Command{
+	setupCmd := &cobra.Command{
 		Use:     "setup",
 		Short:   "Configure Invokr (first-run questionnaire)",
-		Long:    "Asks where your model lives and what to enable, then writes\n~/.invokr/config.json. Safe to re-run; `invokr config` shows the\nresult and `invokr doctor` checks it.",
-		Example: "  invokr setup",
+		Long:    "Asks where your model lives and what to enable, then writes\n~/.invokr/config.json. Safe to re-run; `invokr config` shows the\nresult and `invokr doctor` checks it.\n\n`setup git-identity` is a step of its own: it configures the git and GitHub\naccount invokr commits as, without the questionnaire.",
+		Example: "  invokr setup\n  invokr setup git-identity\n  invokr setup git-identity --reset",
 		Args:    cobra.NoArgs,
 		GroupID: groupConfigure,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -51,4 +52,53 @@ func NewSetupCmd() *cobra.Command {
 			return nil
 		},
 	}
+	setupCmd.AddCommand(newGitIdentityCmd())
+	return setupCmd
+}
+
+// newGitIdentityCmd configures or clears invokr's own git/GitHub identity. It
+// runs one step, so the identity can be set or changed without re-answering
+// the questionnaire, and --reset leaves nothing stored: invokr then uses the
+// host's git and gh, with the host's own config untouched.
+func newGitIdentityCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "git-identity",
+		Short:   "Set the git/GitHub identity invokr commits as (--reset clears it)",
+		Long:    "Asks for the name, email and optional SSH signing key invokr should\nuse, and stores them under the Invokr home. Every git and gh child then\ninherits them through the environment, which outranks a repository's own\nuser.email, so a repo that pins an identity is still committed as this account.\nThe choice is explicit: only this command writes it, and nothing the agent\nruns can. `--reset` removes the stored identity, its signing settings and the\nInvokr gh login.",
+		Example: "  invokr setup git-identity\n  invokr setup git-identity --reset",
+		Args:    cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			homeDir := config.InvokrHomeDir()
+			if reset, _ := cmd.Flags().GetBool("reset"); reset {
+				if err := config.ClearGitIdentity(homeDir); err != nil {
+					return err
+				}
+				return renderIdentity(cmd.OutOrStdout(), config.GitIdentityConfig{}, homeDir)
+			}
+			identity, err := setup.RunGitIdentityStep(cmd.InOrStdin(), cmd.OutOrStdout(), homeDir)
+			if err != nil {
+				return err
+			}
+			return renderIdentity(cmd.OutOrStdout(), identity, homeDir)
+		},
+	}
+	cmd.Flags().Bool("reset", false, "Clear the stored identity, its signing settings and the Invokr gh login")
+	return cmd
+}
+
+// renderIdentity says which account invokr will commit and push as, or that it
+// falls back to the host's git. The gh config dir is shown because that is
+// where `gh auth login` put the bot's credentials.
+func renderIdentity(out io.Writer, identity config.GitIdentityConfig, homeDir string) error {
+	if identity.Name == "" || identity.Email == "" {
+		_, err := fmt.Fprintf(out, "git identity: host's (nothing stored under %s)\n", homeDir)
+		return err
+	}
+	signing := "no signing; type a passphrase-less SSH key path to sign commits"
+	if identity.SigningKey != "" {
+		signing = "ssh key " + identity.SigningKey
+	}
+	_, err := fmt.Fprintf(out, "git identity: %s <%s>\nsigning: %s\ngh login dir: %s\n",
+		identity.Name, identity.Email, signing, config.GitIdentityDir(homeDir))
+	return err
 }

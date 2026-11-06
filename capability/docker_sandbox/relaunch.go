@@ -190,5 +190,8 @@ func shouldPassEnv(key string) bool {
 	case "OPENAI_API_KEY", "TERM", "COLORTERM", "NO_COLOR":
 		return true
 	}
-	return strings.HasPrefix(key, "INVOKR_")
+	// The invokr git identity names, so the container commits as the same
+	// account the host run would. Every other GIT_* name can point git at a
+	// host binary, config or directory and stays behind.
+	return slices.Contains(config.GitIdentityEnvNames(), key) || strings.HasPrefix(key, "INVOKR_")
 }

@@ -89,6 +89,11 @@ type Services struct {
 
 func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 	app = app.WithDefaults()
+	// invokr's own git/GitHub identity, when one is configured: applied to this
+	// process before any tool exists, so every git and gh child inherits it.
+	if err := config.ApplyGitIdentity(config.InvokrHomeDir()); err != nil {
+		return nil, err
+	}
 
 	l, err := newValidatedLogger(app, opts)
 	if err != nil {

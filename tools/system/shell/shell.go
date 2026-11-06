@@ -111,11 +111,16 @@ var isolatedEnvPassthrough = []string{"PATH", "HOME", "LANG", "TERM", "TMPDIR", 
 // the always-forwarded vars plus any configured passthrough names that are set
 // in the host process.
 // IsolatedEnv is the environment model-supplied code runs under: the
-// always-forwarded vars and none of the agent's secrets.
+// always-forwarded vars, this run's git identity override names when one is
+// configured, and none of the agent's secrets.
 func IsolatedEnv() []string { return buildShellEnv(nil) }
 
 func buildShellEnv(passthrough []string) []string {
-	names := slices.Concat(isolatedEnvPassthrough, passthrough)
+	// The identity names travel so a sandboxed `git commit` is authored, signed
+	// and pushed as the configured account. Unset names forward nothing, and the
+	// rest of the GIT_* family stays out: those can point git at a host binary
+	// or path (see policy.go's loaderPrefixes).
+	names := slices.Concat(isolatedEnvPassthrough, config.GitIdentityEnvNames(), passthrough)
 	for i, name := range names {
 		names[i] = strings.TrimSpace(name)
 	}
