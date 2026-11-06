@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/constants"
 	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
@@ -261,12 +262,19 @@ func (p Policy) ResolveWrite(path string) (string, error) {
 		return "", err
 	}
 	if root, ok := p.ReadOnlyRoot(resolved); ok {
+		// Name the path as asked (maybe relative), so the model can write the real file.
+		if root == SpillRoot() {
+			return "", fmt.Errorf("path %q is a spilled tool-result copy at %s; spill files are read-only, and editing one leaves the file it came from unchanged. Write the real workspace file instead", path, resolved)
+		}
 		// Name the writable root too: told only that "a" root is read-only,
 		// a model concludes its whole workspace is and stops writing.
 		return "", fmt.Errorf("path %q is under the read-only root %s; it can be read but not modified. The workspace root %s is writable — write there instead", path, root, p.Root)
 	}
 	return resolved, nil
 }
+
+// SpillRoot is where oversized tool results are saved; config mounts it read-only.
+func SpillRoot() string { return filepath.Join(config.InvokrHomeDir(), constants.SpillDirName) }
 
 func underRoot(path, root string) bool {
 	return path == root || strings.HasPrefix(path, root+string(os.PathSeparator))

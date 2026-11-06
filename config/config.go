@@ -750,9 +750,9 @@ func (c WorkspaceConfig) withDefaults(homeDir string) WorkspaceConfig {
 			roots[i] = filepath.Clean(root)
 		}
 	}
-	// The spill dir joins the roots so read_file can page spilled tool
-	// results; NewWorkspacePolicy deduplicates repeats.
-	c.ExtraRoots = append(c.ExtraRoots, filepath.Join(homeDir, constants.SpillDirName))
+	// Read-only roots are also roots, so read_file can page spilled results while
+	// an edit to a copy never reaches its source.
+	c.ReadonlyRoots = append(c.ReadonlyRoots, filepath.Join(homeDir, constants.SpillDirName))
 	return c
 }
 

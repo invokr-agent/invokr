@@ -53,7 +53,7 @@ func newResultGate(settings config.AgentConfig, sessionID string, logger *zap.Lo
 // any. A nil gate (tests constructing TurnProcessor literals) degrades to the
 // legacy hard cap. Strategy failure falls back the same way: no regression,
 // just no recovery.
-func (g *resultGate) cap(tool string, _ json.RawMessage, result string) (string, string) {
+func (g *resultGate) cap(tool string, args json.RawMessage, result string) (string, string) {
 	if g == nil {
 		return capToolResult(result, constants.ToolResultMaxContextTokens), ""
 	}
@@ -69,7 +69,7 @@ func (g *resultGate) cap(tool string, _ json.RawMessage, result string) (string,
 	if strategy == constants.ToolResultStrategyCap {
 		return capToolResult(result, min(g.budget*2, constants.ToolResultMaxContextTokens)), ""
 	}
-	text, ref, err := g.spillResult(tool, result)
+	text, ref, err := g.spillResult(tool, result, args)
 	if err != nil {
 		g.logger.Warn("oversize strategy failed; hard-truncating", zap.String("tool", tool), zap.Error(err))
 		return capToolResult(result, g.budget), ""
@@ -81,7 +81,7 @@ func (g *resultGate) cap(tool string, _ json.RawMessage, result string) (string,
 // preview. Other envelope fields survive, including exit_code/timed_out;
 // completed-but-flagged ToolError.Payload results must stay non-empty.
 // Historical archiving separately stores the complete envelope.
-func (g *resultGate) spillResult(tool, result string) (string, string, error) {
+func (g *resultGate) spillResult(tool, result string, args json.RawMessage) (string, string, error) {
 	fields, key, payload, enveloped := envelopeLongestField(result)
 	if !enveloped {
 		payload = result
@@ -91,6 +91,9 @@ func (g *resultGate) spillResult(tool, result string) (string, string, error) {
 		return "", "", fmt.Errorf("spill %s result: %w", tool, err)
 	}
 	stub := spillStub(payload, ref, g.budget)
+	if tool == "read_file" {
+		stub += sourceNote(args)
+	}
 	if !enveloped {
 		return stub, ref, nil
 	}
@@ -99,6 +102,24 @@ func (g *resultGate) spillResult(tool, result string) (string, string, error) {
 	// ponytail: fields contain only validated JSON and the encoded preview string.
 	envelope, _ := json.Marshal(fields)
 	return string(envelope), ref, nil
+}
+
+// A spill copy is read-only, so the note points a spilled read back at the real file.
+func sourceNote(args json.RawMessage) string {
+	var call struct {
+		Path  string   `json:"path"`
+		Paths []string `json:"paths"`
+	}
+	if err := json.Unmarshal(args, &call); err != nil {
+		return ""
+	}
+	if call.Path != "" {
+		call.Paths = append(call.Paths, call.Path)
+	}
+	if len(call.Paths) == 0 {
+		return ""
+	}
+	return "\nSource of the saved output: " + strings.Join(call.Paths, ", ") + ". The saved file is a read-only copy; change the source named here instead.\n"
 }
 
 // envelopeLongestField reports the longest string field of a JSON object

@@ -456,8 +456,8 @@ func TestToolResultGateDefaults(t *testing.T) {
 		t.Fatalf("ToolResultStrategy default = %q", cfg.Agent.ToolResultStrategy)
 	}
 	spill := filepath.Join(InvokrHomeDir(), constants.SpillDirName)
-	if !slices.Contains(cfg.Workspace.ExtraRoots, spill) {
-		t.Fatalf("workspace extra roots missing spill dir %q: %v", spill, cfg.Workspace.ExtraRoots)
+	if !slices.Contains(cfg.Workspace.ReadonlyRoots, spill) {
+		t.Fatalf("workspace read-only roots missing spill dir %q: %v", spill, cfg.Workspace.ReadonlyRoots)
 	}
 }
 
