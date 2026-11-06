@@ -1,7 +1,7 @@
 {
-  "global": 39945,
+  "global": 39969,
   "areas": {
-    "agent": 3934,
+    "agent": 3953,
     "capability": 3846,
     "capability/memory": 3394,
     "clients": 792,
@@ -15,7 +15,7 @@
     "surface": 537,
     "tools": 593,
     "tools/core": 1364,
-    "tools/system": 11338
+    "tools/system": 11343
   },
   "exclude-dirs": [
     "vendor",
