@@ -75,11 +75,9 @@ func TestRunGitIdentityStepRefusesHalfIdentity(t *testing.T) {
 	}
 }
 
-// The answered key is copied to one fixed file under the Invokr home at 0600, and
-// only the private half travels: git derives the public half from it. A sandboxed
-// commit can only sign with a file the sandbox mounts, so the host's own ~/.ssh
-// is never written and nothing else under the home is exposed. A wider copy left
-// by an earlier run is tightened, not trusted.
+// The answered key is copied to one fixed file under the Invokr home at 0600,
+// only the private half travels, and the host's ~/.ssh is never written. A
+// wider copy an earlier run left there is tightened.
 func TestRunGitIdentityStepCopiesTheSigningKey(t *testing.T) {
 	homeDir, dir := t.TempDir(), t.TempDir()
 	host := filepath.Join(dir, "ssh")
