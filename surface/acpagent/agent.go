@@ -214,7 +214,7 @@ func (a *Agent) send(ctx context.Context, id acp.SessionID, sess *chatSession, i
 	stopDrain := func() {}
 	if a.bound == nil {
 		stopDrain = approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
-			d := a.ask(ctx, id, r)
+			d, _ := a.ask(ctx, id, r)
 			if d.Approved {
 				approved = append(approved, acp.ToolCallID(r.ID))
 			} else {
@@ -327,12 +327,14 @@ func (a *Agent) pinned(ctx context.Context) context.Context {
 	return approval.Pin(ctx)
 }
 
-func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request) approval.Decision {
+// ask shows the call to the chat contact. The flag says the chat answered;
+// a dead connection is not a denial, and must not settle the host's request.
+func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request) (approval.Decision, bool) {
 	callID := acp.ToolCallID(req.ID)
 	title, kind := cmp.Or(req.Summary, req.Tool), toolKind(req)
 	announce := acp.SessionUpdate{ToolCall: &acp.ToolCall{ToolCallID: callID, Name: req.Tool, Title: title, Kind: kind, Status: acp.ToolCallStatusPending}}
 	if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: id, Update: announce}); err != nil {
-		return approval.Decision{Reason: "permission request failed"}
+		return approval.Decision{Reason: "permission request failed"}, false
 	}
 	resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{SessionID: id, Options: permissionOptions,
 		ToolCall: acp.ToolCallUpdate{ToolCallID: callID, Name: req.Tool, Title: title, Kind: kind}})
@@ -342,7 +344,7 @@ func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request)
 	}
 	update := acp.SessionUpdate{ToolCallUpdate: &acp.ToolCallUpdate{ToolCallID: callID, Status: status}}
 	_ = a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: id, Update: update})
-	return decision
+	return decision, err == nil
 }
 
 func toolKind(req approval.Request) acp.ToolKind {

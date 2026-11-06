@@ -3,6 +3,8 @@
 package acpagent
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -12,6 +14,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/invokr-agent/invokr/config"
+	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
 const (
@@ -31,6 +34,55 @@ func SocketPath() string {
 		return filepath.Join(home, ".invokr", "run", socketName)
 	}
 	return filepath.Join(runtime, socketDirName, socketName)
+}
+
+func RelayConfigPath() string {
+	base := config.Env("XDG_CONFIG_HOME")
+	if base == "" {
+		home, _ := os.UserHomeDir()
+		base = filepath.Join(home, ".config")
+	}
+	return filepath.Join(base, "agent-relay", "config.json")
+}
+
+// SetRelaySocket writes every other answer back unchanged, so the relay's
+// tokens survive: each value keeps its own JSON bytes (no number becomes a
+// float, no re-escaping), and the file is replaced atomically at 0600 rather
+// than written through a symlink. Member keys come back sorted.
+func SetRelaySocket(path string) error {
+	file := RelayConfigPath()
+	found, err := os.Lstat(file)
+	if os.IsNotExist(err) {
+		return fmt.Errorf("%s: no such file; configure agent-relay first", file)
+	}
+	if err != nil {
+		return fmt.Errorf("%s: %w; configure agent-relay first", file, err)
+	}
+	if !found.Mode().IsRegular() {
+		return fmt.Errorf("%s is %s, not a regular file; refusing to write it", file, found.Mode())
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return fmt.Errorf("%s: %w; configure agent-relay first", file, err)
+	}
+	stored := map[string]json.RawMessage{}
+	if err := json.Unmarshal(data, &stored); err != nil {
+		return fmt.Errorf("%s: %w", file, err)
+	}
+	if path == "" {
+		delete(stored, "agent_socket")
+	} else {
+		value, err := encodeJSON(path)
+		if err != nil {
+			return err
+		}
+		stored["agent_socket"] = value
+	}
+	encoded, err := encodeJSON(stored)
+	if err != nil {
+		return err
+	}
+	return fsutil.WriteFileAtomic(file, encoded, 0o600)
 }
 
 type Socket struct {
@@ -150,6 +202,19 @@ func answers(path string) bool {
 	return err == nil || errors.Is(err, unix.EINPROGRESS) || errors.Is(err, unix.EAGAIN)
 }
 
+// encodeJSON writes the document with HTML escaping left off: agent-relay's
+// own answers may hold < > & in tokens and headers, and a socket path may too.
+// The whole document goes through this encoder because json re-escapes a value
+// it is handed as RawMessage.
+func encodeJSON(value any) (json.RawMessage, error) {
+	buf := bytes.Buffer{}
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	if err := encoder.Encode(value); err != nil {
+		return buf.Bytes(), err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
 func blame(err error, uid int) string {
 	if err != nil {
 		return "cannot tell whose uid the peer is: " + err.Error()

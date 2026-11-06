@@ -205,3 +205,84 @@ func TestAnswersCountsAFullAcceptQueue(t *testing.T) {
 		t.Fatal("a listener with a full accept queue looked dead")
 	}
 }
+
+func TestSetRelaySocketKeepsTheRelaysOwnAnswers(t *testing.T) {
+	conf := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", conf)
+	dir := filepath.Dir(RelayConfigPath())
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	file := RelayConfigPath()
+	// A number, a nested object and HTML-significant characters: agent-relay's
+	// own answers must survive the rewrite byte for byte.
+	before := `{"agent":["invokr","acp"],"version":1,"headers":{"X-A":"a<b"},"ttl":30}`
+	if err := os.WriteFile(file, []byte(before), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetRelaySocket(SocketPath()); err != nil {
+		t.Fatalf("set = %v", err)
+	}
+	stored, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(stored), "\"version\":1") || !strings.Contains(string(stored), "\"ttl\":30") {
+		t.Fatalf("config after the write = %s, want the relay's numbers unconverted", stored)
+	}
+	if !strings.Contains(string(stored), "a<b") {
+		t.Fatalf("config after the write = %s, want the headers value untouched", stored)
+	}
+	if !strings.Contains(string(stored), "agent_socket") {
+		t.Fatalf("config after the write = %s, want agent_socket set", stored)
+	}
+	if strings.Contains(string(stored), `\u003c`) {
+		t.Fatal("a value was HTML-escaped on the way out")
+	}
+	held, err := os.Stat(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held.Mode()&0o777 != 0o600 {
+		t.Fatalf("config mode = %o, want 600", held.Mode())
+	}
+	left, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 1 {
+		t.Fatalf("%s holds %d files, want only the config", dir, len(left))
+	}
+	if err := SetRelaySocket(""); err != nil {
+		t.Fatalf("clear = %v", err)
+	}
+	stored, _ = os.ReadFile(file)
+	if strings.Contains(string(stored), "agent_socket") {
+		t.Fatalf("config after clear = %s, want agent_socket gone", stored)
+	}
+}
+
+func TestSetRelaySocketRefusesASymlinkedConfig(t *testing.T) {
+	conf := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", conf)
+	elsewhere := filepath.Join(conf, "elsewhere.json")
+	if err := os.WriteFile(elsewhere, []byte(`{"token":"mine"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(RelayConfigPath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(elsewhere, RelayConfigPath()); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetRelaySocket(SocketPath()); err == nil {
+		t.Fatal("SetRelaySocket wrote through a symlink at the config path")
+	}
+	held, err := os.ReadFile(elsewhere)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(held) != `{"token":"mine"}` {
+		t.Fatalf("the symlink's target changed: %s", held)
+	}
+}

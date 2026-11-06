@@ -244,3 +244,31 @@ func TestChatTurnIsPinned(t *testing.T) {
 		t.Fatal("a YOLO host session answered a chat turn's call without asking")
 	}
 }
+
+// The human answering at the panel must stand the chat's prompt down: the contact
+// cannot be left holding a request that is already settled, and its answer must
+// not settle it a second time.
+func TestPanelAnswerStandsDownTheChatAsk(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.Manual, false)
+	sharer, err := OpenShare(socketPathIn(t), nil, &recordingSession{}, broker, nil)
+	if err != nil {
+		t.Fatalf("open share = %v", err)
+	}
+	agent, _ := boundAgent(t, &recordingSession{}, broker)
+	sharer.ask(agent, "call-1", approval.Request{Tool: "shell", Subject: "git push"},
+		func(_ string, _ approval.Decision) {
+			t.Fatal("the chat answered a request the panel had already settled")
+		})
+	if sharer.pendingAsks() != 1 {
+		t.Fatal("the chat ask was never open")
+	}
+	sharer.Settled("call-1", approval.Decision{Approved: true})
+	deadline := time.Now().Add(5 * time.Second)
+	for sharer.pendingAsks() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("the chat ask outlived the panel's answer")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
