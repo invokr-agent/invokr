@@ -32,9 +32,8 @@ var shareNote func(string)
 // than in Update, and it is bounded so a hung relay cannot hold the quit path.
 const relayRestartWait = 15 * time.Second
 
-// shareNoteMsg carries a share-side failure for Update to show. The watcher's
-// error callback and the restart command both run off the event loop, so neither
-// may touch the model.
+// The watcher's error callback and the restart command run off the event loop,
+// so neither may touch the model.
 type shareNoteMsg struct {
 	text string
 }
@@ -110,8 +109,7 @@ func closeShare() (string, tea.Cmd) {
 	return "stopped sharing: " + path + " removed, agent-relay back on `invokr acp`", restartCmd(ws)
 }
 
-// restartCmd hands the relay restart to the TUI, which runs it after Update;
-// what it reports comes back as a message for Update to show.
+// restartCmd hands the relay restart to the TUI to run after Update.
 func restartCmd(ws string) tea.Cmd {
 	return func() tea.Msg {
 		if err := restartRelay(ws); err != nil {

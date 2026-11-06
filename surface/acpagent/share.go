@@ -15,9 +15,8 @@ import (
 	"github.com/invokr-agent/invokr/platform/turn"
 )
 
-// asks keys the open permission prompts on the chat side by request id: one cancel
-// per contact sharing this session, all of them stood down when the human answers
-// at the panel so no contact is left holding a request that is already settled.
+// asks keys the open chat-side prompts by request id: one cancel per contact,
+// all stood down when the human answers at the panel.
 type Sharer struct {
 	socket   *net.UnixListener
 	path     string
@@ -116,9 +115,8 @@ func (s *Sharer) Settled(id string, _ approval.Decision) {
 	s.standDown(id)
 }
 
-// standDown cancels every ask open for id, which ends the blocked permission
-// requests; a chat answer that arrives afterwards finds no ask to cancel and no
-// request to settle.
+// standDown cancels every open ask for id; a chat answer arriving later finds
+// nothing to settle.
 func (s *Sharer) standDown(id string) {
 	s.mu.Lock()
 	cancels := s.asks[id]
