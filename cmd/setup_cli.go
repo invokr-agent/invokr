@@ -76,8 +76,7 @@ func newGitIdentityCmd() *cobra.Command {
 			} else if _, err := setup.RunGitIdentityStep(cmd.InOrStdin(), cmd.OutOrStdout(), homeDir); err != nil {
 				return err
 			}
-			// renderIdentity shows the identity this run applies: its signing key
-			// path is resolved from the home in use, not from what the file stores.
+			// renderIdentity shows the identity this run applies, with resolved paths.
 			applied, err := config.ApplyGitIdentity(homeDir)
 			if err != nil {
 				return err

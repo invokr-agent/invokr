@@ -10,9 +10,8 @@ import (
 	"github.com/invokr-agent/invokr/support/fsutil"
 )
 
-// git signs a commit inside the sandbox only if it can read the key user.signingkey
-// names. The Invokr home that holds that copy also holds the gh login and the stored
-// identity, so the plan mounts the one key file and nothing else (#103).
+// git signs inside the sandbox only if it can read the key user.signingkey names;
+// the home holding it also holds the gh login, so only the key file is mounted.
 func TestSandboxMountsOnlyTheSigningKey(t *testing.T) {
 	home, ws := t.TempDir(), t.TempDir()
 	key := config.GitIdentityKeyPath(home)
