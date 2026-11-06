@@ -44,6 +44,13 @@ func run(ctx context.Context) (err error) {
 		return err
 	}
 	version.Edge = cfg.UpdateChannel == "edge"
+	// The identity env goes on this process before the container is built: the
+	// relaunch forwards exactly those names, so a sandboxed agent commits as the
+	// same account it would outside. The container's own bootstrap applies it
+	// again against the mounted Invokr home.
+	if err := config.ApplyGitIdentity(config.InvokrHomeDir()); err != nil {
+		return err
+	}
 	if handled, exitCode, sandboxErr := docker_sandbox.MaybeRelaunch(cfg.Sandbox, cfg.Provider.BaseURL, os.Args); handled {
 		if sandboxErr != nil {
 			return sandboxErr
@@ -107,6 +114,8 @@ func parseStartupChoice(args []string) (startupChoice, error) {
 	}
 	profile, _ := command.Flags().GetString("profile")
 	parent := command.Parent()
-	return startupChoice{profile: profile, setup: command.Name() == "setup",
+	// `setup git-identity` is a setup step of its own: it must not trigger the
+	// first-run questionnaire or load a profile on the way to the stored identity.
+	return startupChoice{profile: profile, setup: command.Name() == "setup" || parent != nil && parent.Name() == "setup",
 		configUse: command.Name() == "use" && parent != nil && parent.Name() == "config"}, nil
 }

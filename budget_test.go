@@ -42,13 +42,13 @@ var budgets = []area{
 	// harnesses (3.8k here against crush's 27k), so it gets the most room:
 	// the cap should not be what stops the TUI catching up.
 	{"cmd/agentui", 6693},
-	{"cmd", 2503},
+	{"cmd", 2540},
 	{"internal", 185},
 
 	// Agent loop and tool plumbing — the core of the core.
-		{"agent", 3934},
+	{"agent", 3934},
 	{"tools/core", 1365},
-	{"tools/system", 11334},
+	{"tools/system", 11338},
 	{"tools", 600}, // tools/, tools/integrations
 
 	// Capabilities. Memory is budgeted apart from the rest because it is by
@@ -58,8 +58,8 @@ var budgets = []area{
 	{"capability", 4700},
 
 	// Platform, config, clients, surfaces, leaf helpers.
-	{"platform", 2531},
-	{"config", 1389},
+	{"platform", 2587},
+	{"config", 1434},
 	{"clients", 800},
 	{"surface", 1600},
 	{"support", 500},

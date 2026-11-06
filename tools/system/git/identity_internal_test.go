@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -56,6 +57,20 @@ func TestCommitIdentityEnvLeavesAConfiguredIdentityAlone(t *testing.T) {
 
 	if env := commitIdentityEnv(context.Background(), "commit", root); env != nil {
 		t.Fatalf("overrode a configured identity: %v", env)
+	}
+}
+
+// An identity the run configured for invokr is already in this process's
+// environment; the fallback is appended after os.Environ(), so it would win and
+// the commit would land on the agent's address instead of that account.
+func TestCommitIdentityEnvLeavesTheRunsOwnIdentityAlone(t *testing.T) {
+	for _, kv := range []string{"GIT_AUTHOR_NAME=octocat-bot", "GIT_AUTHOR_EMAIL=octocat-bot@example.invalid",
+		"GIT_COMMITTER_NAME=octocat-bot", "GIT_COMMITTER_EMAIL=octocat-bot@example.invalid"} {
+		key, value, _ := strings.Cut(kv, "=")
+		t.Setenv(key, value)
+	}
+	if env := commitIdentityEnv(context.Background(), "commit", initRepo(t)); env != nil {
+		t.Fatalf("supplied a fallback that shadows the identity already in the environment: %v", env)
 	}
 }
 

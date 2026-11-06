@@ -91,9 +91,15 @@ const (
 // Environment rather than `-c`: config keys can name binaries git will execute
 // (#318), and that door stays shut even for keys we choose ourselves.
 //
-// A repository that already has an identity is left entirely alone.
+// A repository that already has an identity is left entirely alone, as is one
+// the run gave invokr its own identity for: the override is already in this
+// process's environment, and the fallback appended after it would win.
 func commitIdentityEnv(ctx context.Context, op string, root string) []string {
 	if op != "commit" {
+		return nil
+	}
+	if os.Getenv("GIT_AUTHOR_NAME") != "" && os.Getenv("GIT_AUTHOR_EMAIL") != "" &&
+		os.Getenv("GIT_COMMITTER_NAME") != "" && os.Getenv("GIT_COMMITTER_EMAIL") != "" {
 		return nil
 	}
 	if email, err := gitText(ctx, root, "config", "--get", "user.email"); err == nil && strings.TrimSpace(email) != "" {
