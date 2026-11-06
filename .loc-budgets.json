@@ -1,21 +1,21 @@
 {
-  "global": 39969,
+  "global": 39999,
   "areas": {
     "agent": 3953,
     "capability": 3846,
     "capability/memory": 3394,
     "clients": 792,
-    "cmd": 2540,
+    "cmd": 2541,
     "cmd/agentui": 6693,
-    "config": 1434,
+    "config": 1442,
     "constants": 255,
     "internal": 185,
-    "platform": 2587,
+    "platform": 2600,
     "support": 358,
     "surface": 537,
     "tools": 593,
     "tools/core": 1364,
-    "tools/system": 11343
+    "tools/system": 11351
   },
   "exclude-dirs": [
     "vendor",
