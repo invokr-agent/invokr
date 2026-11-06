@@ -165,18 +165,13 @@ func Pin(ctx context.Context) context.Context { return context.WithValue(ctx, pi
 // Pinned is whether this context came from a turn nobody local started.
 func Pinned(ctx context.Context) bool { return ctx.Value(pinnedKey{}) != nil }
 
-// forPinnedCall is the policy a pinned call's tools see: Manual, no Auto toggles.
-// The store stays so standing denials still refuse; the pinned branch of decide
-// never consults its grants.
-func (p *Policy) forPinnedCall() *Policy {
-	return &Policy{mode: Manual, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
-}
-
 func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) (context.Context, func()) {
 	p.mu.Lock()
 	s := &callState{policy: p, host: p, mode: p.mode, request: req, pinned: Pinned(ctx)}
 	if s.pinned {
-		s.policy = p.forPinnedCall()
+		// Manual with no Auto toggles; the store stays so standing denials still
+		// refuse, and the pinned branch of decide never consults its grants.
+		s.policy = &Policy{mode: Manual, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
 		s.mode = Manual
 		if p.mode == Plan {
 			s.mode = Plan

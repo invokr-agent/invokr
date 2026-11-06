@@ -83,8 +83,6 @@ func (q *ApprovalQueue) SetMirror(installed func(string, Request), resolved func
 	}
 }
 
-func (q *ApprovalQueue) ClearMirror() { q.SetMirror(nil, nil) }
-
 // autoDecision preserves legacy standing decisions. Session-policy requests
 // already evaluated standing rules and must receive a user's scoped decision.
 func (q *ApprovalQueue) autoDecision(req Request) (Decision, bool) {

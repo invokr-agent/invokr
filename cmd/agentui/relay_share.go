@@ -48,7 +48,7 @@ func setShareHost(session turn.Session, approvals *approval.Broker, queue *appro
 
 func openShare() (string, tea.Cmd) {
 	if share != nil {
-		return "this session already shares: " + share.Status() + " at " + sharePath, nil
+		return shareLine(), nil
 	}
 	if !relayRunning.Load() {
 		return "agent-relay is not running: start it with `invokr relay start`, then /relay open", nil
@@ -77,9 +77,7 @@ func openShare() (string, tea.Cmd) {
 	// The relay dials this socket instead of spawning its own agent, so accept
 	// here; without a watcher nobody is served.
 	go next.Watch(shareCtx, func(err error) {
-		if shareNote != nil {
-			shareNote("a connection to the shared socket failed: " + err.Error())
-		}
+		shareNote("a connection to the shared socket failed: " + err.Error())
 	})
 	if shareQueue != nil {
 		// A bound chat turn parks its approvals in this queue, so the queue has
@@ -100,7 +98,7 @@ func closeShare() (string, tea.Cmd) {
 	// Clear the mirror first: a chat contact must not answer anything the
 	// host parks after the socket is gone.
 	if shareQueue != nil {
-		shareQueue.ClearMirror()
+		shareQueue.SetMirror(nil, nil)
 	}
 	if err := share.Close(); err != nil {
 		return "the socket at " + path + " did not close cleanly: " + err.Error(), nil
@@ -133,10 +131,7 @@ func restartRelay(ws string) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"start", "-replace"}
-	if ws != "" {
-		args = append(args, "-cwd", ws)
-	}
+	args := []string{"start", "-replace", "-cwd", ws}
 	ctx, cancel := context.WithTimeout(context.Background(), relayRestartWait)
 	defer cancel()
 	return exec.CommandContext(ctx, bin, args...).Run()
