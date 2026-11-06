@@ -149,14 +149,34 @@ func (p *Policy) PriorWork() int {
 type callKey struct{}
 type callState struct {
 	approver Approver
-	policy   *Policy
+	policy   *Policy // what this call's tools may assume
+	host     *Policy // whose activity counter this call occupies
 	mode     Mode
 	request  Request
+	pinned   bool
 }
+
+// Pin marks a turn nobody local started: a chat contact on a shared TUI sent
+// the message, so nothing this session granted or allowed may answer for it.
+type pinnedKey struct{}
+
+func Pin(ctx context.Context) context.Context { return context.WithValue(ctx, pinnedKey{}, true) }
+
+// Pinned is whether this context came from a turn nobody local started.
+func Pinned(ctx context.Context) bool { return ctx.Value(pinnedKey{}) != nil }
 
 func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) (context.Context, func()) {
 	p.mu.Lock()
-	s := &callState{policy: p, mode: p.mode, request: req}
+	s := &callState{policy: p, host: p, mode: p.mode, request: req, pinned: Pinned(ctx)}
+	if s.pinned {
+		// Manual with no Auto toggles; the store stays so standing denials still
+		// refuse, and the pinned branch of decide never consults its grants.
+		s.policy = &Policy{mode: Manual, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
+		s.mode = Manual
+		if p.mode == Plan {
+			s.mode = Plan
+		}
+	}
 	if len(approvers) > 0 {
 		s.approver = approvers[0]
 	}
@@ -166,9 +186,9 @@ func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) 
 }
 
 func (s *callState) release() {
-	s.policy.mu.Lock()
-	defer s.policy.mu.Unlock()
-	s.policy.active[s.mode]--
+	s.host.mu.Lock()
+	defer s.host.mu.Unlock()
+	s.host.active[s.mode]--
 }
 
 // Retain keeps background work visible after its initiating tool has returned.
@@ -178,9 +198,9 @@ func Retain(ctx context.Context) func() {
 	if s == nil {
 		return func() {}
 	}
-	s.policy.mu.Lock()
-	s.policy.active[s.mode]++
-	s.policy.mu.Unlock()
+	s.host.mu.Lock()
+	s.host.active[s.mode]++
+	s.host.mu.Unlock()
 	return sync.OnceFunc(s.release)
 }
 
@@ -234,7 +254,8 @@ func Authorize(ctx context.Context, approver Approver, req Request, ask bool) (b
 		return true, err
 	}
 	recheck := *s
-	recheck.mode = s.policy.Mode()
+	recheck.policy = s.host
+	recheck.mode = s.host.Mode()
 	if current, resolved := recheck.decide(req, ask); resolved && !current.Approved {
 		return true, decisionError(req, current)
 	}
@@ -264,6 +285,15 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 	}
 	if s.mode == Plan && blockedInPlan(req) {
 		return Decision{Reason: "Plan permits only reads and confined verification with read-only sources"}, true
+	}
+	if s.pinned {
+		// Plan's block and standing denials above still apply, and a call the
+		// tool itself declares automatic still runs; only the party that pinned
+		// the turn may answer it.
+		if !ask {
+			return Decision{Approved: true}, true
+		}
+		return Decision{}, false
 	}
 	s.policy.mu.Lock()
 	store, publish, network := s.policy.store, s.policy.publish, s.policy.network

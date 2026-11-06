@@ -104,11 +104,20 @@ func Run(ctx context.Context, p Params) error {
 	uiModel.notify.mode, _ = parseNotifyMode(cmp.Or(saved.NotifyMode, p.NotifyMode))
 	setSyntaxTheme(cmp.Or(saved.SyntaxTheme, p.SyntaxTheme))
 	defer func() {
+		// The quit path has no TUI left to hand the restart to, so run it here;
+		// restartRelay is bounded, so a hung agent-relay cannot hold shutdown.
+		if _, restart := closeShare(); restart != nil {
+			restart()
+		}
 		if approvalQueue != nil {
 			approvalQueue.Close()
 		}
 	}()
 	program := tea.NewProgram(uiModel, tea.WithContext(ctx), tea.WithInput(p.In), tea.WithOutput(p.Out))
+	// The share reports through the program: its watcher and its restart command
+	// run off the event loop, so only Update touches the model.
+	setShareHost(p.Session, p.Approvals, approvalQueue, p.EventBus, ctx,
+		func(text string) { program.Send(shareNoteMsg{text}) })
 	go watchRelay(ctx, func() { program.Send(relayChangedMsg{}) })
 	unregister := registerToolEvents(p.EventBus, p.Session, toolEvents.Push, func() {
 		program.Send(toolEventsReadyMsg{})

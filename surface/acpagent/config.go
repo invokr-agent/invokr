@@ -65,7 +65,13 @@ func (a *Agent) SetSessionMode(ctx context.Context, req acp.SetSessionModeReques
 	return acp.SetSessionModeResponse{}, nil
 }
 
+// The human at the terminal owns the host's approval mode. A chat contact on
+// a shared session may only narrow it to Plan: it stops the host from changing
+// anything, so it cannot widen or redirect what the human will run.
 func (a *Agent) setMode(ctx context.Context, id acp.SessionID, sess *chatSession, mode string) error {
+	if a.bound != nil && approval.Mode(mode) != approval.Plan {
+		return fmt.Errorf("acp: a shared session cannot change the host's mode to %s; only plan", mode)
+	}
 	if err := sess.approvals.Policy.SetMode(approval.Mode(mode)); err != nil {
 		return err
 	}

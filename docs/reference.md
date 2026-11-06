@@ -228,7 +228,7 @@ is currency-free while ACP cost requires an ISO currency code. The prompt respon
 that ends the turn is unchanged by these updates.
 
 Telegram, Signal and Matrix are handled by [agent-relay](https://github.com/invokr-agent/agent-relay)
-(v0.1.0), a separate repository that drives this command:
+(v0.4.0), a separate repository that drives this command:
 
 ```sh
 agent-relay setup --apply telegram
@@ -239,9 +239,27 @@ transport, no allowlist and no messaging config of its own.
 
 `invokr relay start|stop|status` drives that process from the shell, in the
 current directory. `/relay` in the TUI reports the same status — running or not,
-which directory it serves, and whether this session is the one chat reaches. It
-never is: chat always gets a fresh `invokr acp` session, so a TUI session in
-progress cannot be continued from a phone yet.
+which directory it serves, and whether this session shares itself.
+
+`/relay open` makes a running TUI session the one chat reaches, and `/relay close`
+(with the same effect on TUI quit) undoes it:
+
+- the TUI listens on `$XDG_RUNTIME_DIR/invokr/relay.sock` (dir `0700`, socket
+  `0600`; `~/.invokr/run/relay.sock` when `XDG_RUNTIME_DIR` is unset);
+- agent-relay's `agent_socket` is set to that path, or cleared with an empty
+  value, and the relay is restarted for this directory (`-replace`) because it
+  checks the socket at start and on reconnect only;
+- connections are accepted only from a peer running as this uid, on a socket file
+  and directory that deny group and other writes and belong to this uid.
+
+A shared session is not a second one: `session/new` and `session/load` resolve to
+the TUI's own session, chat turns are serialised with the human's, and a chat contact
+cannot switch cwd or mode. A turn started from chat is *pinned*: it does not inherit
+the session's mode, standing grants or the Auto publishing/network toggles — every
+call it makes is asked in the chat as allow-once or reject-once, is also visible in
+the TUI's approval queue, and the first answer wins; unanswered denies. Plan's block
+and standing denials still apply. See `docs/onboarding/14-relay.md` for the trust
+boundary in full.
 
 ## Memory forgetting and the recall gate
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 const relayPollInterval = 15 * time.Second
@@ -22,9 +24,20 @@ var relayAlive = func(ctx context.Context) bool {
 }
 
 // relayStatusText answers /relay with agent-relay's own status for this
-// directory. It runs inside Update, so a hung agent-relay must not freeze the
-// UI; the status exits non-zero when the relay is down, and its text says so.
-func (m *model) relayStatusText([]string) string {
+// directory. Opening or closing a share restarts agent-relay, which does not
+// exit promptly, so that restart goes back as a tea.Cmd for the TUI to run after
+// Update rather than inside it.
+func (m *model) relayStatusText(args []string) (string, tea.Cmd) {
+	action := ""
+	if len(args) > 0 {
+		action = args[0]
+	}
+	switch action {
+	case "open":
+		return openShare()
+	case "close":
+		return closeShare()
+	}
 	ctx, cancel := context.WithTimeout(m.ctx, relayStatusTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, "agent-relay", "status").CombinedOutput()
@@ -35,7 +48,7 @@ func (m *model) relayStatusText([]string) string {
 	case status == "" && err != nil:
 		status = "agent-relay status: " + err.Error()
 	}
-	return status + "\nthis session: not shared"
+	return status + "\n" + shareLine(), nil
 }
 
 // watchRelay polls for agent-relay until ctx ends, calling changed when the

@@ -271,6 +271,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if updated, cmd, ok := m.updateImageMsg(msg); ok {
 		return updated, cmd
 	}
+	if note, ok := msg.(shareNoteMsg); ok {
+		m.chatLog.Append(message{role: "error", text: note.text})
+		return m, nil
+	}
 	// huh's own messages (field focus, blink) come back through here, so an
 	// open settings form sees every non-key message as well as the model.
 	if _, isCompaction := msg.(compactionMsg); isCompaction {

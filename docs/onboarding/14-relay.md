@@ -2,15 +2,18 @@
 
 Package: `surface/acpagent/`. Entry: `invokr acp` (`cmd/chat_cli.go`). Relays live
 outside this repository: [agent-relay](https://github.com/invokr-agent/agent-relay)
-(v0.3.0+) carries Telegram, Signal and Matrix to invokr over ACP.
+(v0.4.0+) carries Telegram, Signal and Matrix to invokr over ACP.
 
 ## Topology
 
 ```text
-Telegram / Signal / Matrix ──▶ agent-relay ──ACP stdio──▶ invokr acp
+Telegram / Signal / Matrix ──▶ agent-relay ─ACP stdio─▶ invokr acp
                                                               └─ chatSession (per ACP session)
                                                                    ├─ turn.IdentifiedSession
                                                                    └─ approval.Broker
+
+a running TUI ─/relay open─▶ $XDG_RUNTIME_DIR/invokr/relay.sock ◀agent-relay
+                                    └─ the same chatSession, approval queue and transcript
 ```
 
 invokr owns no transport, no allowlist and no chat→session store. A relay maps
@@ -49,9 +52,44 @@ process runs, the TUI header shows a `relay ●` pill (polled every 15s).
 
 `/relay` in the TUI prints the same facts as `invokr relay status` — whether the
 relay runs, the directory it serves (agent-relay's own `status` text) and whether
-*this* session is the one chat reaches. It never is: the relay always drives its
-own `invokr acp`, so a TUI session in progress cannot be continued from Telegram,
-Signal or Matrix yet.
+*this* session shares itself. `/relay open` opens that share, `/relay close` closes
+it, and quitting the TUI closes it too; either way the relay goes back to driving
+its own `invokr acp`.
+
+## Sharing a live session
+
+`/relay open` listens on `$XDG_RUNTIME_DIR/invokr/relay.sock` (dir `0700`, socket
+`0600`; `~/.invokr/run/relay.sock` when `XDG_RUNTIME_DIR` is unset), writes that
+path into agent-relay's `agent_socket`, and restarts the relay for this directory,
+which then dials the socket instead of spawning `invokr acp`. The reply names the
+directory the relay now serves. `/relay close`, and quitting the TUI, remove the
+socket, clear `agent_socket` and restart the relay back onto `invokr acp`.
+
+A TUI killed mid-share leaves `agent_socket` set and a socket nobody answers. agent-relay
+dials it, fails that check and falls back to spawning `invokr acp` for the directory, so
+the relay keeps working while the share is dead; the next `/relay open` removes the stale
+socket and rewrites `agent_socket`.
+
+The socket is the whole trust boundary, so every one of these is checked before a
+session is served: the socket file and its directory deny group and other writes,
+the file belongs to this uid, and the process on the other end of the connection
+runs as this uid (peer credentials; a connection whose uid cannot be read is refused).
+A socket file another session answers is reported, not taken over: that session's
+contacts would otherwise start talking to this one. A stale socket (nobody listening)
+is removed.
+
+Chat contacts then talk to *this* session: `session/new` and `session/load` resolve
+to the TUI's own session, so their turns land in the transcript, mode and approval
+queue the human is looking at, and they are serialised with the human's turns rather
+than running beside them. A chat contact gets no session of its own, so it cannot
+switch cwd or mode.
+
+A turn a chat started answers for its own approvals. Nothing the session granted or
+allowed reaches it: no standing grants, no permissive mode (a YOLO or Auto session
+keeps asking), no Auto publishing or network toggle. Plan's block and standing
+denials still apply. Each approval is offered in the chat as allow-once or reject-once
+and also shows in the TUI's queue; the first answer wins, and an unanswered call
+denies.
 
 The relay owns the allowlists, the credentials and the answer formatting;
 invokr only sees prompts and permission requests.

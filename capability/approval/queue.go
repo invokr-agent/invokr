@@ -21,6 +21,10 @@ type ApprovalQueue struct {
 	items  []QueueItem
 	closed bool // true after Close(); guarded by mu
 	grants *Store
+
+	// Whichever Decide runs first wins; the other is a no-op.
+	installed func(string, Request)
+	resolved  func(string, Decision)
 }
 
 // NewApprovalQueue creates a queue and starts draining broker.Requests() in
@@ -55,10 +59,27 @@ func (q *ApprovalQueue) enqueue(p Pending) {
 	closed := q.closed
 	if !closed {
 		q.items = append(q.items, QueueItem{Pending: p})
+		if q.installed != nil {
+			q.installed(p.ID, p.Request)
+		}
 	}
 	q.mu.Unlock()
 	if closed {
 		p.Decide(Decision{Approved: false, Reason: "approval queue closed"})
+	}
+}
+
+// SetMirror replays parked requests, so a share opened mid-turn still sees them.
+func (q *ApprovalQueue) SetMirror(installed func(string, Request), resolved func(string, Decision)) {
+	q.mu.Lock()
+	q.installed, q.resolved = installed, resolved
+	waiting := append([]QueueItem(nil), q.items...)
+	q.mu.Unlock()
+	if installed == nil {
+		return
+	}
+	for _, item := range waiting {
+		installed(item.Pending.ID, item.Pending.Request)
 	}
 }
 
@@ -113,9 +134,13 @@ func (q *ApprovalQueue) Decide(id string, decision Decision) {
 	}
 	q.items[idx].decided = true
 	item := q.items[idx]
+	resolved := q.resolved
 	q.items = slices.Delete(q.items, idx, idx+1)
 	q.mu.Unlock()
 	item.Pending.Decide(decision)
+	if resolved != nil {
+		resolved(id, decision)
+	}
 }
 
 // DecideAll delivers the same decision to every item currently in the queue.
@@ -148,8 +173,12 @@ func (q *ApprovalQueue) drain(decision Decision, markClosed bool) {
 		}
 	}
 	q.items = q.items[:0]
+	resolved := q.resolved
 	q.mu.Unlock()
 	for _, item := range removed {
 		item.Pending.Decide(decision)
+		if resolved != nil {
+			resolved(item.Pending.ID, decision)
+		}
 	}
 }

@@ -115,6 +115,39 @@ func TestPendingApprovalCannotCrossModeChange(t *testing.T) {
 	}
 }
 
+// A pinned turn's tools see a Manual policy, but the human's mode still owns
+// the recheck: switching to Plan mid-call must stop the write.
+func TestPinnedApprovalCannotCrossHostModeChange(t *testing.T) {
+	p := NewPolicy(Auto, false)
+	req := Request{Tool: "edit", Subject: "a.go", Writes: true, Confined: true}
+	ctx, done := p.Begin(Pin(context.Background()), req)
+	defer done()
+	approver := modeApprover(func(context.Context, Request) (Decision, error) {
+		if err := p.SetMode(Plan); err != nil {
+			t.Fatal(err)
+		}
+		return Decision{Approved: true}, nil
+	})
+	if _, err := Authorize(ctx, approver, req, true); err == nil {
+		t.Fatal("a pinned write survived the host switching to Plan")
+	}
+}
+
+// A pinned call occupies the host policy's activity count: counting it on the
+// throwaway policy hides it from the mode-switch warning and leaves the
+// release decrementing a counter that was never raised.
+func TestPinnedCallCountsOnTheHostPolicy(t *testing.T) {
+	p := NewPolicy(Auto, false)
+	_, done := p.Begin(Pin(context.Background()), Request{Tool: "shell", Subject: "git status"})
+	if p.PriorWork() != 1 {
+		t.Fatalf("a pinned call left the host counting %d, want 1", p.PriorWork())
+	}
+	done()
+	if p.PriorWork() != 0 {
+		t.Fatalf("after release the host counts %d, want 0", p.PriorWork())
+	}
+}
+
 // A standing grant covers an outside read in every mode, but only when it
 // covers each path; nothing else approves one without asking.
 func TestOutsideReadNeedsGrantCoveringEveryPath(t *testing.T) {
@@ -206,5 +239,57 @@ func TestStructuredDenialPathsKeepSpaces(t *testing.T) {
 	d, ok := s.DenyOnly(Request{Tool: "apply_patch", Subject: "secret file public", Paths: []string{"secret file", "public"}, SubjectIsPathList: true})
 	if !ok || d.Approved {
 		t.Fatal("structured denied path split at whitespace")
+	}
+}
+
+func TestPinnedTurnApprovals(t *testing.T) {
+	for _, tc := range []struct {
+		name                  string
+		mode                  Mode
+		req                   Request
+		ask, publish, network bool
+		rule                  string
+		prompt, denied        bool
+	}{
+		{"yolo-asks", YOLO, Request{Writes: true, Publishes: true, Protected: true}, true, false, false, "", true, false},
+		{"auto-confined-asks", Auto, Request{Writes: true, Confined: true}, true, false, false, "", true, false},
+		{"auto-network-toggle-asks", Auto, Request{Network: true, Confined: true}, true, false, true, "", true, false},
+		{"auto-publish-asks", Auto, Request{Publishes: true, Network: true, Confined: true}, true, true, false, "", true, false},
+		{"standing-grant-asks", Auto, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "grant", true, false},
+		{"standing-denial-denies", Manual, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "deny", false, true},
+		{"plan-write-blocked", Plan, Request{Confined: true, Writes: true}, true, false, false, "", false, true},
+		{"plan-read-asks", Plan, Request{ReadOnly: true}, true, false, false, "", true, false},
+		{"automatic-runs", YOLO, Request{ReadOnly: true}, false, false, false, "", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewPolicy(tc.mode, tc.publish)
+			p.SetAutoNetwork(tc.network)
+			if tc.rule != "" {
+				s := newTestStore(t)
+				g := testGrant(t, "git status*")
+				if tc.rule == "deny" {
+					g = denial(t, "git status*")
+				}
+				mustAdd(t, s, g)
+				p.SetStore(s, nil)
+			}
+			ctx, done := p.Begin(Pin(context.Background()), tc.req)
+			defer done()
+			called, checked := false, false
+			approver := modeApprover(func(_ context.Context, req Request) (Decision, error) {
+				called, checked = true, req.PolicyChecked
+				return Decision{Approved: true}, nil
+			})
+			_, err := Authorize(ctx, approver, tc.req, tc.ask)
+			if (err != nil) != tc.denied || called != tc.prompt {
+				t.Fatalf("err=%v prompted=%v, want denied=%v prompted=%v", err, called, tc.denied, tc.prompt)
+			}
+			if tc.prompt && !checked {
+				t.Fatal("a pinned request could be auto-decided by the queue's standing grants")
+			}
+			if p.Mode() != tc.mode {
+				t.Fatalf("pinning changed the session mode to %s", p.Mode())
+			}
+		})
 	}
 }

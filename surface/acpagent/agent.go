@@ -47,13 +47,19 @@ type Agent struct {
 	newSession runtime.ChatSessionFunc
 	commands   Commands
 	sessions   sync.Map
+	// bound is the host's own session: a shared TUI serves its chat contacts
+	// from it, so turns land in the transcript, mode and approvals the human sees.
+	bound *chatSession
 }
 
 // latestVersion is the newer invokr release tag, "" when none is known; tests replace it.
 var latestVersion = version.LatestVersion
 
 func Serve(ctx context.Context, in io.Reader, out io.Writer, bus events.Bus, newSession runtime.ChatSessionFunc, commands Commands) error {
-	a := &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}
+	return serve(ctx, &Agent{conn: acp.NewAgentConn(in, out), newSession: newSession, commands: commands}, bus)
+}
+
+func serve(ctx context.Context, a *Agent, bus events.Bus) error {
 	stopUsage := a.registerUsage(bus)
 	defer stopUsage()
 	latestVersion() // starts the background lookup so the first reply can carry its answer
@@ -112,22 +118,36 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 	if !sameDir(req.Cwd, wd) {
 		return acp.NewSessionResponse{}, fmt.Errorf("acp: cwd %q differs from the workspace invokr was started in (%q); start invokr acp in that directory", req.Cwd, wd)
 	}
-	sess, broker, err := a.newSession("")
-	if err != nil {
-		return acp.NewSessionResponse{}, err
+	// One shared TUI has one session: a contact gets the host's, not a fresh one,
+	// and asking again must not list its models and commands a second time.
+	var (
+		store = true
+		chat  *chatSession
+		id    acp.SessionID
+	)
+	if a.bound != nil {
+		chat = a.bound
+		id = acp.SessionID(chat.SessionID())
+		_, already := a.sessions.Load(id)
+		store = !already
+	} else {
+		sess, broker, err := a.newSession("")
+		if err != nil {
+			return acp.NewSessionResponse{}, err
+		}
+		chat = &chatSession{IdentifiedSession: sess, approvals: broker}
+		id = acp.SessionID(sess.SessionID())
 	}
-	id := acp.SessionID(sess.SessionID())
-	chat := &chatSession{IdentifiedSession: sess, approvals: broker}
-	listModels(ctx, chat)
-	a.sessions.Store(id, chat)
-	commands := []acp.AvailableCommand{modeCommand}
-	if a.commands != nil {
-		commands = append(commands, a.commands.Available()...)
+	if store {
+		a.sessions.Store(id, chat)
+		listModels(ctx, chat)
+		commands := a.available()
+		go func() {
+			_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{
+				AvailableCommands: commands}})
+		}()
 	}
-	go func() {
-		_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{AvailableCommands: commands}})
-	}()
-	return acp.NewSessionResponse{SessionID: id, Modes: modeState(broker.Policy), ConfigOptions: configOptions(chat)}, nil
+	return acp.NewSessionResponse{SessionID: id, Modes: modeState(chat.approvals.Policy), ConfigOptions: configOptions(chat)}, nil
 }
 
 func (a *Agent) session(id acp.SessionID) (*chatSession, error) {
@@ -166,8 +186,14 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 	sess.turnMu.Lock()
 	defer sess.turnMu.Unlock()
 	input := strings.Join(text, "\n")
+	// Pin before commands run: a skill, tool command or job a chat turn starts
+	// inherits this context, and an unwrapped one is the host's to answer.
+	ctx = a.pinned(ctx)
 	if reply, ok := a.modeText(ctx, req.SessionID, sess, input); ok {
 		return a.reply(ctx, req.SessionID, reply)
+	}
+	if a.bound != nil && spawnsDetachedSession(input) {
+		return a.reply(ctx, req.SessionID, "a shared session cannot start this command: it runs detached, with its own approvals")
 	}
 	if a.commands != nil {
 		if reply, prompt, ok := a.commands.Run(ctx, sess.IdentifiedSession, input); ok {
@@ -186,16 +212,21 @@ func (a *Agent) Prompt(ctx context.Context, req acp.PromptRequest) (acp.PromptRe
 func (a *Agent) send(ctx context.Context, id acp.SessionID, sess *chatSession, input string) (acp.PromptResponse, error) {
 	var denied []turn.ToolOutcome
 	var approved []acp.ToolCallID
-	stopDrain := approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
-		d := a.ask(ctx, id, r)
-		if d.Approved {
-			approved = append(approved, acp.ToolCallID(r.ID))
-		} else {
-			denied = append(denied, turn.ToolOutcome{Tool: r.Tool, Detail: strings.TrimPrefix(cmp.Or(r.Summary, r.Tool), "Run ")})
-		}
-		return d
-	})
-	resp, err := sess.Send(ctx, input)
+	// A bound session's approvals go to the host's queue, which mirrors them
+	// here; draining the broker too would split each request between consumers.
+	stopDrain := func() {}
+	if a.bound == nil {
+		stopDrain = approval.Drain(sess.approvals, func(r approval.Request) approval.Decision {
+			d, _ := a.ask(ctx, id, r)
+			if d.Approved {
+				approved = append(approved, acp.ToolCallID(r.ID))
+			} else {
+				denied = append(denied, turn.ToolOutcome{Tool: r.Tool, Detail: strings.TrimPrefix(cmp.Or(r.Summary, r.Tool), "Run ")})
+			}
+			return d
+		})
+	}
+	resp, err := sess.Send(a.pinned(ctx), input)
 	stopDrain()
 	final := acp.ToolCallStatusCompleted
 	if err != nil {
@@ -284,12 +315,29 @@ func evidenceMark(e turn.ExecutionEvidence, pending, labels *[]turn.ToolOutcome)
 	return label, "✗ " + outcome
 }
 
-func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request) approval.Decision {
+func (a *Agent) available() []acp.AvailableCommand {
+	commands := []acp.AvailableCommand{modeCommand}
+	if a.commands != nil {
+		commands = append(commands, a.commands.Available()...)
+	}
+	return commands
+}
+
+func (a *Agent) pinned(ctx context.Context) context.Context {
+	if a.bound == nil {
+		return ctx
+	}
+	return approval.Pin(ctx)
+}
+
+// ask shows the call to the chat contact. The flag says the chat answered;
+// a dead connection is not a denial, and must not settle the host's request.
+func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request) (approval.Decision, bool) {
 	callID := acp.ToolCallID(req.ID)
 	title, kind := cmp.Or(req.Summary, req.Tool), toolKind(req)
 	announce := acp.SessionUpdate{ToolCall: &acp.ToolCall{ToolCallID: callID, Name: req.Tool, Title: title, Kind: kind, Status: acp.ToolCallStatusPending}}
 	if err := a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: id, Update: announce}); err != nil {
-		return approval.Decision{Reason: "permission request failed"}
+		return approval.Decision{Reason: "permission request failed"}, false
 	}
 	resp, err := a.conn.RequestPermission(ctx, acp.RequestPermissionRequest{SessionID: id, Options: permissionOptions,
 		ToolCall: acp.ToolCallUpdate{ToolCallID: callID, Name: req.Tool, Title: title, Kind: kind}})
@@ -299,7 +347,7 @@ func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request)
 	}
 	update := acp.SessionUpdate{ToolCallUpdate: &acp.ToolCallUpdate{ToolCallID: callID, Status: status}}
 	_ = a.conn.SessionUpdate(ctx, acp.SessionNotification{SessionID: id, Update: update})
-	return decision
+	return decision, err == nil
 }
 
 func toolKind(req approval.Request) acp.ToolKind {
@@ -318,3 +366,13 @@ func toolKind(req approval.Request) acp.ToolKind {
 }
 
 func (a *Agent) Cancel(context.Context, acp.CancelNotification) error { return nil }
+
+// detachedSessions are slash commands whose work outlives the turn that asked:
+// a scheduled job runs on its own context with a fresh session and approvals,
+// so the pin cannot carry into it.
+var detachedSessions = []string{"/jobs"}
+
+func spawnsDetachedSession(input string) bool {
+	fields := strings.Fields(input)
+	return len(fields) > 0 && slices.Contains(detachedSessions, strings.ToLower(fields[0]))
+}
