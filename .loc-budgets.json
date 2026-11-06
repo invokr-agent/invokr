@@ -1,18 +1,18 @@
 {
-  "global": 39999,
+  "global": 40519,
   "areas": {
     "agent": 3953,
-    "capability": 3846,
+    "capability": 3892,
     "capability/memory": 3394,
     "clients": 792,
     "cmd": 2541,
-    "cmd/agentui": 6693,
+    "cmd/agentui": 6826,
     "config": 1442,
     "constants": 255,
     "internal": 185,
     "platform": 2600,
     "support": 358,
-    "surface": 537,
+    "surface": 878,
     "tools": 593,
     "tools/core": 1364,
     "tools/system": 11351
