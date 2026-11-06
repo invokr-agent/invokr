@@ -29,6 +29,18 @@ func GitIdentityPath(homeDir string) string { return filepath.Join(homeDir, "git
 // GitHub login apart from the host's ~/.config/gh.
 func GitIdentityDir(homeDir string) string { return filepath.Join(homeDir, "gh") }
 
+// GitIdentityKeyFileName is the fixed name of the copied signing key inside the
+// Invokr home. The stored identity keeps only this name: the path git signs with
+// is derived from the home in use, so the same home mounted at another path
+// (the container's /root/.invokr) resolves to its own copy and needs no extra
+// mount.
+const GitIdentityKeyFileName = "git-identity.key"
+
+// GitIdentityKeyPath is the copied signing key: one file directly under the
+// home, which is the only thing a sandbox mounts from the home. The home also
+// carries the gh login and the stored identity, so it is never mounted itself.
+func GitIdentityKeyPath(homeDir string) string { return filepath.Join(homeDir, GitIdentityKeyFileName) }
+
 // LoadGitIdentity reads the stored identity; no file means no identity, so an
 // unconfigured run behaves exactly as it did before.
 func LoadGitIdentity(homeDir string) (GitIdentityConfig, error) {
@@ -43,23 +55,30 @@ func LoadGitIdentity(homeDir string) (GitIdentityConfig, error) {
 // process's environment, before any tool runs, so every git and gh child
 // inherits them. Nothing stored sets nothing. An unparseable file is an error
 // rather than a silent fall back to the host's identity: running as the wrong
-// account is worse than refusing to start.
-func ApplyGitIdentity(homeDir string) error {
+// account is worse than refusing to start. The identity that was applied is
+// returned so a caller can report the paths it resolved for this home.
+func ApplyGitIdentity(homeDir string) (GitIdentityConfig, error) {
 	identity, err := LoadGitIdentity(homeDir)
 	for _, entry := range GitIdentityEnv(identity, homeDir) {
 		key, value, _ := strings.Cut(entry, "=")
 		_ = os.Setenv(key, value)
 	}
-	return err
+	return identity, err
 }
 
-// ClearGitIdentity drops the stored identity, its signing settings and the gh
-// login. Nothing configured is not an error, so --reset is idempotent.
+// ClearGitIdentity drops the stored identity, its signing key, the gh login and
+// the copied key. Nothing configured is not an error, so --reset is idempotent.
 func ClearGitIdentity(homeDir string) error {
 	if err := os.Remove(GitIdentityPath(homeDir)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return os.RemoveAll(GitIdentityDir(homeDir))
+	if err := os.RemoveAll(GitIdentityDir(homeDir)); err != nil {
+		return err
+	}
+	if err := os.Remove(GitIdentityKeyPath(homeDir)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
 }
 
 // GitIdentityEnv is the environment every git and gh child inherits. Environment
@@ -82,8 +101,12 @@ func GitIdentityEnv(identity GitIdentityConfig, homeDir string) []string {
 	keys := []string{"credential.helper", "credential.https://github.com.helper", "url.https://github.com/.insteadOf"}
 	values := []string{"", "!gh auth git-credential", "git@github.com:"}
 	if identity.SigningKey != "" {
+		// The stored name only says this identity signs: the key path is derived
+		// from the home this run uses, which is what lets a container that mounts
+		// the home sign with the copy inside it. git needs no .pub beside it; it
+		// derives the public half from the private key.
 		keys = append(keys, "gpg.format", "user.signingkey", "commit.gpgsign")
-		values = append(values, "ssh", identity.SigningKey, "true")
+		values = append(values, "ssh", GitIdentityKeyPath(homeDir), "true")
 	}
 	env = append(env, "GIT_CONFIG_COUNT="+strconv.Itoa(len(keys)))
 	for i := 0; i < len(keys); i++ {

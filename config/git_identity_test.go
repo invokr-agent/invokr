@@ -12,6 +12,10 @@ import (
 
 const testHomeDir = "/home/operator/.invokr"
 
+// containerHomeDir is where docker_sandbox mounts the Invokr home inside the
+// container; an identity applied there must name a key under it.
+const containerHomeDir = "/root/.invokr"
+
 func TestGitIdentityEnvEmpty(t *testing.T) {
 	for _, identity := range []GitIdentityConfig{GitIdentityConfig{}, GitIdentityConfig{Name: "octocat-bot"}, GitIdentityConfig{Email: "octocat-bot@example.com"}} {
 		if got := GitIdentityEnv(identity, testHomeDir); len(got) != 0 {
@@ -39,15 +43,26 @@ func TestGitIdentityEnvIdentity(t *testing.T) {
 	}
 }
 
-func TestGitIdentityEnvSigning(t *testing.T) {
-	env := GitIdentityEnv(GitIdentityConfig{Name: "octocat-bot", Email: "octocat-bot@example.com", SigningKey: "/home/operator/.ssh/id_ed25519_signer"}, testHomeDir)
-	for _, entry := range []string{
-		"GIT_CONFIG_COUNT=6", "GIT_CONFIG_KEY_3=gpg.format", "GIT_CONFIG_VALUE_3=ssh",
-		"GIT_CONFIG_KEY_4=user.signingkey", "GIT_CONFIG_VALUE_4=/home/operator/.ssh/id_ed25519_signer",
-		"GIT_CONFIG_KEY_5=commit.gpgsign", "GIT_CONFIG_VALUE_5=true",
-	} {
-		if !slices.Contains(env, entry) {
-			t.Errorf("missing %s in %v", entry, env)
+// The stored signing key is only the flag that this identity signs: the path git
+// signs with is always derived from the home in use, so the same Invokr home
+// mounted at another path (the container's /root/.invokr) resolves to the copy
+// that exists there instead of a host path that dangles.
+func TestGitIdentityEnvSigningDerivesKeyFromHome(t *testing.T) {
+	for _, homeDir := range []string{testHomeDir, containerHomeDir} {
+		for _, stored := range []string{GitIdentityKeyFileName, GitIdentityKeyPath(testHomeDir)} {
+			env := GitIdentityEnv(GitIdentityConfig{Name: "octocat-bot", Email: "octocat-bot@example.com", SigningKey: stored}, homeDir)
+			for _, entry := range []string{
+				"GIT_CONFIG_COUNT=6", "GIT_CONFIG_KEY_3=gpg.format", "GIT_CONFIG_VALUE_3=ssh",
+				"GIT_CONFIG_KEY_4=user.signingkey", "GIT_CONFIG_VALUE_4=" + GitIdentityKeyPath(homeDir),
+				"GIT_CONFIG_KEY_5=commit.gpgsign", "GIT_CONFIG_VALUE_5=true",
+			} {
+				if !slices.Contains(env, entry) {
+					t.Errorf("home %s stored %q: missing %s in %v", homeDir, stored, entry, env)
+				}
+			}
+			if len(env) != 18 {
+				t.Errorf("home %s stored %q: expected 15 entries, got %d: %v", homeDir, stored, len(env), env)
+			}
 		}
 	}
 }
@@ -64,7 +79,7 @@ func TestGitIdentityEnvNamesCover(t *testing.T) {
 
 func TestGitIdentityStore(t *testing.T) {
 	dir := t.TempDir()
-	identity := GitIdentityConfig{Name: "octocat-bot", Email: "octocat-bot@example.com", SigningKey: "/home/operator/.ssh/id_ed25519_signer"}
+	identity := GitIdentityConfig{Name: "octocat-bot", Email: "octocat-bot@example.com", SigningKey: GitIdentityKeyFileName}
 	if err := fsutil.SaveJSON(GitIdentityPath(dir), identity); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -85,6 +100,9 @@ func TestGitIdentityStore(t *testing.T) {
 	if err := os.MkdirAll(GitIdentityDir(dir), 0o700); err != nil {
 		t.Fatalf("mkdir gh: %v", err)
 	}
+	if err := os.WriteFile(GitIdentityKeyPath(dir), []byte("key material"), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
 	for i := 0; i < 2; i++ {
 		if err := ClearGitIdentity(dir); err != nil {
 			t.Fatalf("clear (%d): %v", i, err)
@@ -93,7 +111,40 @@ func TestGitIdentityStore(t *testing.T) {
 	if _, err := os.Stat(GitIdentityDir(dir)); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("clear must remove %s: %v", GitIdentityDir(dir), err)
 	}
+	if _, err := os.Stat(GitIdentityKeyPath(dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("clear must remove %s: %v", GitIdentityKeyPath(dir), err)
+	}
 	if loaded, err := LoadGitIdentity(dir); err != nil || loaded.Name != "" || loaded.Email != "" || loaded.SigningKey != "" {
 		t.Errorf("after clear expected an empty identity, got %v (%v)", loaded, err)
+	}
+}
+
+// --reset takes the copied signing key with the identity: a leftover key would
+// keep signing commits no account asked for, and it must stay idempotent.
+func TestClearGitIdentityRemovesTheKeyFile(t *testing.T) {
+	dir := t.TempDir()
+	key := GitIdentityKeyPath(dir)
+	if err := os.WriteFile(key, []byte("key material"), 0o600); err != nil {
+		t.Fatalf("write key: %v", err)
+	}
+	if err := ClearGitIdentity(dir); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if _, err := os.Stat(key); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("clear must remove the copied key: %v", err)
+	}
+	if err := ClearGitIdentity(dir); err != nil {
+		t.Errorf("clear must stay idempotent: %v", err)
+	}
+}
+
+// git derives the public half from the private key, so only the private key is
+// copied: one file under the home is one file the sandbox can mount.
+func TestGitIdentityKeyPathIsUnderTheHome(t *testing.T) {
+	for _, homeDir := range []string{testHomeDir, containerHomeDir} {
+		key := GitIdentityKeyPath(homeDir)
+		if filepath.Dir(key) != homeDir || filepath.Base(key) != GitIdentityKeyFileName {
+			t.Errorf("%s is not the key file directly under %s", key, homeDir)
+		}
 	}
 }

@@ -47,8 +47,9 @@ func run(ctx context.Context) (err error) {
 	// The identity env goes on this process before the container is built: the
 	// relaunch forwards exactly those names, so a sandboxed agent commits as the
 	// same account it would outside. The container's own bootstrap applies it
-	// again against the mounted Invokr home.
-	if err := config.ApplyGitIdentity(config.InvokrHomeDir()); err != nil {
+	// again against the mounted Invokr home, which is where a signing key path
+	// resolves inside the container.
+	if _, err := config.ApplyGitIdentity(config.InvokrHomeDir()); err != nil {
 		return err
 	}
 	if handled, exitCode, sandboxErr := docker_sandbox.MaybeRelaunch(cfg.Sandbox, cfg.Provider.BaseURL, os.Args); handled {
