@@ -19,16 +19,16 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: antonikliment/go-code-metrics/.github/workflows/budget-pr.yml@18e7ae842a238d76365f6b2796f9e535e1b459d5 # v0.1.0
+    uses: antonikliment/go-code-metrics/.github/workflows/budget-pr.yml@367cac262405f7419d17fb0ab893688574281652 # v0.1.1
     with:
-      version: v0.1.0
+      version: v0.1.1
   main:
     if: github.event_name == 'push'
     permissions:
       contents: read
-    uses: antonikliment/go-code-metrics/.github/workflows/budget-main.yml@18e7ae842a238d76365f6b2796f9e535e1b459d5 # v0.1.0
+    uses: antonikliment/go-code-metrics/.github/workflows/budget-main.yml@367cac262405f7419d17fb0ab893688574281652 # v0.1.1
     with:
-      version: v0.1.0
+      version: v0.1.1
     secrets:
       app-id: ${{ secrets.LINE_WARDEN_APP_ID }}
       app-key: ${{ secrets.LINE_WARDEN_APP_KEY }}
