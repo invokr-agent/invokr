@@ -97,3 +97,41 @@ func TestGitIdentityStore(t *testing.T) {
 		t.Errorf("after clear expected an empty identity, got %v (%v)", loaded, err)
 	}
 }
+
+// --reset takes the copied signing key with the identity: a leftover key would
+// keep signing commits no account asked for.
+func TestClearGitIdentityRemovesCopiedKeys(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(GitIdentityKeyDir(dir), 0o700); err != nil {
+		t.Fatalf("mkdir keys: %v", err)
+	}
+	key := filepath.Join(GitIdentityKeyDir(dir), "id_ed25519_signer")
+	for _, path := range []string{key, key + ".pub"} {
+		if err := os.WriteFile(path, []byte("key material"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+	if err := ClearGitIdentity(dir); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if _, err := os.Stat(GitIdentityKeyDir(dir)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("clear must remove the copied keys: %v", err)
+	}
+	if err := ClearGitIdentity(dir); err != nil {
+		t.Errorf("clear must stay idempotent: %v", err)
+	}
+}
+
+// A sandbox mounts exactly these two files: the private key git signs with and
+// the public half it verifies against, and nothing at all when the identity does
+// not sign.
+func TestSigningKeyFilesNamesBothHalves(t *testing.T) {
+	key := "/home/operator/.invokr/ssh/id_ed25519_signer"
+	want := []string{key, key + ".pub"}
+	if got := SigningKeyFiles(GitIdentityConfig{SigningKey: key}); !slices.Equal(got, want) {
+		t.Fatalf("SigningKeyFiles = %v, want %v", got, want)
+	}
+	if got := SigningKeyFiles(GitIdentityConfig{Name: "octocat-bot"}); len(got) != 0 {
+		t.Fatalf("an identity with no signing key mounted %v", got)
+	}
+}

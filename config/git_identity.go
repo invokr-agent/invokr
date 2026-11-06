@@ -29,6 +29,20 @@ func GitIdentityPath(homeDir string) string { return filepath.Join(homeDir, "git
 // GitHub login apart from the host's ~/.config/gh.
 func GitIdentityDir(homeDir string) string { return filepath.Join(homeDir, "gh") }
 
+// GitIdentityKeyDir holds the signing keys the stored identity uses. A sandbox
+// mounts only the key and its public half, never this directory's parent: the
+// Invokr home also carries the gh login and config.
+func GitIdentityKeyDir(homeDir string) string { return filepath.Join(homeDir, "ssh") }
+
+// SigningKeyFiles is the pair git needs to sign a commit: the private key and
+// the public half it verifies against. No signing key means nothing to mount.
+func SigningKeyFiles(identity GitIdentityConfig) []string {
+	if identity.SigningKey == "" {
+		return nil
+	}
+	return []string{identity.SigningKey, identity.SigningKey + ".pub"}
+}
+
 // LoadGitIdentity reads the stored identity; no file means no identity, so an
 // unconfigured run behaves exactly as it did before.
 func LoadGitIdentity(homeDir string) (GitIdentityConfig, error) {
@@ -53,13 +67,16 @@ func ApplyGitIdentity(homeDir string) error {
 	return err
 }
 
-// ClearGitIdentity drops the stored identity, its signing settings and the gh
-// login. Nothing configured is not an error, so --reset is idempotent.
+// ClearGitIdentity drops the stored identity, its signing settings, the gh login
+// and the copied keys. Nothing configured is not an error, so --reset is idempotent.
 func ClearGitIdentity(homeDir string) error {
 	if err := os.Remove(GitIdentityPath(homeDir)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	return os.RemoveAll(GitIdentityDir(homeDir))
+	if err := os.RemoveAll(GitIdentityDir(homeDir)); err != nil {
+		return err
+	}
+	return os.RemoveAll(GitIdentityKeyDir(homeDir))
 }
 
 // GitIdentityEnv is the environment every git and gh child inherits. Environment
