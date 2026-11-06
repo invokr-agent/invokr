@@ -40,7 +40,7 @@ require (
 )
 
 require (
-	github.com/antonikliment/go-code-metrics v0.0.7 // indirect
+	github.com/antonikliment/go-code-metrics v0.1.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/blockloop/scan/v2 v2.4.0 // indirect

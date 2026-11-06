@@ -25,7 +25,7 @@ Instructions for AI coding agents working on this repository. Humans: see
   4. What can be removed or consolidated to stay under the LOC budget?
 - A new package needs an updated `docs/architecture/services.md` and a PR explanation of why extending wasn't enough.
 - Lint budgets (`make lint-ci`): `gocyclo` < 12, `gocognit` < 15, `funlen` 80 lines / 50 statements, `nestif`, `dupl`.
-- LoC ceilings live in `.loc-budgets.json` (one global plus per-area ceilings, longest path prefix wins). Check them locally with `go run github.com/antonikliment/go-code-metrics/cmd/go-code-metrics@v0.1.0 budget report|check|sync`; the `loc-budget` workflow gates PRs and resyncs the ledger on `main`, so PRs never edit ceiling numbers.
+- LoC ceilings live in `.loc-budgets.json` (one global plus per-area ceilings, longest path prefix wins). Check them locally with `go run github.com/antonikliment/go-code-metrics/cmd/go-code-metrics@v0.1.1 budget report|check|sync`; the `loc-budget` workflow gates PRs and resyncs the ledger on `main`, so PRs never edit ceiling numbers.
 - Bug fixes come with a regression test that fails before the fix and passes after.
 
 ## Comments
