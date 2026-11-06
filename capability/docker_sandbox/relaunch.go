@@ -129,13 +129,16 @@ func buildDockerArgs(engine, image, workspaceRoot, invokrHome string, agentArgs 
 	args = append(args, "--rm", "--init")
 
 	workVol := workspaceRoot + ":" + workspaceRoot
+	// The stored identity's signing key is a file directly under the Invokr home,
+	// so this mount carries it: the container re-applies the identity and resolves
+	// the key path against containerInvokrHome, which is why no per-key mount is
+	// needed for a container commit to be signed.
 	homeVol := invokrHome + ":" + containerInvokrHome
 	if selinux {
 		workVol += ":Z"
 		homeVol += ":Z"
 	}
 	args = append(args, "-v", workVol, "-v", homeVol, "-w", workspaceRoot)
-	args = append(args, keyMountArgs(invokrHome, selinux)...)
 	args = append(args, filterEnv(os.Environ())...)
 	// The host invokr home is mounted at containerInvokrHome, but host-side
 	// INVOKR_HOME/INVOKR_MEMORY_DIR (and any config memory.dir) still point at
@@ -145,29 +148,6 @@ func buildDockerArgs(engine, image, workspaceRoot, invokrHome string, agentArgs 
 		"-e", "INVOKR_MEMORY_DIR="+containerInvokrHome, "-e", "INVOKR_TOOLBOX_ALLOW_UNSANDBOXED=1")
 	args = append(args, hostLoopbackArgs(baseURL)...)
 	return append(append(args, image), agentArgs...)
-}
-
-// keyMountArgs mounts the stored identity's signing key and its public half
-// read-only at their own paths. The Invokr home is mounted at containerInvokrHome,
-// so the host path the forwarded user.signingkey names would otherwise dangle and
-// every container commit comes out unsigned.
-func keyMountArgs(invokrHome string, selinux bool) []string {
-	identity, err := config.LoadGitIdentity(invokrHome)
-	if err != nil {
-		return nil
-	}
-	context := ""
-	if selinux {
-		context = ":Z"
-	}
-	var mounts []string
-	for _, path := range config.SigningKeyFiles(identity) {
-		if _, found := os.Stat(path); found != nil {
-			continue
-		}
-		mounts = append(mounts, "-v", path+":"+path+":ro"+context)
-	}
-	return mounts
 }
 
 // hostLoopbackArgs makes a loopback provider base_url reachable from inside the

@@ -73,13 +73,16 @@ func newGitIdentityCmd() *cobra.Command {
 				if err := config.ClearGitIdentity(homeDir); err != nil {
 					return err
 				}
-				return renderIdentity(cmd.OutOrStdout(), config.GitIdentityConfig{}, homeDir)
+			} else if _, err := setup.RunGitIdentityStep(cmd.InOrStdin(), cmd.OutOrStdout(), homeDir); err != nil {
+				return err
 			}
-			identity, err := setup.RunGitIdentityStep(cmd.InOrStdin(), cmd.OutOrStdout(), homeDir)
+			// renderIdentity shows the identity this run applies: its signing key
+			// path is resolved from the home in use, not from what the file stores.
+			applied, err := config.ApplyGitIdentity(homeDir)
 			if err != nil {
 				return err
 			}
-			return renderIdentity(cmd.OutOrStdout(), identity, homeDir)
+			return renderIdentity(cmd.OutOrStdout(), applied, homeDir)
 		},
 	}
 	cmd.Flags().Bool("reset", false, "Clear the stored identity, its signing settings and the Invokr gh login")

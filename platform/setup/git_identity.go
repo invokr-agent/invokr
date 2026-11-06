@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"charm.land/huh/v2"
@@ -48,9 +47,11 @@ func RunGitIdentityStep(in io.Reader, out io.Writer, homeDir string) (config.Git
 		return config.GitIdentityConfig{}, fmt.Errorf("a git identity needs a name and an email; `invokr setup git-identity --reset` clears what is stored")
 	}
 	if identity.SigningKey != "" {
-		// Store the copy under the Invokr home, not the answered path: a sandboxed
-		// commit can only sign with a key the sandbox mounts, and the sandbox mounts
-		// just this key dir's two files. The host's own ~/.ssh is never written.
+		// Copy the key into the Invokr home under a fixed name, not where the
+		// answer points: a sandboxed commit can only sign with the one file the
+		// sandbox mounts, and the stored identity keeps just that name so the
+		// path resolves against whichever home is in use. The host's own ~/.ssh
+		// is never written.
 		key, err := storeSigningKey(identity.SigningKey, homeDir)
 		if err != nil {
 			return config.GitIdentityConfig{}, fmt.Errorf("%s; `invokr setup git-identity --reset` clears what is stored", err)
@@ -83,30 +84,14 @@ func loginGitHub(homeDir string) error {
 	return nil
 }
 
-// storeSigningKey copies the answered key, and its public half when that exists,
-// into invokr's own key dir: dir 0700, files 0600. The copy is what lets a
-// sandboxed commit sign without exposing the rest of the Invokr home, and the
-// key must need no passphrase because no ssh-agent runs inside the sandbox.
+// storeSigningKey copies the answered key to one fixed file under the Invokr
+// home. CopyFile writes it 0600 and chmods the destination, so a wider copy an
+// earlier run left there is tightened rather than trusted. Only the private half
+// travels: git derives the public half from it. The key must need no passphrase,
+// because no ssh-agent runs inside the sandbox.
 func storeSigningKey(source, homeDir string) (string, error) {
-	dir := config.GitIdentityKeyDir(homeDir)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := fsutil.CopyFile(source, config.GitIdentityKeyPath(homeDir), 0o600); err != nil {
 		return "", err
 	}
-	// MkdirAll applies the umask, and a key dir another account can write is a
-	// key another account can swap.
-	if err := os.Chmod(dir, 0o700); err != nil {
-		return "", err
-	}
-	name := filepath.Join(dir, filepath.Base(source))
-	if err := fsutil.CopyFile(source, name, 0o600); err != nil {
-		return "", fmt.Errorf("%s: %w", source, err)
-	}
-	// git derives the public half from the private key when it has to, so a
-	// missing .pub is not a reason to refuse the identity.
-	if _, err := os.Stat(source + ".pub"); err == nil {
-		if err := fsutil.CopyFile(source+".pub", name+".pub", 0o600); err != nil {
-			return "", fmt.Errorf("%s.pub: %w", source, err)
-		}
-	}
-	return name, nil
+	return config.GitIdentityKeyFileName, nil
 }
