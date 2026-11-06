@@ -39,11 +39,6 @@ func LoadGitIdentity(homeDir string) (GitIdentityConfig, error) {
 	return identity, nil
 }
 
-// SaveGitIdentity writes the identity 0600 under a 0700 home, atomically.
-func SaveGitIdentity(identity GitIdentityConfig, homeDir string) error {
-	return fsutil.SaveJSON(GitIdentityPath(homeDir), identity)
-}
-
 // ApplyGitIdentity loads the stored identity and puts its variables in this
 // process's environment, before any tool runs, so every git and gh child
 // inherits them. Nothing stored sets nothing. An unparseable file is an error
@@ -51,14 +46,11 @@ func SaveGitIdentity(identity GitIdentityConfig, homeDir string) error {
 // account is worse than refusing to start.
 func ApplyGitIdentity(homeDir string) error {
 	identity, err := LoadGitIdentity(homeDir)
-	if err != nil {
-		return err
-	}
 	for _, entry := range GitIdentityEnv(identity, homeDir) {
 		key, value, _ := strings.Cut(entry, "=")
-		os.Setenv(key, value)
+		_ = os.Setenv(key, value)
 	}
-	return nil
+	return err
 }
 
 // ClearGitIdentity drops the stored identity, its signing settings and the gh

@@ -16,10 +16,10 @@ func TestRunGitIdentityStepStoresAnswers(t *testing.T) {
 		t.Fatalf("answers: %v", err)
 	}
 	in, err := os.Open(answersPath)
-	defer in.Close()
 	if err != nil {
 		t.Fatalf("open answers: %v", err)
 	}
+	t.Cleanup(func() { _ = in.Close() })
 	out, err := os.Create(outPath)
 	if err != nil {
 		t.Fatalf("create out: %v", err)
@@ -56,8 +56,14 @@ func TestRunGitIdentityStepRefusesHalfIdentity(t *testing.T) {
 		t.Fatalf("answers: %v", err)
 	}
 	in, err := os.Open(answersPath)
-	defer in.Close()
+	if err != nil {
+		t.Fatalf("open answers: %v", err)
+	}
+	t.Cleanup(func() { _ = in.Close() })
 	out, err := os.Create(outPath)
+	if err != nil {
+		t.Fatalf("create out: %v", err)
+	}
 	if _, err := RunGitIdentityStep(in, out, homeDir); err == nil {
 		t.Errorf("a missing email must be refused, not stored")
 	}

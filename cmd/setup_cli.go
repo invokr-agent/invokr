@@ -94,11 +94,7 @@ func renderIdentity(out io.Writer, identity config.GitIdentityConfig, homeDir st
 		_, err := fmt.Fprintf(out, "git identity: host's (nothing stored under %s)\n", homeDir)
 		return err
 	}
-	signing := "no signing; type a passphrase-less SSH key path to sign commits"
-	if identity.SigningKey != "" {
-		signing = "ssh key " + identity.SigningKey
-	}
-	_, err := fmt.Fprintf(out, "git identity: %s <%s>\nsigning: %s\ngh login dir: %s\n",
-		identity.Name, identity.Email, signing, config.GitIdentityDir(homeDir))
+	_, err := fmt.Fprintf(out, "git identity: %s <%s>\nsigning key: %q\ngh login dir: %s\n",
+		identity.Name, identity.Email, identity.SigningKey, config.GitIdentityDir(homeDir))
 	return err
 }

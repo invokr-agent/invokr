@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"github.com/invokr-agent/invokr/support/fsutil"
 	"os"
 	"path/filepath"
 	"slices"
@@ -64,7 +65,7 @@ func TestGitIdentityEnvNamesCover(t *testing.T) {
 func TestGitIdentityStore(t *testing.T) {
 	dir := t.TempDir()
 	identity := GitIdentityConfig{Name: "octocat-bot", Email: "octocat-bot@example.com", SigningKey: "/home/operator/.ssh/id_ed25519_signer"}
-	if err := SaveGitIdentity(identity, dir); err != nil {
+	if err := fsutil.SaveJSON(GitIdentityPath(dir), identity); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "gh")); !errors.Is(err, os.ErrNotExist) {

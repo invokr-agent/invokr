@@ -7,14 +7,9 @@ import (
 )
 
 func TestFilterEnvCarriesGitIdentity(t *testing.T) {
-	os.Setenv("GIT_AUTHOR_NAME", "octocat-bot")
-	os.Setenv("GIT_CONFIG_KEY_0", "credential.helper")
-	os.Setenv("GIT_SSH_COMMAND", "/host/bin/ssh")
-	defer func() {
-		os.Unsetenv("GIT_AUTHOR_NAME")
-		os.Unsetenv("GIT_CONFIG_KEY_0")
-		os.Unsetenv("GIT_SSH_COMMAND")
-	}()
+	t.Setenv("GIT_AUTHOR_NAME", "octocat-bot")
+	t.Setenv("GIT_CONFIG_KEY_0", "credential.helper")
+	t.Setenv("GIT_SSH_COMMAND", "/host/bin/ssh")
 	env := filterEnv(os.Environ())
 	for _, entry := range []string{"GIT_AUTHOR_NAME=octocat-bot", "GIT_CONFIG_KEY_0=credential.helper"} {
 		if !slices.Contains(env, entry) {

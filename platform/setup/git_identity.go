@@ -46,7 +46,7 @@ func RunGitIdentityStep(in io.Reader, out io.Writer, homeDir string) (config.Git
 	if identity.Name == "" || identity.Email == "" {
 		return config.GitIdentityConfig{}, fmt.Errorf("a git identity needs a name and an email; `invokr setup git-identity --reset` clears what is stored")
 	}
-	if err := config.SaveGitIdentity(identity, homeDir); err != nil {
+	if err := fsutil.SaveJSON(config.GitIdentityPath(homeDir), identity); err != nil {
 		return config.GitIdentityConfig{}, err
 	}
 	if !login {
