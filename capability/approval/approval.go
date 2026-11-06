@@ -20,6 +20,10 @@ type Request struct {
 	NetworkPreapproved bool
 	Paths              []string
 	PolicyChecked      bool
+	// Pinned marks a request raised by a turn nobody local started (a chat contact
+	// on a shared TUI). Only those may be answered remotely; the host's own
+	// requests belong to the human at the terminal.
+	Pinned bool
 	// Subject is the canonical, matchable argument string for this call (for
 	// shell, the command line). It is the ONLY thing standing grants match
 	// against: a request that leaves it empty can never be auto-approved by a
@@ -77,6 +81,7 @@ func (b *Broker) RequestApproval(ctx context.Context, req Request) (Decision, er
 	}
 	req.Tool = strings.TrimSpace(req.Tool)
 	req.Tool = cmp.Or(req.Tool, "tool")
+	req.Pinned = Pinned(ctx)
 	if strings.TrimSpace(req.ID) == "" {
 		req.ID = uuid.NewString()
 	}
