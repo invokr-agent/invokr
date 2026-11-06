@@ -43,8 +43,8 @@ vLLM, …) or a remote endpoint via `--base-url` / `INVOKR_BASE_URL` +
 ## House conventions (the ones that bite)
 
 - **Lint budgets are hard limits**: gocyclo ≤ 12, gocognit ≤ 15, funlen 80/50,
-  nestif ≤ 5, dupl 100, and a repo-wide 30,000-LOC cap on implementation Go
-  (`goclocbudget`). Large features can fail CI on *size alone*. Split
+  nestif ≤ 5, dupl 100, and LoC ceilings in `.loc-budgets.json` (global plus per-area,
+  gated by the `loc-budget` workflow). Large features can fail CI on *size alone*. Split
   functions early; delete code when you add code.
 - **Errors**: wrap with `fmt.Errorf("ctx: %w", err)`; classify with typed
   errors via `errors.As` (`approval.DeniedError`, `core.ToolError`). Never

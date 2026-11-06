@@ -31,7 +31,7 @@ same provider. The delta attributes outcomes to the harness vs the model.
 | terminal | 3 | terminal-bench-1 easy tasks | task's pytest oracle |
 
 The terminal tasks keep their upstream canary GUIDs. `bench/` is excluded from the LOC budget
-(`.golangci.yml`, `budget_test.go`) like `cmd/e2ereport`.
+(`.loc-budgets.json`) like `cmd/e2ereport`.
 
 Results land in `bench-results.json` (gitignored); tracked findings go in
 `docs/research/bench-report.md`.

@@ -16,9 +16,6 @@ import (
 
 	"github.com/golangci/golangci-lint/v2/pkg/commands"
 	"github.com/golangci/golangci-lint/v2/pkg/exitcodes"
-
-	// Registers the goclocbudget custom linter (see .custom-gcl.yml).
-	_ "github.com/antonikliment/go-code-metrics/goclocbudget"
 )
 
 func main() {

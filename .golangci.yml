@@ -7,7 +7,6 @@ linters:
     - funlen
     - nestif
     - dupl
-    - goclocbudget
 
   settings:
     gocyclo:
@@ -27,30 +26,6 @@ linters:
     dupl:
       threshold: 100
 
-    custom:
-      goclocbudget:
-        type: "module"
-        description: "Enforces the implementation Go LOC budget using gocloc."
-        settings:
-          # Repo-wide ceiling: the hard aggregate limit, enforced by gocloc. The per-area
-          # budgets in budget_test.go bind underneath this number.
-          #
-          # The cap exists to catch runaway growth, not to freeze the current line count.
-          # Before raising it, lower it: trim implementation lines and set the cap to the
-          # exact measured count. Raise only when the count forces it, and only to that
-          # count — never above it. Change history: git log -p .golangci.yml
-          max-go-code-lines: 39946
-          include-tests: false
-          exclude-generated: true
-          exclude-dirs:
-            - vendor
-            - .git
-            - node_modules
-            - app/dist
-            - support/testutil # test-support code; include-tests: false intent
-            - cmd/e2ereport # e2e reporting harness, not shipped implementation
-            - bench # benchmark harness + vendored tasks, not shipped implementation
-            - .claude # stale agent worktrees with full repo copies
 
   exclusions:
     rules:
