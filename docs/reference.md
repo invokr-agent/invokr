@@ -360,9 +360,10 @@ gofmt -w . && go mod tidy
 CI is Woodpecker (`.woodpecker/{lint,test,e2e,pr-metrics}.yml`), gated on
 PRs/pushes to `main`: `lint` runs the custom linter (`make lint-ci`), `test`
 runs `make test`, `e2e` runs `make e2e`, and `pr-metrics` posts a code-size/
-complexity diff as a PR comment. Lint enforces complexity budgets (gocyclo
-≤12, gocognit ≤15, funlen 80/50, dupl) plus a hard implementation-LOC budget
-(`goclocbudget`) — large features can fail CI on size alone. `_test.go` files
+complexity diff as a PR comment; `loc-budget` checks `.loc-budgets.json` on PRs and
+resyncs it on `main`. Lint enforces complexity budgets (gocyclo
+≤12, gocognit ≤15, funlen 80/50, dupl). The hard implementation-LOC budget lives in
+`.loc-budgets.json` — large features can fail CI on size alone. `_test.go` files
 are exempt from the complexity linters.
 
 The live e2e tier drives the real agent against a running model server:

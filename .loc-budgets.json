@@ -1,0 +1,30 @@
+{
+  "global": 39945,
+  "areas": {
+    "agent": 3934,
+    "capability": 3846,
+    "capability/memory": 3394,
+    "clients": 792,
+    "cmd": 2540,
+    "cmd/agentui": 6693,
+    "config": 1434,
+    "constants": 255,
+    "internal": 185,
+    "platform": 2587,
+    "support": 358,
+    "surface": 537,
+    "tools": 593,
+    "tools/core": 1364,
+    "tools/system": 11338
+  },
+  "exclude-dirs": [
+    "vendor",
+    ".git",
+    "node_modules",
+    "app/dist",
+    "support/testutil",
+    "cmd/e2ereport",
+    "bench",
+    ".claude"
+  ]
+}

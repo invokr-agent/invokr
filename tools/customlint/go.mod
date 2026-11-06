@@ -2,10 +2,7 @@ module github.com/invokr-agent/invokr/tools/customlint
 
 go 1.26.3
 
-require (
-	github.com/antonikliment/go-code-metrics v0.0.7
-	github.com/golangci/golangci-lint/v2 v2.15.0
-)
+require github.com/golangci/golangci-lint/v2 v2.15.0
 
 require (
 	4d63.com/gocheckcompilerdirectives v1.4.0 // indirect
@@ -73,8 +70,6 @@ require (
 	github.com/fzipp/gocyclo v0.6.0 // indirect
 	github.com/ghostiam/protogetter v1.0.1 // indirect
 	github.com/go-critic/go-critic v0.15.0 // indirect
-	github.com/go-enry/go-enry/v2 v2.8.0 // indirect
-	github.com/go-enry/go-oniguruma v1.2.1 // indirect
 	github.com/go-toolsmith/astcast v1.1.0 // indirect
 	github.com/go-toolsmith/astcopy v1.1.0 // indirect
 	github.com/go-toolsmith/astequal v1.2.0 // indirect
@@ -111,7 +106,6 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
-	github.com/hhatto/gocloc v0.7.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jgautheron/goconst v1.11.0 // indirect
 	github.com/jjti/go-spancheck v0.6.5 // indirect

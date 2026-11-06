@@ -65,13 +65,14 @@ Lint enforces hard budgets, not suggestions:
 
 - `gocyclo` ≤ 12, `gocognit` ≤ 15, `funlen` 80 lines / 50 statements,
   `nestif` ≤ 5, `dupl` 100.
-- `goclocbudget`: total implementation Go is capped. A correct feature can
-  still fail CI because it pushed the repo over the line, so look for things to
-  delete alongside what you add.
+- LoC ceilings live in `.loc-budgets.json`: one global ceiling plus per-area ceilings
+  (longest path prefix wins). A correct feature can still fail CI because it pushed
+  an area over its ceiling, so look for things to delete alongside what you add.
 
 `_test.go` files are exempt from the complexity linters, not from the rest.
-`make lint-ci` builds and runs the custom linter. Stock `golangci-lint` doesn't
-enforce `goclocbudget`.
+`make lint-ci` builds and runs the custom linter. LoC ceilings are not a lint rule:
+the `loc-budget` workflow is the gate, and PRs never edit `.loc-budgets.json` — the
+main-branch job resyncs it after merge.
 
 ## Before adding logic
 
