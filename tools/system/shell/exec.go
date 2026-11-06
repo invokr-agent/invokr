@@ -229,6 +229,9 @@ func sandboxPlan(bash string, plan preparedShellCommand) sandbox.Plan {
 		// the global config read-only gives it the user's real identity and
 		// removes the reason to reach for `git config` at all.
 		sb.RO = append(sb.RO, gitConfigFiles()...)
+		// A key git cannot read is an unsigned commit, and the Invokr home that
+		// holds it also holds the gh login: mount the one key file, not the home.
+		sb.RO = append(sb.RO, signingKeyFiles()...)
 	}
 	if readOnlyGit {
 		// Concat, not append: appending onto plan.roots could write into its backing array.
@@ -519,4 +522,16 @@ func gitConfigFiles() []string {
 		info, err := os.Stat(path)
 		return err != nil || !info.Mode().IsRegular()
 	})
+}
+
+// signingKeyFiles names the key the stored git identity signs with, under the
+// path this run's Invokr home holds it at. A run whose stored identity cannot be
+// read has already refused to start (main.go), so an error here can only mean
+// there is no key to mount.
+func signingKeyFiles() []string {
+	identity, err := config.LoadGitIdentity(config.InvokrHomeDir())
+	if err != nil || identity.SigningKey == "" {
+		return nil
+	}
+	return []string{config.GitIdentityKeyPath(config.InvokrHomeDir())}
 }
