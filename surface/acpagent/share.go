@@ -2,6 +2,7 @@ package acpagent
 
 import (
 	"context"
+	"errors"
 	"net"
 	"slices"
 	"sync"
@@ -14,22 +15,18 @@ import (
 	"github.com/invokr-agent/invokr/platform/turn"
 )
 
+// asks keys the open permission prompts on the chat side by request id: one cancel
+// per contact sharing this session, all of them stood down when the human answers
+// at the panel so no contact is left holding a request that is already settled.
 type Sharer struct {
-	socket   Socket
+	socket   *net.UnixListener
+	path     string
 	bus      events.Bus
 	bound    *chatSession
 	commands Commands
 	mu       sync.Mutex
 	live     []*Agent
-	asks     []openAsk
-	closed   bool
-}
-
-// An open permission prompt on the chat side, stood down when the human answers
-// at the panel so the contact cannot be left holding a settled request.
-type openAsk struct {
-	id     string
-	cancel func()
+	asks     map[string][]context.CancelFunc
 }
 
 const chatPermissionWait = 10 * time.Minute
@@ -42,29 +39,35 @@ const (
 )
 
 func OpenShare(path string, bus events.Bus, session turn.IdentifiedSession, approvals *approval.Broker, commands Commands) (*Sharer, error) {
-	socket, err := Listen(path)
+	listener, err := Listen(path)
 	if err != nil {
 		return nil, err
 	}
 	return &Sharer{
-		socket:   socket,
+		socket:   listener,
+		path:     path,
 		bus:      bus,
 		bound:    &chatSession{IdentifiedSession: session, approvals: approvals},
 		commands: commands,
+		asks:     map[string][]context.CancelFunc{},
 	}, nil
 }
 
-// One goroutine per connection, so an idle contact cannot block another.
+// One goroutine per connection, so an idle contact cannot block another. Closing
+// the listener ends the watcher: package net reports ErrClosed to Accept.
 func (s *Sharer) Watch(ctx context.Context, report func(error)) {
 	wait := acceptRetryWait
 	for {
-		conn, err := s.socket.Accept()
+		conn, err := acceptPeer(s.socket, s.path)
 		if err != nil {
-			if s.stopped() || ctx.Err() != nil {
+			if errors.Is(err, net.ErrClosed) || ctx.Err() != nil {
 				return
 			}
 			report(err)
-			if !sleepOut(ctx, wait) {
+			// Back off, but stop at once when nobody wants this watcher any more.
+			select {
+			case <-time.After(wait):
+			case <-ctx.Done():
 				return
 			}
 			wait = min(2*wait, acceptRetryCeiling)
@@ -94,7 +97,9 @@ func (s *Sharer) Mirror(decide func(string, approval.Decision)) func(string, app
 
 func (s *Sharer) ask(agent *Agent, id string, req approval.Request, decide func(string, approval.Decision)) {
 	ctx, cancel := context.WithTimeout(context.Background(), chatPermissionWait)
-	s.enterAsk(id, cancel)
+	s.mu.Lock()
+	s.asks[id] = append(s.asks[id], cancel)
+	s.mu.Unlock()
 	go func() {
 		defer s.standDown(id)
 		decision, answered := agent.ask(ctx, acp.SessionID(s.bound.SessionID()), req)
@@ -105,56 +110,46 @@ func (s *Sharer) ask(agent *Agent, id string, req approval.Request, decide func(
 }
 
 // Settled is the queue's resolved callback: the human answered at the panel, so
-// the chat's prompt for that request goes away rather than waiting out
+// the chat's prompts for that request go away rather than waiting out
 // chatPermissionWait for a click that means nothing now.
 func (s *Sharer) Settled(id string, _ approval.Decision) {
 	s.standDown(id)
 }
 
-func (s *Sharer) enterAsk(id string, cancel func()) {
-	s.mu.Lock()
-	s.asks = append(s.asks, openAsk{id: id, cancel: cancel})
-	s.mu.Unlock()
-}
-
-// standDown cancels the ask for id, which ends the blocked permission request;
-// a chat answer that arrives afterwards finds no ask to cancel and no request
-// to settle.
+// standDown cancels every ask open for id, which ends the blocked permission
+// requests; a chat answer that arrives afterwards finds no ask to cancel and no
+// request to settle.
 func (s *Sharer) standDown(id string) {
 	s.mu.Lock()
-	idx := slices.IndexFunc(s.asks, func(held openAsk) bool { return held.id == id })
-	var cancel func()
-	if idx >= 0 {
-		cancel = s.asks[idx].cancel
-		s.asks = slices.Delete(s.asks, idx, idx+1)
-	}
+	cancels := s.asks[id]
+	delete(s.asks, id)
 	s.mu.Unlock()
-	if cancel != nil {
+	for _, cancel := range cancels {
 		cancel()
 	}
 }
 
-func (s *Sharer) pendingAsks() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.asks)
-}
-
+// serve takes the connection's agent out of live as soon as it stops serving,
+// so a contact that hung up cannot be offered a request it cannot answer.
 func (s *Sharer) serve(ctx context.Context, conn *net.UnixConn, report func(error)) {
 	agent := &Agent{conn: acp.NewAgentConn(conn, conn), commands: s.commands, bound: s.bound}
-	s.enter(agent)
-	defer s.leave(agent)
+	s.mu.Lock()
+	s.live = append(s.live, agent)
+	s.mu.Unlock()
+	defer func() {
+		s.mu.Lock()
+		s.live = slices.DeleteFunc(s.live, func(held *Agent) bool { return held == agent })
+		s.mu.Unlock()
+	}()
 	if err := serve(ctx, agent, s.bus); err != nil {
 		report(err)
 	}
 }
 
-func (s *Sharer) Close() error {
-	s.mu.Lock()
-	s.closed = true
-	s.mu.Unlock()
-	return s.socket.Close()
-}
+// Package net created the socket file and unlinks it on Close, which also
+// unblocks a pending Accept; a bare descriptor would leave the watcher parked
+// in accept() with the fd number free for reuse.
+func (s *Sharer) Close() error { return s.socket.Close() }
 
 func (s *Sharer) Status() string {
 	s.mu.Lock()
@@ -163,35 +158,4 @@ func (s *Sharer) Status() string {
 		return "shared"
 	}
 	return "listening"
-}
-
-func (s *Sharer) stopped() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.closed
-}
-
-func (s *Sharer) enter(agent *Agent) {
-	s.mu.Lock()
-	s.live = append(s.live, agent)
-	s.mu.Unlock()
-}
-
-func (s *Sharer) leave(agent *Agent) {
-	s.mu.Lock()
-	s.live = slices.DeleteFunc(s.live, func(held *Agent) bool { return held == agent })
-	s.mu.Unlock()
-}
-
-// sleepOut waits out the backoff, but ends early when ctx does, so a watcher
-// nobody wants any more stops at once instead of after the ceiling.
-func sleepOut(ctx context.Context, wait time.Duration) bool {
-	timer := time.NewTimer(wait)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

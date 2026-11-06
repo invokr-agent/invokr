@@ -118,33 +118,36 @@ func (a *Agent) NewSession(ctx context.Context, req acp.NewSessionRequest) (acp.
 	if !sameDir(req.Cwd, wd) {
 		return acp.NewSessionResponse{}, fmt.Errorf("acp: cwd %q differs from the workspace invokr was started in (%q); start invokr acp in that directory", req.Cwd, wd)
 	}
+	// One shared TUI has one session: a contact gets the host's, not a fresh one,
+	// and asking again must not list its models and commands a second time.
+	var (
+		store = true
+		chat  *chatSession
+		id    acp.SessionID
+	)
 	if a.bound != nil {
-		// One shared TUI has one session: a contact gets the host's, not a fresh one.
-		bound := acp.SessionID(a.bound.SessionID())
-		if _, already := a.sessions.Load(bound); !already {
-			a.sessions.Store(bound, a.bound)
-			listModels(ctx, a.bound)
-			commands := a.available()
-			go func() {
-				_ = a.update(context.WithoutCancel(ctx), bound, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{
-					AvailableCommands: commands}})
-			}()
+		chat = a.bound
+		id = acp.SessionID(chat.SessionID())
+		_, already := a.sessions.Load(id)
+		store = !already
+	} else {
+		sess, broker, err := a.newSession("")
+		if err != nil {
+			return acp.NewSessionResponse{}, err
 		}
-		return acp.NewSessionResponse{SessionID: bound, Modes: modeState(a.bound.approvals.Policy), ConfigOptions: configOptions(a.bound)}, nil
+		chat = &chatSession{IdentifiedSession: sess, approvals: broker}
+		id = acp.SessionID(sess.SessionID())
 	}
-	sess, broker, err := a.newSession("")
-	if err != nil {
-		return acp.NewSessionResponse{}, err
+	if store {
+		a.sessions.Store(id, chat)
+		listModels(ctx, chat)
+		commands := a.available()
+		go func() {
+			_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{
+				AvailableCommands: commands}})
+		}()
 	}
-	id := acp.SessionID(sess.SessionID())
-	chat := &chatSession{IdentifiedSession: sess, approvals: broker}
-	listModels(ctx, chat)
-	a.sessions.Store(id, chat)
-	commands := a.available()
-	go func() {
-		_ = a.update(context.WithoutCancel(ctx), id, acp.SessionUpdate{AvailableCommandsUpdate: &acp.AvailableCommandsUpdate{AvailableCommands: commands}})
-	}()
-	return acp.NewSessionResponse{SessionID: id, Modes: modeState(broker.Policy), ConfigOptions: configOptions(chat)}, nil
+	return acp.NewSessionResponse{SessionID: id, Modes: modeState(chat.approvals.Policy), ConfigOptions: configOptions(chat)}, nil
 }
 
 func (a *Agent) session(id acp.SessionID) (*chatSession, error) {

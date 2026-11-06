@@ -182,7 +182,8 @@ func (p *pinProbe) Run(ctx context.Context, _ turn.Session, _ string) (string, s
 func TestWatchStopsWhenTheSharerCloses(t *testing.T) {
 	broker := approval.NewBroker()
 	broker.Policy = approval.NewPolicy(approval.Manual, false)
-	sharer, err := OpenShare(socketPathIn(t), nil, &recordingSession{}, broker, nil)
+	socket := socketPathIn(t)
+	sharer, err := OpenShare(socket, nil, &recordingSession{}, broker, nil)
 	if err != nil {
 		t.Fatalf("open share = %v", err)
 	}
@@ -193,7 +194,7 @@ func TestWatchStopsWhenTheSharerCloses(t *testing.T) {
 		sharer.Watch(ctx, func(error) {})
 		stopped <- true
 	}()
-	peer := dial(t, sharer.socket.Path)
+	peer := dial(t, socket)
 	deadline := time.Now().Add(5 * time.Second)
 	for sharer.Status() != "shared" {
 		if time.Now().After(deadline) {
@@ -245,30 +246,42 @@ func TestChatTurnIsPinned(t *testing.T) {
 	}
 }
 
-// The human answering at the panel must stand the chat's prompt down: the contact
-// cannot be left holding a request that is already settled, and its answer must
+// The human answering at the panel must stand every chat prompt down: no contact
+// can be left holding a request that is already settled, and its answer must
 // not settle it a second time.
-func TestPanelAnswerStandsDownTheChatAsk(t *testing.T) {
+func TestPanelAnswerStandsDownEveryChatAsk(t *testing.T) {
 	broker := approval.NewBroker()
 	broker.Policy = approval.NewPolicy(approval.Manual, false)
 	sharer, err := OpenShare(socketPathIn(t), nil, &recordingSession{}, broker, nil)
 	if err != nil {
 		t.Fatalf("open share = %v", err)
 	}
-	agent, _ := boundAgent(t, &recordingSession{}, broker)
-	sharer.ask(agent, "call-1", approval.Request{Tool: "shell", Subject: "git push"},
-		func(_ string, _ approval.Decision) {
-			t.Fatal("the chat answered a request the panel had already settled")
-		})
-	if sharer.pendingAsks() != 1 {
-		t.Fatal("the chat ask was never open")
+	defer func() { _ = sharer.Close() }()
+	for range 2 {
+		// Two contacts, one shared session: both are asked about the same call.
+		agent, _ := boundAgent(t, &recordingSession{}, broker)
+		sharer.ask(agent, "call-1", approval.Request{Tool: "shell", Subject: "git push"},
+			func(_ string, _ approval.Decision) {
+				t.Fatal("the chat answered a request the panel had already settled")
+			})
+	}
+	if open := openAsks(sharer); open != 2 {
+		t.Fatalf("%d chat asks open, want one per contact", open)
 	}
 	sharer.Settled("call-1", approval.Decision{Approved: true})
-	deadline := time.Now().Add(5 * time.Second)
-	for sharer.pendingAsks() != 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("the chat ask outlived the panel's answer")
-		}
-		time.Sleep(10 * time.Millisecond)
+	if open := openAsks(sharer); open != 0 {
+		t.Fatalf("%d chat asks still open after the panel answered, want none", open)
 	}
+}
+
+// openAsks counts the chat prompts a sharer still holds: one entry per contact
+// asked about a request, keyed by that request's id.
+func openAsks(s *Sharer) int {
+	s.mu.Lock()
+	var open int
+	for _, cancels := range s.asks {
+		open += len(cancels)
+	}
+	s.mu.Unlock()
+	return open
 }

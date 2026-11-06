@@ -22,17 +22,18 @@ func dial(t *testing.T, path string) net.Conn {
 }
 
 func TestListenAcceptsOwnPeer(t *testing.T) {
-	s, err := Listen(socketPathIn(t))
+	path := socketPathIn(t)
+	s, err := Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	peer := dial(t, s.Path)
+	peer := dial(t, path)
 	defer func() { _ = peer.Close() }()
 	if _, err := peer.Write([]byte("ping\n")); err != nil {
 		t.Fatal(err)
 	}
-	conn, err := s.Accept()
+	conn, err := acceptPeer(s, path)
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
@@ -69,12 +70,13 @@ func leaveStaleSocket(path string) error {
 }
 
 func TestListenRefusesLiveSocket(t *testing.T) {
-	held, err := Listen(socketPathIn(t))
+	socket := socketPathIn(t)
+	held, err := Listen(socket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = held.Close() }()
-	_, err = Listen(held.Path)
+	_, err = Listen(socket)
 	if err == nil {
 		t.Fatal("a second listener took a live socket")
 	}
@@ -84,21 +86,22 @@ func TestListenRefusesLiveSocket(t *testing.T) {
 }
 
 func TestListenSocketIsTrustedByTheRelay(t *testing.T) {
-	s, err := Listen(socketPathIn(t))
+	path := socketPathIn(t)
+	s, err := Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	st, err := os.Lstat(s.Path)
+	st, err := os.Lstat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir, err := os.Lstat(filepath.Dir(s.Path))
+	dir, err := os.Lstat(filepath.Dir(path))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if st.Mode()&os.ModeSocket == 0 {
-		t.Fatalf("%s is %s, want a socket file", s.Path, st.Mode())
+		t.Fatalf("%s is %s, want a socket file", path, st.Mode())
 	}
 	if st.Mode().Perm()&0o022 != 0 {
 		t.Fatalf("socket mode %o is writable by group or others", st.Mode().Perm())
@@ -115,13 +118,14 @@ func TestAcceptRefusesForeignPeer(t *testing.T) {
 		return uid + 1, nil
 	}
 	t.Cleanup(func() { peerUID = own })
-	s, err := Listen(socketPathIn(t))
+	path := socketPathIn(t)
+	s, err := Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	_ = dial(t, s.Path).Close()
-	_, err = s.Accept()
+	_ = dial(t, path).Close()
+	_, err = acceptPeer(s, path)
 	if err == nil {
 		t.Fatal("accepted a peer with a foreign uid")
 	}
@@ -142,13 +146,14 @@ func socketPathIn(t *testing.T) string {
 // negative read count and gives up after spinning on a zero one: a hung-up
 // peer must end the read at EOF, and a closed connection must report why.
 func TestAcceptedConnectionEndsReadsCleanly(t *testing.T) {
-	s, err := Listen(socketPathIn(t))
+	path := socketPathIn(t)
+	s, err := Listen(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = s.Close() }()
-	_ = dial(t, s.Path).Close()
-	conn, err := s.Accept()
+	_ = dial(t, path).Close()
+	conn, err := acceptPeer(s, path)
 	if err != nil {
 		t.Fatalf("accept: %v", err)
 	}
