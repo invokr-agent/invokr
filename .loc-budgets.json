@@ -1,12 +1,12 @@
 {
-  "global": 40519,
+  "global": 40525,
   "areas": {
     "agent": 3953,
     "capability": 3892,
     "capability/memory": 3394,
     "clients": 792,
     "cmd": 2541,
-    "cmd/agentui": 6826,
+    "cmd/agentui": 6832,
     "config": 1442,
     "constants": 255,
     "internal": 185,
