@@ -129,10 +129,8 @@ func buildDockerArgs(engine, image, workspaceRoot, invokrHome string, agentArgs 
 	args = append(args, "--rm", "--init")
 
 	workVol := workspaceRoot + ":" + workspaceRoot
-	// The stored identity's signing key is a file directly under the Invokr home,
-	// so this mount carries it: the container re-applies the identity and resolves
-	// the key path against containerInvokrHome, which is why no per-key mount is
-	// needed for a container commit to be signed.
+	// The signing key is a file directly under the Invokr home, so this mount
+	// carries it: the key path resolves against containerInvokrHome.
 	homeVol := invokrHome + ":" + containerInvokrHome
 	if selinux {
 		workVol += ":Z"

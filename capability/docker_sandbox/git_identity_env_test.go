@@ -25,11 +25,10 @@ func TestFilterEnvCarriesGitIdentity(t *testing.T) {
 	}
 }
 
-// The container starts with the host's GIT_CONFIG_* values, which name paths that
-// do not exist inside it. Signing survives because main.go re-applies the stored
-// identity against config.InvokrHomeDir(), and buildDockerArgs pins INVOKR_HOME to
-// containerInvokrHome, where the host's Invokr home is bind-mounted. The re-applied
-// user.signingkey replaces the forwarded one, so no per-key mount is needed (#103).
+// The container inherits the host's GIT_CONFIG_* values, which name paths that
+// do not exist inside it; its own bootstrap re-applies the identity against the
+// mounted home, so user.signingkey resolves to the copy inside it and no per-key
+// mount is needed.
 func TestContainerReappliesIdentityOverTheForwardedKey(t *testing.T) {
 	// mountedHome stands in for containerInvokrHome, which is not writable here.
 	hostHome, mountedHome := t.TempDir(), t.TempDir()
@@ -54,9 +53,8 @@ func TestContainerReappliesIdentityOverTheForwardedKey(t *testing.T) {
 	}
 }
 
-// The applied key path is derived from the home in use, so the copy inside the
-// mount is what git signs with; the relaunch mounts the whole home there and adds
-// no key-specific volume.
+// The applied key path is derived from the home in use, so the copy inside
+// the mount is what git signs with.
 func TestContainerSigningKeyResolvesInsideTheMount(t *testing.T) {
 	env := config.GitIdentityEnv(config.GitIdentityConfig{
 		Name: "octocat-bot", Email: "octocat-bot@example.com", SigningKey: config.GitIdentityKeyFileName}, containerInvokrHome)

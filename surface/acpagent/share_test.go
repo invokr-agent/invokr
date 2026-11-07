@@ -274,8 +274,7 @@ func TestPanelAnswerStandsDownEveryChatAsk(t *testing.T) {
 	}
 }
 
-// openAsks counts the chat prompts a sharer still holds: one entry per contact
-// asked about a request, keyed by that request's id.
+// openAsks counts the chat prompts a sharer still holds.
 func openAsks(s *Sharer) int {
 	s.mu.Lock()
 	var open int
