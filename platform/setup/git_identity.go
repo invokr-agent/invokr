@@ -47,11 +47,10 @@ func RunGitIdentityStep(in io.Reader, out io.Writer, homeDir string) (config.Git
 		return config.GitIdentityConfig{}, fmt.Errorf("a git identity needs a name and an email; `invokr setup git-identity --reset` clears what is stored")
 	}
 	if identity.SigningKey != "" {
-		// Copy the key into the Invokr home under a fixed name, not where the
-		// answer points: a sandboxed commit can only sign with the one file the
-		// sandbox mounts, and the stored identity keeps just that name so the
-		// path resolves against whichever home is in use. The host's own ~/.ssh
-		// is never written.
+		// Copy the key into the Invokr home under a fixed name: a sandboxed commit
+		// can only sign with the one file the sandbox mounts, and the stored name lets
+		// the path resolve against whichever home is in use. The host's ~/.ssh is
+		// never written.
 		key, err := storeSigningKey(identity.SigningKey, homeDir)
 		if err != nil {
 			return config.GitIdentityConfig{}, fmt.Errorf("%s; `invokr setup git-identity --reset` clears what is stored", err)
@@ -85,10 +84,9 @@ func loginGitHub(homeDir string) error {
 }
 
 // storeSigningKey copies the answered key to one fixed file under the Invokr
-// home. CopyFile writes it 0600 and chmods the destination, so a wider copy an
-// earlier run left there is tightened rather than trusted. Only the private half
-// travels: git derives the public half from it. The key must need no passphrase,
-// because no ssh-agent runs inside the sandbox.
+// home at 0600, tightening a wider copy an earlier run left there. Only the
+// private half travels; the key needs no passphrase, as no ssh-agent runs
+// inside the sandbox.
 func storeSigningKey(source, homeDir string) (string, error) {
 	if err := fsutil.CopyFile(source, config.GitIdentityKeyPath(homeDir), 0o600); err != nil {
 		return "", err

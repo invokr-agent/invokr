@@ -46,9 +46,8 @@ func run(ctx context.Context) (err error) {
 	version.Edge = cfg.UpdateChannel == "edge"
 	// The identity env goes on this process before the container is built: the
 	// relaunch forwards exactly those names, so a sandboxed agent commits as the
-	// same account it would outside. The container's own bootstrap applies it
-	// again against the mounted Invokr home, which is where a signing key path
-	// resolves inside the container.
+	// same account it would outside. The container's bootstrap applies it again
+	// against the mounted home, where a signing key path resolves.
 	if _, err := config.ApplyGitIdentity(config.InvokrHomeDir()); err != nil {
 		return err
 	}

@@ -126,6 +126,7 @@ Don't open a public issue for a suspected vulnerability. See
 Push a `vX.Y.Z` tag cut from `main`; `.github/workflows/release.yml` runs
 [goreleaser](https://goreleaser.com) (`.goreleaser.yaml`) and attests every
 archive. Every merge to `main` also publishes an edge pre-release (`edge.yml`).
+Release notes are built from the PRs merged since the previous tag, grouped by label; bot authors are left out.
 
 ```bash
 git tag v0.1.0 && git push origin v0.1.0

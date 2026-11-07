@@ -162,7 +162,6 @@ type pinnedKey struct{}
 
 func Pin(ctx context.Context) context.Context { return context.WithValue(ctx, pinnedKey{}, true) }
 
-// Pinned is whether this context came from a turn nobody local started.
 func Pinned(ctx context.Context) bool { return ctx.Value(pinnedKey{}) != nil }
 
 func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) (context.Context, func()) {

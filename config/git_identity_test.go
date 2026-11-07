@@ -12,8 +12,7 @@ import (
 
 const testHomeDir = "/home/operator/.invokr"
 
-// containerHomeDir is where docker_sandbox mounts the Invokr home inside the
-// container; an identity applied there must name a key under it.
+// containerHomeDir is where docker_sandbox mounts the Invokr home.
 const containerHomeDir = "/root/.invokr"
 
 func TestGitIdentityEnvEmpty(t *testing.T) {
@@ -43,10 +42,8 @@ func TestGitIdentityEnvIdentity(t *testing.T) {
 	}
 }
 
-// The stored signing key is only the flag that this identity signs: the path git
-// signs with is always derived from the home in use, so the same Invokr home
-// mounted at another path (the container's /root/.invokr) resolves to the copy
-// that exists there instead of a host path that dangles.
+// The stored signing key only flags that this identity signs: the path git
+// signs with is derived from the home in use.
 func TestGitIdentityEnvSigningDerivesKeyFromHome(t *testing.T) {
 	for _, homeDir := range []string{testHomeDir, containerHomeDir} {
 		for _, stored := range []string{GitIdentityKeyFileName, GitIdentityKeyPath(testHomeDir)} {
@@ -119,8 +116,7 @@ func TestGitIdentityStore(t *testing.T) {
 	}
 }
 
-// --reset takes the copied signing key with the identity: a leftover key would
-// keep signing commits no account asked for, and it must stay idempotent.
+// A leftover key would keep signing commits no account asked for.
 func TestClearGitIdentityRemovesTheKeyFile(t *testing.T) {
 	dir := t.TempDir()
 	key := GitIdentityKeyPath(dir)
@@ -138,8 +134,7 @@ func TestClearGitIdentityRemovesTheKeyFile(t *testing.T) {
 	}
 }
 
-// git derives the public half from the private key, so only the private key is
-// copied: one file under the home is one file the sandbox can mount.
+// git derives the public half, so only the private key is copied.
 func TestGitIdentityKeyPathIsUnderTheHome(t *testing.T) {
 	for _, homeDir := range []string{testHomeDir, containerHomeDir} {
 		key := GitIdentityKeyPath(homeDir)
