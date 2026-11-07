@@ -20,12 +20,13 @@ import (
 var hostSession turn.IdentifiedSession
 var hostApprovals *approval.Broker
 var hostBus events.Bus
+var hostCtx context.Context
 
 var share *acpagent.Sharer
 var sharePath string
 var shareWd string
 var shareQueue *approval.ApprovalQueue
-var shareCtx context.Context
+var shareStop func()
 var shareNote func(string)
 
 // agent-relay does not exit promptly, so a restart belongs in a tea.Cmd rather
@@ -42,7 +43,7 @@ func setShareHost(session turn.Session, approvals *approval.Broker, queue *appro
 	ctx context.Context, note func(string)) {
 	hostSession, _ = session.(turn.IdentifiedSession)
 	hostApprovals, hostBus = approvals, bus
-	shareQueue, shareCtx, shareNote = queue, ctx, note
+	shareQueue, hostCtx, shareNote = queue, ctx, note
 }
 
 func openShare() (string, tea.Cmd) {
@@ -72,10 +73,9 @@ func openShare() (string, tea.Cmd) {
 	// Take the share before restarting the relay: a restart that fails leaves
 	// the socket listening and agent_socket pointing at it, and this session
 	// still owns both, so /relay close can put them back.
-	share, sharePath, shareWd = next, path, ws
-	// The relay dials this socket instead of spawning its own agent, so accept
-	// here; without a watcher nobody is served.
-	go next.Watch(shareCtx, func(err error) {
+	ctx, stop := context.WithCancel(hostCtx)
+	share, sharePath, shareWd, shareStop = next, path, ws, stop
+	go next.Watch(ctx, func(err error) {
 		shareNote("a connection to the shared socket failed: " + err.Error())
 	})
 	if shareQueue != nil {
@@ -93,18 +93,24 @@ func closeShare() (string, tea.Cmd) {
 	if share == nil {
 		return "this session does not share", nil
 	}
-	path, ws := sharePath, shareWd
+	path, ws, sharer, stop := sharePath, shareWd, share, shareStop
 	// Clear the mirror first: a chat contact must not answer anything the
 	// host parks after the socket is gone.
 	if shareQueue != nil {
 		shareQueue.SetMirror(nil, nil)
 	}
-	if err := share.Close(); err != nil {
-		return "the socket at " + path + " did not close cleanly: " + err.Error(), nil
+	if stop != nil {
+		stop()
 	}
-	share, sharePath, shareWd = nil, "", ""
+	// Clear the share before the close can fail: a share whose socket resists
+	// closing would otherwise outlive the session that can no longer serve it.
+	share, sharePath, shareWd, shareStop = nil, "", "", nil
+	closed := sharer.Close()
 	if err := acpagent.SetRelaySocket(""); err != nil {
 		return "the socket at " + path + " is closed, but agent_socket is still set: " + err.Error(), nil
+	}
+	if closed != nil {
+		return "the socket at " + path + " did not close cleanly: " + closed.Error(), nil
 	}
 	return "stopped sharing: " + path + " removed, agent-relay back on `invokr acp`", restartCmd(ws)
 }
