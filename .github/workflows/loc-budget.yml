@@ -19,9 +19,9 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: antonikliment/go-code-metrics/.github/workflows/budget-pr.yml@bb91d10bd6e61622c8a8691685a3811f6a134265 # v0.2.2
+    uses: antonikliment/go-code-metrics/.github/workflows/budget-pr.yml@a100a3a7b17950734128170b97c0ccc9cee6ffbf # v0.2.3
     with:
-      version: v0.2.2
+      version: v0.2.3
       budgets-repo: invokr-agent/loc-budgets
     secrets:
       app-id: ${{ secrets.LINE_WARDEN_APP_ID }}
@@ -30,9 +30,9 @@ jobs:
     if: github.event_name == 'push'
     permissions:
       contents: read
-    uses: antonikliment/go-code-metrics/.github/workflows/budget-main.yml@bb91d10bd6e61622c8a8691685a3811f6a134265 # v0.2.2
+    uses: antonikliment/go-code-metrics/.github/workflows/budget-main.yml@a100a3a7b17950734128170b97c0ccc9cee6ffbf # v0.2.3
     with:
-      version: v0.2.2
+      version: v0.2.3
       dashboard-issue: false
       budgets-repo: invokr-agent/loc-budgets
     secrets:
