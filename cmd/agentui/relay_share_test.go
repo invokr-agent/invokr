@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,14 +41,41 @@ func givenHost() {
 	setShareHost(shareSession{}, broker, approval.NewApprovalQueue(context.Background(), broker), nil, context.Background(), nil)
 }
 
-// Watched counts the bytes a dialled peer receives off the shared socket.
-func watched(peer net.Conn) chan int {
-	out := make(chan int, 1)
+// One reader per socket: a second concurrent Read lets the earlier waiter
+// swallow the frames the next phase waits for.
+type peerReader struct {
+	mu      sync.Mutex
+	waiting chan int
+}
+
+func readPeer(peer net.Conn) *peerReader {
+	r := &peerReader{}
 	go func() {
 		buf := make([]byte, 4096)
-		n, _ := peer.Read(buf)
-		out <- n
+		for {
+			n, _ := peer.Read(buf)
+			r.mu.Lock()
+			waiting := r.waiting
+			r.waiting = nil
+			r.mu.Unlock()
+			if waiting != nil {
+				waiting <- n
+			}
+			if n == 0 {
+				return
+			}
+		}
 	}()
+	return r
+}
+
+// Frames nobody waits for are dropped, so a leftover cannot be mistaken for
+// the next phase's request.
+func (r *peerReader) watching() chan int {
+	out := make(chan int, 1)
+	r.mu.Lock()
+	r.waiting = out
+	r.mu.Unlock()
 	return out
 }
 
@@ -76,6 +104,7 @@ func TestShareOpenServesAndMirrors(t *testing.T) {
 		t.Fatalf("dial the shared socket = %v", err)
 	}
 	defer func() { _ = peer.Close() }()
+	dialled := readPeer(peer)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) && share.Status() != "shared" {
 		time.Sleep(10 * time.Millisecond)
@@ -84,7 +113,7 @@ func TestShareOpenServesAndMirrors(t *testing.T) {
 		t.Fatal("openShare never served a connection: nothing watches the socket")
 	}
 
-	reader := watched(peer)
+	reader := dialled.watching()
 	go func() { _, _ = broker.RequestApproval(ctx, approval.Request{Tool: "shell", Subject: "ls"}) }()
 	select {
 	case n := <-reader:
@@ -92,7 +121,7 @@ func TestShareOpenServesAndMirrors(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 	}
 
-	reader = watched(peer)
+	reader = dialled.watching()
 	pinned := approval.Pin(ctx)
 	go func() {
 		_, _ = broker.RequestApproval(pinned, approval.Request{Tool: "shell", Subject: "git push"})
@@ -107,7 +136,7 @@ func TestShareOpenServesAndMirrors(t *testing.T) {
 	}
 
 	closeShare()
-	reader = watched(peer)
+	reader = dialled.watching()
 	go func() {
 		_, _ = broker.RequestApproval(approval.Pin(ctx), approval.Request{Tool: "shell", Subject: "rm -rf"})
 	}()
