@@ -70,3 +70,6 @@ release:
   # A suffixed tag (v0.5.8-edge.3) is an edge build: a pre-release, never
   # "Latest", so /releases/latest and stable installs keep the last vX.Y.Z.
   prerelease: auto
+
+changelog:
+  use: github-native
