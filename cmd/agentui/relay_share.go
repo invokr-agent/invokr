@@ -26,7 +26,7 @@ var share *acpagent.Sharer
 var sharePath string
 var shareWd string
 var shareQueue *approval.ApprovalQueue
-var shareStop func() // nil while nothing is shared
+var shareStop func()
 var shareNote func(string)
 
 // agent-relay does not exit promptly, so a restart belongs in a tea.Cmd rather
@@ -75,7 +75,6 @@ func openShare() (string, tea.Cmd) {
 	// still owns both, so /relay close can put them back.
 	ctx, stop := context.WithCancel(hostCtx)
 	share, sharePath, shareWd, shareStop = next, path, ws, stop
-	// Bounded by this share, not the host.
 	go next.Watch(ctx, func(err error) {
 		shareNote("a connection to the shared socket failed: " + err.Error())
 	})
