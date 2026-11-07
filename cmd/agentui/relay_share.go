@@ -26,7 +26,7 @@ var share *acpagent.Sharer
 var sharePath string
 var shareWd string
 var shareQueue *approval.ApprovalQueue
-var shareStop func() // ends this share's watcher; nil while nothing is shared
+var shareStop func() // nil while nothing is shared
 var shareNote func(string)
 
 // agent-relay does not exit promptly, so a restart belongs in a tea.Cmd rather
@@ -73,10 +73,9 @@ func openShare() (string, tea.Cmd) {
 	// Take the share before restarting the relay: a restart that fails leaves
 	// the socket listening and agent_socket pointing at it, and this session
 	// still owns both, so /relay close can put them back.
-	// The watcher is bounded by the share, not by the host: a closed share must
-	// not leave a watcher reporting into the next one.
 	ctx, stop := context.WithCancel(hostCtx)
 	share, sharePath, shareWd, shareStop = next, path, ws, stop
+	// Bounded by this share, not the host.
 	go next.Watch(ctx, func(err error) {
 		shareNote("a connection to the shared socket failed: " + err.Error())
 	})
@@ -104,9 +103,8 @@ func closeShare() (string, tea.Cmd) {
 	if stop != nil {
 		stop()
 	}
-	// Drop the share before anything can fail: a socket that resists closing
-	// would otherwise leave the session reporting a share it can neither serve
-	// nor reopen.
+	// Clear the share before the close can fail: a share whose socket resists
+	// closing would otherwise outlive the session that can no longer serve it.
 	share, sharePath, shareWd, shareStop = nil, "", "", nil
 	closed := sharer.Close()
 	if err := acpagent.SetRelaySocket(""); err != nil {

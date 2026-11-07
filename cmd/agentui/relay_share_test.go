@@ -41,9 +41,8 @@ func givenHost() {
 	setShareHost(shareSession{}, broker, approval.NewApprovalQueue(context.Background(), broker), nil, context.Background(), nil)
 }
 
-// A socket has one reader: whoever is waiting when a frame arrives gets it.
-// Reading it twice concurrently lets the earlier waiter swallow the frames the
-// next phase is waiting for.
+// One reader per socket: a second concurrent Read lets the earlier waiter
+// swallow the frames the next phase waits for.
 type peerReader struct {
 	mu      sync.Mutex
 	waiting chan int
@@ -70,8 +69,8 @@ func readPeer(peer net.Conn) *peerReader {
 	return r
 }
 
-// Frames nobody waits for are dropped: the phase that starts next issues its
-// own request, so a leftover cannot be mistaken for it.
+// Frames nobody waits for are dropped, so a leftover cannot be mistaken for
+// the next phase's request.
 func (r *peerReader) watching() chan int {
 	out := make(chan int, 1)
 	r.mu.Lock()
