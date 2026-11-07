@@ -1,0 +1,17 @@
+changelog:
+  exclude:
+    authors:
+      - linewarden[bot]
+      - dependabot[bot]
+      - depstamper[bot]
+  categories:
+    - title: Features
+      labels: [enhancement]
+    - title: Fixes
+      labels: [bug]
+    - title: Docs
+      labels: [documentation]
+    - title: Dependencies
+      labels: [dependencies, go, github_actions]
+    - title: Other
+      labels: ["*"]
