@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: antonikliment/go-code-metrics/.github/workflows/budget-pr.yml@64babae668a47b09395c745387248eee715cf7be # v0.2.0
+    uses: antonikliment/go-code-metrics/.github/workflows/budget-pr.yml@60985580536cb31d2f86328a38ee3fd39a5a0b4c # fix-split
     with:
       version: v0.2.0
       budgets-repo: invokr-agent/loc-budgets
@@ -30,7 +30,7 @@ jobs:
     if: github.event_name == 'push'
     permissions:
       contents: read
-    uses: antonikliment/go-code-metrics/.github/workflows/budget-main.yml@64babae668a47b09395c745387248eee715cf7be # v0.2.0
+    uses: antonikliment/go-code-metrics/.github/workflows/budget-main.yml@60985580536cb31d2f86328a38ee3fd39a5a0b4c # fix-split
     with:
       version: v0.2.0
       dashboard-issue: false
