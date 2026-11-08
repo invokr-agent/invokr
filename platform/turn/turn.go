@@ -16,6 +16,10 @@ type Session interface {
 	Send(context.Context, string) (AgentResponse, error)
 }
 
+// ContinueGate answers whether a run that spent its turn budget gets one more
+// batch; reason is the question to show the user, so the UI owns how it is put.
+type ContinueGate func(context.Context, string) bool
+
 type PromptHistory interface {
 	Append(context.Context, string) error
 	Recent(context.Context, int) ([]string, error)

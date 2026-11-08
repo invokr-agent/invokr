@@ -154,7 +154,20 @@ func validateSessionDeps(deps SessionDeps) error {
 }
 
 func (s *Session) Send(ctx context.Context, message string) (turn.AgentResponse, error) {
-	return s.runner.Run(ctx, RunRequest{SessionID: s.sessionID, Message: message})
+	return s.runner.Run(ctx, s.runRequest(message, nil))
+}
+
+// Later sends see the gate, so a surface can install one mid-session.
+func (s *Session) SetContinueGate(gate turn.ContinueGate) {
+	s.runner.mu.Lock()
+	s.runner.continueGate = gate
+	s.runner.mu.Unlock()
+}
+
+func (s *Session) runRequest(message string, images []inference.ContentBlock) RunRequest {
+	s.runner.mu.RLock()
+	defer s.runner.mu.RUnlock()
+	return RunRequest{SessionID: s.sessionID, Message: message, Images: images, ContinueGate: s.runner.continueGate}
 }
 
 // SendImages is Send with images attached to the user message. It refuses when
@@ -163,7 +176,7 @@ func (s *Session) SendImages(ctx context.Context, message string, images []infer
 	if !s.runner.providerContext.AcceptsImages() {
 		return turn.AgentResponse{}, fmt.Errorf("model %s does not accept images", s.runner.providerContext.Model())
 	}
-	return s.runner.Run(ctx, RunRequest{SessionID: s.sessionID, Message: message, Images: images})
+	return s.runner.Run(ctx, s.runRequest(message, images))
 }
 
 func (s *Session) ToolSpecs() []core.ToolSpec {

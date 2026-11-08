@@ -18,6 +18,11 @@ func runPlainWithCommands(ctx context.Context, session turn.Session, commands Co
 	// is approved only by a standing grant and otherwise auto-denied with a
 	// notice. Left undrained the broker blocks the turn forever.
 	defer denyPlainApprovals(approvals, grants, errOut)()
+	// Plain mode only ever gets a piped stdin, so nobody is there to answer the panel.
+	setContinueGate(session, func(_ context.Context, reason string) bool {
+		writePlain(errOut, reason, " not continuing: no terminal to answer\n")
+		return false
+	})
 
 	// Tool-progress events go to stderr so stdout carries only the assistant
 	// response, matching the exec adapter and keeping the two streams separable.

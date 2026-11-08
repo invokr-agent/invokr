@@ -60,6 +60,8 @@ type Runner struct {
 	provider          clients.LLMProvider
 	backgroundContext context.Context
 	spend             spendCap
+	// Read under mu: the setter can race a queued send.
+	continueGate turn.ContinueGate
 	// toolCaps is the declared-capability index (core.CapabilityIndex), which
 	// the turn budget uses to price a read-only turn. Nil in tests: an unknown
 	// tool is never read-only, so every turn is full price.
@@ -70,6 +72,8 @@ type RunRequest struct {
 	SessionID, Message string
 	// Images ride on the user message as content blocks.
 	Images []inference.ContentBlock
+	// Asked once the budget and auto-extension are spent; nil means wrap up.
+	ContinueGate turn.ContinueGate
 }
 
 type ModelGateway interface {
