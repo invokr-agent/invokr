@@ -110,3 +110,67 @@ func TestPlainContinuePromptReportsAndAnswersNo(t *testing.T) {
 		t.Fatalf("stderr = %q, want the question reported", errOut.String())
 	}
 }
+
+// TestContinuePromptCarriesThePinToTheQueue: the share answers only a pinned
+// call's request, so the budget question raised by a contact's own turn must
+// reach the queue flagged as pinned, while the host's own prompt stays at the
+// panel for the human at the terminal.
+func TestContinuePromptCarriesThePinToTheQueue(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	broker := approval.NewBroker()
+	queue := approval.NewApprovalQueue(ctx, broker)
+	m := newModel(ctx, &fakeSession{}, nil, queue, nil, false, nil, nil)
+	_, _ = m.Update(tea.WindowSizeMsg{Width: 96, Height: 40})
+
+	goal := &continueGateSession{}
+	setContinueGate(goal, panelGate(broker))
+	answered := make(chan bool, 1)
+	go func() { answered <- goal.gate(ctx, budgetQuestion) }()
+	chatAnswered := make(chan bool, 1)
+	go func() { chatAnswered <- goal.gate(approval.Pin(ctx), budgetQuestion) }()
+	waitForQueueLen(t, queue, 2)
+
+	queued := queue.Snapshot()
+	if countPinned(queued, true) != 1 || countPinned(queued, false) != 1 {
+		t.Fatalf("want one pinned and one unpinned request, got %d pinned of %d",
+			countPinned(queued, true), len(queued))
+	}
+	for _, item := range queued {
+		if item.Pending.Tool != "continue" || item.Pending.Summary != budgetQuestion {
+			t.Fatalf("queued request = %q %q", item.Pending.Tool, item.Pending.Summary)
+		}
+	}
+
+	m.updateKey(testTextKey("y")) //nolint:errcheck
+	m.updateKey(testTextKey("y")) //nolint:errcheck
+	if queue.Len() != 0 {
+		t.Fatalf("queue still holds %d items", queue.Len())
+	}
+	select {
+	case approved := <-answered:
+		if !approved {
+			t.Fatal("the host's own prompt was not answered at the panel")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the host's own prompt stayed blocked")
+	}
+	select {
+	case approved := <-chatAnswered:
+		if !approved {
+			t.Fatal("the pinned prompt was not answered")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("the pinned prompt stayed blocked")
+	}
+}
+
+func countPinned(items []approval.QueueItem, want bool) int {
+	found := 0
+	for _, item := range items {
+		if item.Pending.Pinned == want {
+			found++
+		}
+	}
+	return found
+}
