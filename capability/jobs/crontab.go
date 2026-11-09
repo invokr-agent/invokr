@@ -52,8 +52,6 @@ func stripBlocks(content string, isMarker func(line string) bool) string {
 	// Split without losing the last empty element so we can detect trailing newline.
 	raw := strings.Split(content, "\n")
 
-	// If content ended with \n, Split produces a trailing empty string; remove
-	// it for processing, then add back at the end if needed.
 	lines := raw
 	if hadTrailing {
 		lines = raw[:len(raw)-1]
