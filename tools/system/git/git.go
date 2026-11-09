@@ -23,7 +23,6 @@ const (
 	readToolName  = "git_read"
 	writeToolName = "git_write"
 
-	// gitTimeout bounds any single git invocation.
 	gitTimeout = 30 * time.Second
 	// gitOutputLimit caps captured bytes; TruncatingWriters keeps memory
 	// bounded, and the tool-result gate spills anything the model can't hold.
