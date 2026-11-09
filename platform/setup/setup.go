@@ -224,8 +224,6 @@ func soleRouterProfile(profiles map[string]config.RouterProfileConfig) string {
 	return ""
 }
 
-// wantsAccessible reports whether the questionnaire should use huh's
-// accessible mode.
 func wantsAccessible(in io.Reader) bool { return accessibleMode(fsutil.IsTerminal(in)) }
 
 // accessibleMode decides the mode from whether input is a terminal: anything
