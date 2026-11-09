@@ -26,7 +26,6 @@ type SubagentRequest struct {
 	AgentName string
 	// AgentModel is resolved by RunSubagent from the definition; "" = inherit.
 	AgentModel string
-	// ToolAllowlist is resolved by RunSubagent from the definition.
 	// nil = all tools; non-nil (even empty) = allowlist.
 	ToolAllowlist []string
 }
