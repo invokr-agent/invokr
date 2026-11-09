@@ -89,6 +89,13 @@ func openShare() (string, tea.Cmd) {
 		restartCmd(ws)
 }
 
+// shareChanged keeps chat contacts' status current after the panel changes mode, model or effort.
+func shareChanged() {
+	if share != nil {
+		share.Changed()
+	}
+}
+
 func closeShare() (string, tea.Cmd) {
 	if share == nil {
 		return "this session does not share", nil
