@@ -13,11 +13,8 @@ const (
 	// KeyServedModel is the model the provider reported serving, present when
 	// the provider echoes one.
 	KeyServedModel = "served_model"
-	// KeySystem carries the TypeSystemPrompt payload.
 	KeySystem = "system"
-	// KeyReasoning carries the TypeReasoning payload.
 	KeyReasoning = "reasoning"
-	// KeyUsage carries the TypeUsage payload.
 	KeyUsage = "usage"
 )
 
