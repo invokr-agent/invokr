@@ -37,6 +37,7 @@ type AppConfig struct {
 	MCP             MCPConfig             `json:"mcp,omitempty"`
 	Sandbox         SandboxConfig         `json:"sandbox,omitempty"`
 	Approvals       ApprovalsConfig       `json:"approvals,omitempty"`
+	Relay           RelayConfig           `json:"relay,omitempty"`
 	LSP             LSPConfig             `json:"lsp,omitempty"`
 	UI              UIConfig              `json:"ui,omitempty"`
 }
@@ -103,6 +104,16 @@ type UIConfig struct {
 type ApprovalsConfig struct {
 	StandingGrantsDisabled bool   `json:"standing_grants_disabled,omitempty"`
 	GrantsFile             string `json:"grants_file,omitempty"`
+}
+
+// RelayConfig is invokr's own half of a chat relay: agent-relay owns the
+// transports, allowlists and credentials, and this decides only how much of
+// this session's trust a chat-started turn inherits.
+type RelayConfig struct {
+	// ChatFollowsMode makes a chat turn on a shared session use the session's
+	// mode and standing grants, like a TUI turn. Off (the default), the turn is
+	// pinned: reads run, everything else asks in chat.
+	ChatFollowsMode bool `json:"chat_follows_mode,omitempty" env:"INVOKR_RELAY_CHAT_FOLLOWS_MODE"`
 }
 
 type ProviderConfig struct {

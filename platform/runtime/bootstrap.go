@@ -111,7 +111,7 @@ func Bootstrap(app config.AppConfig, opts Options) (*Runtime, error) {
 
 	eventDispatcher, approvalBroker := events.NewOrderedDispatcher(l.Named("events")), approval.NewBroker()
 	approvalBroker.Policy = opts.Policy
-	opts.Policy.SetOutsideReads(app.Workspace.Reads == config.ReadsAsk)
+	applySessionToggles(opts.Policy, app)
 	zerfooWorker, embeddingProvider := startZerfooWorker(app)
 	memoryManager, err := newMemoryManager(app, eventDispatcher, zerfooWorker, provider, providerContext, l)
 	if err != nil {
@@ -453,6 +453,13 @@ func (r *Runtime) Cleanup() error {
 // expired rules, excludes the tools no grant may ever cover, and wires the audit
 // callback. Any load failure (including a corrupt file) degrades to "no rules"
 // rather than to a permissive policy.
+// applySessionToggles installs the session-scoped yeses the operator configured
+// rather than granted per call.
+func applySessionToggles(policy *approval.Policy, app config.AppConfig) {
+	policy.SetOutsideReads(app.Workspace.Reads == config.ReadsAsk)
+	policy.SetChatFollowsMode(app.Relay.ChatFollowsMode)
+}
+
 func newStandingGrants(ctx context.Context, app config.AppConfig, session turn.IdentifiedSession, dispatcher events.Dispatcher, l *zap.Logger, policy *approval.Policy) *approval.Store {
 	if app.Approvals.StandingGrantsDisabled {
 		return nil
