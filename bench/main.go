@@ -91,7 +91,6 @@ func isDir(path string) bool {
 
 type agg struct{ pass, fail, err, bpass, btotal int }
 
-// tally counts harness and baseline verdicts per tier.
 func tally(results []result) map[string]*agg {
 	byTier := map[string]*agg{}
 	for _, r := range results {
