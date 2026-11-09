@@ -143,7 +143,6 @@ func verify(archive, sums []byte, asset string) error {
 	return fmt.Errorf("checksums.txt has no entry for %s", asset)
 }
 
-// extract pulls the invokr binary out of the release tarball.
 func extract(archive []byte) ([]byte, error) {
 	gz, err := gzip.NewReader(bytes.NewReader(archive))
 	if err != nil {
