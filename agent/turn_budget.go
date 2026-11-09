@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+	"fmt"
 	"math"
 	"slices"
 
@@ -23,6 +25,8 @@ import (
 type turnBudget struct {
 	limit, spent, readWeight float64
 	hardCeiling, iterations  int
+	// batch is the size of a batch the continue gate asks for: MaxTurns again.
+	batch int
 	// extension is how many turns a progressing run is granted when the budget
 	// runs out. The evidence for that decision is three turn indices: the last
 	// turn that progressed, the last one the repeat guard nudged, and the turn
@@ -40,7 +44,7 @@ func newTurnBudget(settings config.AgentConfig, caps map[string]core.ToolCapabil
 	return turnBudget{
 		limit: float64(settings.MaxTurns), readWeight: settings.ReadTurnWeight,
 		hardCeiling: max(ceiling, settings.MaxTurns), extension: settings.TurnExtension,
-		caps: caps, seen: map[string]bool{},
+		batch: settings.MaxTurns, caps: caps, seen: map[string]bool{},
 		lastProgress: -1, lastNudge: -1, decidedAt: -1,
 	}
 }
@@ -91,6 +95,25 @@ func (b *turnBudget) extend() bool {
 	}
 	b.limit += float64(b.extension)
 	b.decidedAt = b.iterations
+	return true
+}
+
+// The hard ceiling rises with the grant: it bounds a zero-cost run's raw loop,
+// and leaving it put would cancel the grant one turn later.
+func (b *turnBudget) grant() {
+	b.limit += float64(b.batch)
+	b.hardCeiling += b.batch
+	b.decidedAt = b.iterations
+}
+
+// A run whose turns all cost nothing stops on the hard ceiling, not the limit,
+// so the ask reports the limit as at least as spent.
+func (b *turnBudget) askContinue(ctx context.Context, ask turnpkg.ContinueGate) bool {
+	if ask == nil || !ask(ctx, fmt.Sprintf("turn budget spent (%d/%d, last progress turn %d). Continue %d more?",
+		b.iterations, max(b.limitTurns(), int(math.Round(b.spent))), b.lastProgress, b.batch)) {
+		return false
+	}
+	b.grant()
 	return true
 }
 

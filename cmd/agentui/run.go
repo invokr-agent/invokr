@@ -83,6 +83,7 @@ func Run(ctx context.Context, p Params) error {
 	if p.Approvals != nil {
 		approvalQueue = approval.NewApprovalQueue(ctx, p.Approvals)
 		approvalQueue.SetStandingGrants(p.Grants)
+		setContinueGate(p.Session, panelGate(p.Approvals))
 	}
 	uiModel := newModelWithCommands(ctx, p.Session, p.Commands, toolEvents, approvalQueue, p.Logs, p.LogView, p.PromptHistory, initialHistory)
 	for _, item := range p.Transcript {
@@ -131,4 +132,20 @@ func Run(ctx context.Context, p Params) error {
 		return got.err
 	}
 	return nil
+}
+
+// A session without the hook (ACP, exec, jobs) keeps the best-effort wrap-up.
+func setContinueGate(session turn.Session, gate turn.ContinueGate) {
+	if asker, ok := session.(interface{ SetContinueGate(turn.ContinueGate) }); ok {
+		asker.SetContinueGate(gate)
+	}
+}
+
+// PolicyChecked stops a standing grant from answering the continue prompt, and
+// an empty Subject leaves "a" no pattern to store: each grant is one batch.
+func panelGate(approvals *approval.Broker) turn.ContinueGate {
+	return func(ctx context.Context, reason string) bool {
+		decision, err := approvals.RequestApproval(ctx, approval.Request{Tool: "continue", Summary: reason, PolicyChecked: true})
+		return err == nil && decision.Approved
+	}
 }

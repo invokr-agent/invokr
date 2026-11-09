@@ -48,6 +48,8 @@ never changes the final per-turn usage. Events from a delegated subagent's sessi
 
 ## Approvals
 
+An interactive run that spends its turn budget (`max_turns`, default 40) asks the approval panel `turn budget spent (40/40, last progress turn 38). Continue 40 more?` with y or n only (Esc stops; there is no `always`, since each grant is one batch), while ACP, `exec`, jobs and piped plain mode never ask.
+
 `exec` (including `--resume`/`--last` runs) auto-denies tool approvals by
 default. Opt in
 with `--allow <tier>` (repeatable; `--allow read-only` covers the read-only

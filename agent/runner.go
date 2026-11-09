@@ -391,13 +391,19 @@ func (r *Runner) turnAvailable(ctx context.Context, req RunRequest, budget *turn
 	if !budget.exhausted() {
 		return true
 	}
-	if budget.iterations >= budget.hardCeiling || !budget.extend() {
+	// Gate only after a declined auto-grant; nil gate, denial or cancel wrap up.
+	auto := budget.iterations < budget.hardCeiling && budget.extend()
+	if !auto && !budget.askContinue(ctx, req.ContinueGate) {
 		return false
 	}
 	state.warned = false
-	r.logger.Info("turn budget extended on progress", zap.Int("extension", budget.extension), zap.Float64("spent", budget.spent), zap.Float64("limit", budget.limit))
+	kind, granted := "continued", budget.batch
+	if auto {
+		kind, granted = "extended", budget.extension
+	}
+	r.logger.Info("turn budget "+kind, zap.Int("turns", granted), zap.Float64("spent", budget.spent), zap.Float64("limit", budget.limit))
 	events.Notice(ctx, r.events, req.SessionID, r.parentSessionID,
-		fmt.Sprintf("turns.extended: +%d (spent %.1f/%.0f)", budget.extension, budget.spent, budget.limit))
+		fmt.Sprintf("turns.%s: +%d (spent %.1f/%.0f)", kind, granted, budget.spent, budget.limit))
 	return true
 }
 
