@@ -24,6 +24,7 @@ type Sharer struct {
 	bound    *chatSession
 	commands Commands
 	mu       sync.Mutex
+	changeMu sync.Mutex // orders Changed's sends; state is read under it, so the last send is current
 	live     []*Agent
 	asks     map[string][]context.CancelFunc
 }
@@ -163,6 +164,8 @@ func (s *Sharer) Changed() {
 		go func() { // off the TUI's event loop: a slow contact must not stall it
 			ctx, cancel := context.WithTimeout(context.Background(), changedWait)
 			defer cancel()
+			s.changeMu.Lock()
+			defer s.changeMu.Unlock()
 			_ = agent.update(ctx, id, acp.SessionUpdate{CurrentModeUpdate: &acp.CurrentModeUpdate{CurrentModeID: acp.SessionModeID(s.bound.approvals.Policy.Mode())}})
 			_ = agent.update(ctx, id, acp.SessionUpdate{ConfigOptionUpdate: &acp.ConfigOptionUpdate{ConfigOptions: configOptions(s.bound)}})
 		}()
