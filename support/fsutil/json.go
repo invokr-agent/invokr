@@ -50,7 +50,7 @@ func SaveJSON(path string, v any) error {
 	return WriteFileAtomic(path, append(data, '\n'), 0o600)
 }
 
-	// A stat failure other than "not exist" is an error, not reported as absence.
+// A stat failure other than "not exist" is an error, not reported as absence.
 func Exists(path string) (bool, error) {
 	if _, err := os.Stat(path); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
