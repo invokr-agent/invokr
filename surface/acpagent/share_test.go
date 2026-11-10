@@ -260,7 +260,7 @@ func TestPanelAnswerStandsDownEveryChatAsk(t *testing.T) {
 	for range 2 {
 		// Two contacts, one shared session: both are asked about the same call.
 		agent, _ := boundAgent(t, &recordingSession{}, broker)
-		sharer.ask(agent, "call-1", approval.Request{Tool: "shell", Subject: "git push"},
+		sharer.ask(agent, "call-1", approval.Request{Tool: "shell", Subject: "git push", Pinned: true},
 			func(_ string, _ approval.Decision) {
 				t.Fatal("the chat answered a request the panel had already settled")
 			})
@@ -271,6 +271,34 @@ func TestPanelAnswerStandsDownEveryChatAsk(t *testing.T) {
 	sharer.Settled("call-1", approval.Decision{Approved: true})
 	if open := openAsks(sharer); open != 0 {
 		t.Fatalf("%d chat asks still open after the panel answered, want none", open)
+	}
+}
+
+// Only a chat-started turn's approvals may reach the relay connection: a prompt
+// for a turn the human at the terminal started would be answered by a contact
+// who never decided it, and agent-relay edits its own prompt to "Approved" on
+// that tap.
+func TestHostTurnSendsNoApprovalToChat(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.Manual, false)
+	sharer, err := OpenShare(socketPathIn(t), nil, &recordingSession{}, broker, nil)
+	if err != nil {
+		t.Fatalf("open share = %v", err)
+	}
+	defer func() { _ = sharer.Close() }()
+	agent, _ := boundAgent(t, &recordingSession{}, broker)
+	sharer.mu.Lock()
+	sharer.live = []*Agent{agent}
+	sharer.mu.Unlock()
+
+	ask := sharer.Mirror(func(_ string, _ approval.Decision) {})
+	ask("host-call", approval.Request{Tool: "shell", Subject: "git status"})
+	if open := openAsks(sharer); open != 0 {
+		t.Fatalf("%d chat prompts for a turn the TUI started, want none", open)
+	}
+	ask("chat-call", approval.Request{Tool: "shell", Subject: "git push", Pinned: true})
+	if open := openAsks(sharer); open != 1 {
+		t.Fatalf("%d chat prompts for a chat-started call, want one", open)
 	}
 }
 
