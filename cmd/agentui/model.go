@@ -1319,6 +1319,7 @@ type modelLister interface {
 func switchModelOnSession(session turn.Session, name string) {
 	if sw, ok := session.(modelSwitcher); ok {
 		sw.SetModel(name)
+		shareChanged()
 	}
 }
 

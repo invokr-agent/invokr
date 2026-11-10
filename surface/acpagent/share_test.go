@@ -1,9 +1,11 @@
 package acpagent
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -311,4 +313,27 @@ func openAsks(s *Sharer) int {
 	}
 	s.mu.Unlock()
 	return open
+}
+
+// A mode change at the panel reaches every live contact, with the options.
+func TestChangedTellsContactsTheHostState(t *testing.T) {
+	broker := approval.NewBroker()
+	broker.Policy = approval.NewPolicy(approval.Auto, false)
+	toClientR, toClientW := io.Pipe()
+	t.Cleanup(func() { _ = toClientW.Close() })
+	agent := &Agent{conn: acp.NewAgentConn(strings.NewReader(""), toClientW)}
+	s := &Sharer{bound: &chatSession{IdentifiedSession: &recordingSession{}, approvals: broker}, live: []*Agent{agent}}
+	s.Changed()
+	lines := bufio.NewScanner(toClientR)
+	for _, want := range []string{`"current_mode_update"`, `"config_option_update"`} {
+		if !lines.Scan() {
+			t.Fatalf("no %s: %v", want, lines.Err())
+		}
+		if got := lines.Text(); !strings.Contains(got, want) || !strings.Contains(got, `"host-1"`) {
+			t.Fatalf("update = %s, want %s for host-1", got, want)
+		}
+		if want == `"current_mode_update"` && !strings.Contains(lines.Text(), `"auto"`) {
+			t.Fatalf("mode update = %s, want auto", lines.Text())
+		}
+	}
 }

@@ -31,8 +31,15 @@ type chatSession struct {
 	turn.IdentifiedSession
 	approvals *approval.Broker
 	turnMu    sync.Mutex
-	noticed   bool     // the update notice was sent in this session; guarded by turnMu
-	models    []string // listed at session/new; read-only after
+	noticed   bool // the update notice was sent in this session; guarded by turnMu
+	modelsMu  sync.Mutex
+	models    []string // listed at session/new; a shared session's Changed reads it meanwhile
+}
+
+func (s *chatSession) listed() []string {
+	s.modelsMu.Lock()
+	defer s.modelsMu.Unlock()
+	return s.models
 }
 
 type Commands interface {
