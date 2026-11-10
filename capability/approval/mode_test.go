@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/invokr-agent/invokr/constants"
 )
 
 type modeApprover func(context.Context, Request) (Decision, error)
@@ -255,10 +257,14 @@ func TestPinnedTurnApprovals(t *testing.T) {
 		{"auto-confined-asks", Auto, Request{Writes: true, Confined: true}, true, false, false, "", true, false},
 		{"auto-network-toggle-asks", Auto, Request{Network: true, Confined: true}, true, false, true, "", true, false},
 		{"auto-publish-asks", Auto, Request{Publishes: true, Network: true, Confined: true}, true, true, false, "", true, false},
-		{"standing-grant-asks", Auto, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "grant", true, false},
+		{"standing-grant-asks", Auto, Request{Tool: "shell", Subject: "git status", Confined: true}, true, false, false, "grant", true, false},
 		{"standing-denial-denies", Manual, Request{Tool: "shell", Subject: "git status", ReadOnly: true, Confined: true}, true, false, false, "deny", false, true},
 		{"plan-write-blocked", Plan, Request{Confined: true, Writes: true}, true, false, false, "", false, true},
-		{"plan-read-asks", Plan, Request{ReadOnly: true}, true, false, false, "", true, false},
+		{"plan-read-runs", Plan, Request{ReadOnly: true}, true, false, false, "", false, false},
+		{"read-tier-runs", Auto, Request{Tool: "shell", Tier: string(constants.ShellTierReadonly), Confined: true, Writes: true}, true, false, false, "", false, false},
+		{"network-read-asks", Auto, Request{ReadOnly: true, Network: true}, true, false, false, "", true, false},
+		{"outside-read-asks", Auto, Request{ReadOnly: true, Outside: true}, true, false, false, "", true, false},
+		{"opaque-read-asks", Auto, Request{Tier: string(constants.ShellTierReadonly), RequiresScopedApproval: true}, true, false, false, "", true, false},
 		{"automatic-runs", YOLO, Request{ReadOnly: true}, false, false, false, "", false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -289,6 +295,51 @@ func TestPinnedTurnApprovals(t *testing.T) {
 			}
 			if p.Mode() != tc.mode {
 				t.Fatalf("pinning changed the session mode to %s", p.Mode())
+			}
+		})
+	}
+}
+
+// relay.chat_follows_mode says the chat account is as trusted as the keyboard, so
+// a chat turn answers to the session's own policy. Plan's block and standing
+// denials refuse in either setting.
+func TestPinnedTurnFollowsSessionMode(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		mode           Mode
+		req            Request
+		follows        bool
+		prompt, denied bool
+	}{
+		{"auto-write-follows", Auto, Request{Tool: "edit", Subject: "a.go", Writes: true, Confined: true}, true, false, false},
+		{"auto-write-pinned-asks", Auto, Request{Tool: "edit", Subject: "a.go", Writes: true, Confined: true}, false, true, false},
+		{"plan-write-blocked", Plan, Request{Tool: "edit", Subject: "a.go", Writes: true, Confined: true}, true, false, true},
+		{"plan-write-blocked-pinned", Plan, Request{Tool: "edit", Subject: "a.go", Writes: true, Confined: true}, false, false, true},
+		{"denied-push-follows", Auto, Request{Tool: "shell", Subject: "git push origin", Writes: true, Publishes: true, Network: true, Confined: true}, true, false, true},
+		{"denied-push-pinned", Auto, Request{Tool: "shell", Subject: "git push origin", Writes: true, Publishes: true, Network: true, Confined: true}, false, false, true},
+		{"grant-answers-follows", Auto, Request{Tool: "shell", Subject: "git status", Confined: true}, true, false, false},
+		{"grant-ignored-pinned", Auto, Request{Tool: "shell", Subject: "git status", Confined: true}, false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewPolicy(tc.mode, true)
+			p.SetChatFollowsMode(tc.follows)
+			s := newTestStore(t)
+			mustAdd(t, s, denial(t, "git push*"))
+			mustAdd(t, s, testGrant(t, "git status*"))
+			p.SetStore(s, nil)
+			ctx, done := p.Begin(Pin(context.Background()), tc.req)
+			defer done()
+			called := false
+			approver := modeApprover(func(context.Context, Request) (Decision, error) {
+				called = true
+				return Decision{Approved: true}, nil
+			})
+			_, err := Authorize(ctx, approver, tc.req, true)
+			if (err != nil) != tc.denied || called != tc.prompt {
+				t.Fatalf("err=%v prompted=%v, want denied=%v prompted=%v", err, called, tc.denied, tc.prompt)
+			}
+			if p.Mode() != tc.mode {
+				t.Fatalf("the session mode became %s", p.Mode())
 			}
 		})
 	}

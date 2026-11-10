@@ -337,9 +337,18 @@ func (a *Agent) pinned(ctx context.Context) context.Context {
 	return approval.Pin(ctx)
 }
 
+// mayAsk is the whole trust boundary of a shared connection: only a chat-started
+// (pinned) turn's calls may be put to the relay. A host turn's approval shown
+// in chat is answered by nobody who decided it, and the relay edits its own
+// prompt to "Approved" when a contact taps a stale button.
+func (a *Agent) mayAsk(req approval.Request) bool { return a.bound == nil || req.Pinned }
+
 // ask shows the call to the chat contact. The flag says the chat answered;
 // a dead connection is not a denial, and must not settle the host's request.
 func (a *Agent) ask(ctx context.Context, id acp.SessionID, req approval.Request) (approval.Decision, bool) {
+	if !a.mayAsk(req) {
+		return approval.Decision{Reason: "the host's own approval belongs to the terminal"}, false
+	}
 	callID := acp.ToolCallID(req.ID)
 	title, kind := cmp.Or(req.Summary, req.Tool), toolKind(req)
 	announce := acp.SessionUpdate{ToolCall: &acp.ToolCall{ToolCallID: callID, Name: req.Tool, Title: title, Kind: kind, Status: acp.ToolCallStatusPending}}

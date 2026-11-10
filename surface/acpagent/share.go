@@ -86,9 +86,6 @@ func (s *Sharer) Watch(ctx context.Context, report func(error)) {
 // belong to the human at the terminal, whatever mode the host runs in.
 func (s *Sharer) Mirror(decide func(string, approval.Decision)) func(string, approval.Request) {
 	return func(id string, req approval.Request) {
-		if !req.Pinned {
-			return
-		}
 		s.mu.Lock()
 		live := append([]*Agent(nil), s.live...)
 		s.mu.Unlock()
@@ -99,6 +96,9 @@ func (s *Sharer) Mirror(decide func(string, approval.Decision)) func(string, app
 }
 
 func (s *Sharer) ask(agent *Agent, id string, req approval.Request, decide func(string, approval.Decision)) {
+	if !agent.mayAsk(req) {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), chatPermissionWait)
 	s.mu.Lock()
 	s.asks[id] = append(s.asks[id], cancel)

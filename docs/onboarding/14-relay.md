@@ -86,12 +86,25 @@ switch cwd or mode.
 Changing mode, model or reasoning effort at the TUI is sent to the contacts, so the
 relay's pinned status (agent-relay with chat status) follows the host.
 
-A turn a chat started answers for its own approvals. Nothing the session granted or
-allowed reaches it: no standing grants, no permissive mode (a YOLO or Auto session
-keeps asking), no Auto publishing or network toggle. Plan's block and standing
-denials still apply. Each approval is offered in the chat as allow-once or reject-once
-and also shows in the TUI's queue; the first answer wins, and an unanswered call
-denies.
+A turn a chat started answers for its own approvals, and only its own: nothing a
+turn the human at the terminal started is ever offered to a chat contact, so chat
+never sees an approval it did not raise (agent-relay edits its own approval prompt
+to "✅ Approved — <tool>" when a contact taps a button, which would otherwise
+read as a decision the contact never made). A call the execution owner classified
+as a read — the shell's read-only tier, the code interpreter's read-workspace tier,
+a native call that marks itself `ReadOnly` — runs without asking: prompting for
+reads only floods the chat. Anything that writes, execs opaquely, publishes or
+reaches the network is offered in the chat as allow-once or reject-once and also
+shows in the TUI's queue; the first answer wins, and an unanswered call denies.
+Plan's block, standing denials and the refusal to auto-approve a read outside the
+workspace still apply.
+
+`relay.chat_follows_mode` (default false; `INVOKR_RELAY_CHAT_FOLLOWS_MODE`) opts a
+single-user setup out of that boundary: a chat turn then uses this session's mode,
+standing grants and the Auto publishing/network toggles, exactly like a TUI turn.
+Plan's block and standing denials still refuse. It is opt-in because it drops the
+threat model the pin protects: a hijacked chat message can then write and exec
+whatever this session already allows.
 
 The relay owns the allowlists, the credentials and the answer formatting;
 invokr only sees prompts and permission requests.

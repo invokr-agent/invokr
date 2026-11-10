@@ -84,9 +84,10 @@ func (q *ApprovalQueue) SetMirror(installed func(string, Request), resolved func
 }
 
 // autoDecision preserves legacy standing decisions. Session-policy requests
-// already evaluated standing rules and must receive a user's scoped decision.
+// already evaluated standing rules and must receive a user's scoped decision;
+// so must a pinned turn's, which the chat contact answers, not this queue.
 func (q *ApprovalQueue) autoDecision(req Request) (Decision, bool) {
-	if req.PolicyChecked {
+	if req.PolicyChecked || req.Pinned {
 		return Decision{}, false
 	}
 	q.mu.Lock()
