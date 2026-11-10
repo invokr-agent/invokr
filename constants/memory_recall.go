@@ -17,6 +17,5 @@ const (
 	DefaultRecallGateBudgetChars     = 2000
 	DefaultRecallGateMinMessageChars = 12
 	DefaultRecallGateTimeoutMS       = 10000
-	// RecallGateMaxTokens caps the probe completion's output tokens.
 	RecallGateMaxTokens = 96
 )

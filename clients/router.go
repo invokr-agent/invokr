@@ -108,7 +108,6 @@ func (e envSecrets) Resolve(ref routercfg.SecretRef) (string, error) {
 	return e.EnvResolver.Resolve(ref)
 }
 
-// compatProviderType is the router's built-in in-process provider type.
 const compatProviderType = "openai-compatible"
 
 // routerDriver adapts the profile-keyed Router to the model-keyed surface

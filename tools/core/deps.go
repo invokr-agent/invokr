@@ -26,7 +26,6 @@ type SubagentRequest struct {
 	AgentName string
 	// AgentModel is resolved by RunSubagent from the definition; "" = inherit.
 	AgentModel string
-	// ToolAllowlist is resolved by RunSubagent from the definition.
 	// nil = all tools; non-nil (even empty) = allowlist.
 	ToolAllowlist []string
 }
@@ -48,7 +47,6 @@ type CallerDeps struct {
 	Dispatcher   events.Dispatcher
 	Approver     approval.Approver
 	Policy       *approval.Policy
-	// AgentDefs is the registry of custom agent definitions.
-	// May be nil if the agents directory is absent or empty.
+	// Nil when the agents directory is absent or empty.
 	AgentDefs agentdef.Registry
 }
