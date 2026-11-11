@@ -123,7 +123,12 @@ func (m *Manager) client(ctx context.Context, server ServerConfig) (*Client, err
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing, ok := m.clients[server.Command]; ok {
-		return existing, nil
+		select {
+		case <-existing.conn.Done():
+			delete(m.clients, server.Command)
+		default:
+			return existing, nil
+		}
 	}
 	started, err := Start(ctx, server, m.root)
 	if err != nil {
