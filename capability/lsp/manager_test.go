@@ -38,3 +38,16 @@ func TestForUnconfiguredExtensionListsActiveExtensions(t *testing.T) {
 		t.Fatalf("error %q should name the extension and the active extensions", err)
 	}
 }
+
+func TestDeadServerIsNotReused(t *testing.T) {
+	dead, _ := testClient(t)
+	_ = dead.abandon()
+	<-dead.conn.Done()
+	m := NewManager(t.TempDir(), nil)
+	m.clients["fake"] = dead
+
+	got, _ := m.client(context.Background(), ServerConfig{Command: "fake"})
+	if got == dead {
+		t.Fatal("expected a closed server to be replaced, got the dead client back")
+	}
+}

@@ -30,6 +30,8 @@ type fakeServer struct {
 	encoding protocol.PositionEncodingKind
 	offered  []protocol.PositionEncodingKind
 
+	acceptsDiagnostics bool
+
 	echoPosition bool
 
 	mu           sync.Mutex
@@ -42,6 +44,8 @@ func (f *fakeServer) Initialize(_ context.Context, params *protocol.InitializePa
 	if general := params.Capabilities.General; general != nil {
 		f.offered = general.PositionEncodings
 	}
+	f.acceptsDiagnostics = params.Capabilities.TextDocument != nil &&
+		params.Capabilities.TextDocument.PublishDiagnostics != nil
 	return &protocol.InitializeResult{
 		Capabilities: protocol.ServerCapabilities{PositionEncoding: f.encoding},
 	}, nil
@@ -537,5 +541,14 @@ func TestSyncGivesUpWhenContextEnds(t *testing.T) {
 	// The blocked caller must not have touched the server on its way out.
 	if opens := fake.openCount(); opens != 0 {
 		t.Fatalf("didOpen sent %d times by a caller that never held the gate, want 0", opens)
+	}
+}
+
+// zls publishes nothing to a client that does not declare it accepts diagnostics.
+func TestClientDeclaresPublishDiagnostics(t *testing.T) {
+	_, fake, _ := testServer(t)
+
+	if !fake.acceptsDiagnostics {
+		t.Fatal("expected initialize to declare textDocument.publishDiagnostics")
 	}
 }
