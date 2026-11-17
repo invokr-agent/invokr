@@ -47,7 +47,7 @@ func TestDeadServerIsNotReused(t *testing.T) {
 	m.clients["fake"] = dead
 
 	got, _ := m.client(context.Background(), ServerConfig{Command: "fake"})
-	if got == dead {
-		t.Fatal("expected a closed server to be replaced, got the dead client back")
+	if got == dead || m.clients["fake"] == dead {
+		t.Fatal("expected a closed server to be dropped, still cached")
 	}
 }

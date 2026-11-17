@@ -125,6 +125,7 @@ func (m *Manager) client(ctx context.Context, server ServerConfig) (*Client, err
 	if existing, ok := m.clients[server.Command]; ok {
 		select {
 		case <-existing.conn.Done():
+			_ = existing.abandon()
 			delete(m.clients, server.Command)
 		default:
 			return existing, nil

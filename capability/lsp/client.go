@@ -171,14 +171,12 @@ func Connect(ctx context.Context, stream jsonrpc2.Stream, cfg ServerConfig, root
 
 func (c *Client) initialize(ctx context.Context) error {
 	root := uri.File(c.root)
+	// Reporting our PID is what lets a well-behaved server reap itself if
+	// invokr dies without a clean shutdown.
 	pid := int32(os.Getpid())
 	params := &protocol.InitializeParams{ProcessID: &pid}
 	params.Capabilities.General = &protocol.GeneralClientCapabilities{PositionEncodings: offeredEncodings()}
-	params.Capabilities.TextDocument = &protocol.TextDocumentClientCapabilities{
-		PublishDiagnostics: &protocol.PublishDiagnosticsClientCapabilities{},
-	}
-	// Reporting our PID is what lets a well-behaved server reap itself if
-	// invokr dies without a clean shutdown.
+	params.Capabilities.TextDocument = &protocol.TextDocumentClientCapabilities{PublishDiagnostics: &protocol.PublishDiagnosticsClientCapabilities{}}
 	params.WorkspaceFolders = protocol.NewNullable([]protocol.WorkspaceFolder{
 		{URI: root, Name: filepath.Base(c.root)},
 	})
