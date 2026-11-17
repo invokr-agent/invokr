@@ -256,12 +256,19 @@ which directory it serves, and whether this session shares itself.
 
 A shared session is not a second one: `session/new` and `session/load` resolve to
 the TUI's own session, chat turns are serialised with the human's, and a chat contact
-cannot switch cwd or mode. A turn started from chat is *pinned*: it does not inherit
-the session's mode, standing grants or the Auto publishing/network toggles — every
-call it makes is asked in the chat as allow-once or reject-once, is also visible in
-the TUI's approval queue, and the first answer wins; unanswered denies. Plan's block
-and standing denials still apply. See `docs/onboarding/14-relay.md` for the trust
-boundary in full.
+cannot switch cwd or mode. A turn started from chat is *pinned*: only that turn's
+approvals travel to the chat — nothing a turn the human at the terminal started is
+offered there, so chat never sees an approval it did not raise. A call the execution
+owner classified as a read (the shell's read-only tier, the code interpreter's
+read-workspace tier, a native call that marks itself read-only) runs unasked; anything
+that writes, execs opaquely, publishes or reaches the network is asked in the chat as
+allow-once or reject-once, is also visible in the TUI's approval queue, and the first
+answer wins; unanswered denies. Plan's block, standing denials and outside reads still
+refuse. `relay.chat_follows_mode` (default false, `INVOKR_RELAY_CHAT_FOLLOWS_MODE`)
+makes a chat turn use the session's mode, standing grants and the Auto publishing/network
+toggles, exactly like a TUI turn — opt-in because it drops the boundary a hijacked
+chat message is held to. See `docs/onboarding/14-relay.md` for the trust boundary in
+full.
 
 ## Memory forgetting and the recall gate
 

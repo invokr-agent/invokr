@@ -24,6 +24,7 @@ type Sharer struct {
 	bound    *chatSession
 	commands Commands
 	mu       sync.Mutex
+	changeMu sync.Mutex // orders Changed's sends; state is read under it, so the last send is current
 	live     []*Agent
 	asks     map[string][]context.CancelFunc
 }
@@ -82,9 +83,6 @@ func (s *Sharer) Watch(ctx context.Context, report func(error)) {
 // belong to the human at the terminal, whatever mode the host runs in.
 func (s *Sharer) Mirror(decide func(string, approval.Decision)) func(string, approval.Request) {
 	return func(id string, req approval.Request) {
-		if !req.Pinned {
-			return
-		}
 		s.mu.Lock()
 		live := append([]*Agent(nil), s.live...)
 		s.mu.Unlock()
@@ -95,6 +93,9 @@ func (s *Sharer) Mirror(decide func(string, approval.Decision)) func(string, app
 }
 
 func (s *Sharer) ask(agent *Agent, id string, req approval.Request, decide func(string, approval.Decision)) {
+	if !agent.mayAsk(req) {
+		return
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), chatPermissionWait)
 	s.mu.Lock()
 	s.asks[id] = append(s.asks[id], cancel)
@@ -148,6 +149,28 @@ func (s *Sharer) serve(ctx context.Context, conn *net.UnixConn, report func(erro
 // unblocks a pending Accept; a bare descriptor would leave the watcher parked
 // in accept() with the fd number free for reuse.
 func (s *Sharer) Close() error { return s.socket.Close() }
+
+// Changed tells every contact the host's mode and options after the human
+// changed them at the panel, so a chat's status does not go stale.
+func (s *Sharer) Changed() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	live := slices.Clone(s.live)
+	s.mu.Unlock()
+	id := acp.SessionID(s.bound.SessionID())
+	for _, agent := range live {
+		go func() { // off the TUI's event loop: a slow contact must not stall it
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			s.changeMu.Lock()
+			defer s.changeMu.Unlock()
+			_ = agent.update(ctx, id, acp.SessionUpdate{CurrentModeUpdate: &acp.CurrentModeUpdate{CurrentModeID: acp.SessionModeID(s.bound.approvals.Policy.Mode())}})
+			_ = agent.update(ctx, id, acp.SessionUpdate{ConfigOptionUpdate: &acp.ConfigOptionUpdate{ConfigOptions: configOptions(s.bound)}})
+		}()
+	}
+}
 
 func (s *Sharer) Status() string {
 	s.mu.Lock()

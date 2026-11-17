@@ -5,8 +5,10 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
+	"github.com/invokr-agent/invokr/constants"
 	"github.com/invokr-agent/invokr/platform/events"
 	"github.com/invokr-agent/invokr/platform/turn"
 )
@@ -24,14 +26,15 @@ const (
 // Policy is session-local. The execution owners provide facts about prepared
 // operations; neither model arguments nor tool-advertised capabilities prove confinement.
 type Policy struct {
-	mu      sync.Mutex
-	mode    Mode
-	publish bool
-	network bool
-	outside bool
-	store   *Store
-	loadErr error
-	active  map[Mode]int
+	mu              sync.Mutex
+	mode            Mode
+	publish         bool
+	network         bool
+	outside         bool
+	chatFollowsMode bool
+	store           *Store
+	loadErr         error
+	active          map[Mode]int
 }
 
 func NewPolicy(mode Mode, publish bool) *Policy {
@@ -70,7 +73,7 @@ func (p *Policy) Clone() *Policy {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return &Policy{mode: p.mode, publish: p.publish, network: p.network, outside: p.outside, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
+	return &Policy{mode: p.mode, publish: p.publish, network: p.network, outside: p.outside, chatFollowsMode: p.chatFollowsMode, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
 }
 
 func (p *Policy) SetPublishing(allow bool) {
@@ -125,6 +128,29 @@ func OutsideReadsAllowed(ctx context.Context) bool {
 	s, ok := ctx.Value(callKey{}).(*callState)
 	return ok && s.policy.OutsideReads()
 }
+
+// SetChatFollowsMode lets a chat-started turn on a shared session inherit this
+// session's mode and standing grants, as a TUI turn does (config
+// relay.chat_follows_mode). Off, the pin keeps its trust boundary; on, it only
+// marks whose approvals may travel to the chat.
+func (p *Policy) SetChatFollowsMode(on bool) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.chatFollowsMode = on
+	p.mu.Unlock()
+}
+
+func (p *Policy) ChatFollowsMode() bool {
+	if p == nil {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.chatFollowsMode
+}
+
 func (p *Policy) SetStore(store *Store, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -166,10 +192,15 @@ func Pinned(ctx context.Context) bool { return ctx.Value(pinnedKey{}) != nil }
 
 func (p *Policy) Begin(ctx context.Context, req Request, approvers ...Approver) (context.Context, func()) {
 	p.mu.Lock()
-	s := &callState{policy: p, host: p, mode: p.mode, request: req, pinned: Pinned(ctx)}
-	if s.pinned {
+	// The pin downgrades this call's policy unless the operator opted into
+	// relay.chat_follows_mode.
+	pinned := Pinned(ctx) && !p.chatFollowsMode
+	s := &callState{policy: p, host: p, mode: p.mode, request: req, pinned: pinned}
+	if pinned {
 		// Manual with no Auto toggles; the store stays so standing denials still
-		// refuse, and the pinned branch of decide never consults its grants.
+		// refuse. Grants are refused by the pinned branch of decide, and the
+		// request's Pinned mark keeps the approval queue from deciding one where
+		// the chat should answer.
 		s.policy = &Policy{mode: Manual, store: p.store, loadErr: p.loadErr, active: make(map[Mode]int)}
 		s.mode = Manual
 		if p.mode == Plan {
@@ -286,13 +317,7 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 		return Decision{Reason: "Plan permits only reads and confined verification with read-only sources"}, true
 	}
 	if s.pinned {
-		// Plan's block and standing denials above still apply, and a call the
-		// tool itself declares automatic still runs; only the party that pinned
-		// the turn may answer it.
-		if !ask {
-			return Decision{Approved: true}, true
-		}
-		return Decision{}, false
+		return s.pinnedDecision(req, ask)
 	}
 	s.policy.mu.Lock()
 	store, publish, network := s.policy.store, s.policy.publish, s.policy.network
@@ -313,6 +338,41 @@ func (s *callState) decide(req Request, ask bool) (Decision, bool) {
 		return Decision{Approved: true, Reason: string(s.mode) + " session policy"}, true
 	}
 	return Decision{}, false
+}
+
+// pinnedDecision answers a call from a turn nobody local started: what its tool
+// declared automatic and what the execution owner classified as a read run;
+// everything else is answered only by the party that pinned the turn. Plan's
+// block and standing denials are refused by decide before this runs.
+func (s *callState) pinnedDecision(req Request, ask bool) (Decision, bool) {
+	if !ask || readOnlyCall(req) {
+		return Decision{Approved: true}, true
+	}
+	return Decision{}, false
+}
+
+// readTiers are the classifier's read-only tiers: the shell's read-only command
+// tier and the code interpreter's read-workspace tier.
+var readTiers = []string{constants.ShellTierReadonly, constants.CodeInterpreterTierReadWorkspace}
+
+// readOnlyCall is the execution owner's read-only marking: native tools state it
+// with ReadOnly, shell and the code interpreter name it in Tier (whose Writes
+// flag only reports that the sandbox mounted the workspace writable). Opaque
+// execution, network, publishing, protected writes and outside reads never get
+// it.
+func readOnlyCall(req Request) bool {
+	if req.RequiresScopedApproval || req.Network || req.Publishes || req.Protected || req.Outside {
+		return false
+	}
+	if req.ReadOnly {
+		return true
+	}
+	if strings.TrimSpace(req.Tier) == "" {
+		return false
+	}
+	return !slices.ContainsFunc(strings.Split(req.Tier, ","), func(tier string) bool {
+		return !slices.Contains(readTiers, strings.TrimSpace(tier))
+	})
 }
 
 // autoApproved is the session policy's own yes for reads and confined work;
