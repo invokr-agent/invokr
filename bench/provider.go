@@ -18,8 +18,7 @@ type chatMessage struct {
 	} `json:"tool_calls"`
 }
 
-// chatCompletion posts one non-streaming completion to the provider and
-// returns the first choice's message — the bare-model baseline path.
+// The bare-model baseline path: one completion, no tools.
 func chatCompletion(opts options, body map[string]any) (chatMessage, error) {
 	payload, err := json.Marshal(body)
 	if err != nil {

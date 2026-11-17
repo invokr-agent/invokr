@@ -62,7 +62,6 @@ func finalMessage(events []map[string]any) string {
 	return ""
 }
 
-// toolCalls extracts (name, arguments-JSON) pairs from completed tool items.
 func toolCalls(events []map[string]any) [][2]string {
 	var calls [][2]string
 	for _, event := range events {

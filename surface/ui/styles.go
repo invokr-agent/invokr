@@ -127,7 +127,6 @@ func (t Theme) Pill(style lipgloss.Style, s string) string {
 	return style.Background(t.ChipBg).Render(" " + s + " ")
 }
 
-// Chip renders inline code — a command, a path — on a filled background.
 func (t Theme) Chip(s string) string { return t.Pill(t.Text, s) }
 
 func (t Theme) GradientText(s string) string {

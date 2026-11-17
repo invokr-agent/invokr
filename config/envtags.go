@@ -50,7 +50,6 @@ func walkTagged(v reflect.Value, visit func(reflect.Value, reflect.StructTag)) {
 	}
 }
 
-// setFromString assigns raw to field, parsed according to the field's type.
 // Parse failures and unsupported types leave the field unchanged.
 func setFromString(field reflect.Value, raw string) {
 	switch field.Type() {

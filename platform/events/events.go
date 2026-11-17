@@ -89,7 +89,6 @@ type SystemPromptPayload struct {
 	NativeSchemaChars int `json:"native_schema_chars,omitempty"`
 }
 
-// PromptSectionSize names one system-prompt section and its rendered size.
 type PromptSectionSize struct {
 	Name  string `json:"name"`
 	Chars int    `json:"chars"`

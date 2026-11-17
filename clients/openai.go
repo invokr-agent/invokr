@@ -104,7 +104,6 @@ func (c *Client) drv() (*routerDriver, error) {
 	return c.driver, nil
 }
 
-// requireDriver returns the routing driver or explains why there is none.
 func (c *Client) requireDriver() (*routerDriver, error) {
 	driver, err := c.drv()
 	if err != nil {
