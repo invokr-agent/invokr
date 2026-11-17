@@ -108,7 +108,7 @@ func (a *Agent) SetSessionConfigOption(ctx context.Context, req acp.SetSessionCo
 	rs, canReason := sess.IdentifiedSession.(reasoningSession)
 	switch {
 	case req.ConfigID == configModel && canModel:
-		if value != selectedModel(ms) && !slices.Contains(sess.models, value) {
+		if value != selectedModel(ms) && !slices.Contains(sess.listed(), value) {
 			return acp.SetSessionConfigOptionResponse{}, acp.NewError(acp.ErrInvalidParams, fmt.Sprintf("acp: model %q is not offered", value))
 		}
 		ms.SetModel(value)
@@ -129,20 +129,23 @@ func listModels(ctx context.Context, sess *chatSession) {
 	if !ok {
 		return
 	}
-	sess.models = []string{ms.Model()}
+	models := []string{ms.Model()}
 	if lister, ok := sess.IdentifiedSession.(modelLister); ok {
 		listCtx, cancel := context.WithTimeout(ctx, listModelsWait)
 		defer cancel()
 		if listed, err := lister.ListModels(listCtx); err == nil && len(listed) > 0 {
-			sess.models = listed
+			models = listed
 		}
 	}
+	sess.modelsMu.Lock()
+	sess.models = models
+	sess.modelsMu.Unlock()
 }
 
 func configOptions(sess *chatSession) []acp.SessionConfigOption {
 	var out []acp.SessionConfigOption
 	if ms, ok := sess.IdentifiedSession.(modelSession); ok {
-		current, models := selectedModel(ms), sess.models
+		current, models := selectedModel(ms), sess.listed()
 		if !slices.Contains(models, current) {
 			models = append(slices.Clone(models), current) // switched by /model or /profile
 		}

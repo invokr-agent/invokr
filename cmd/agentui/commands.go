@@ -289,6 +289,7 @@ func (m *model) setApprovalMode(args []string) {
 		m.commandMessage(err.Error())
 		return
 	}
+	share.Changed()
 	m.commandMessage("mode: " + mode + " (future calls; running work keeps its permissions)")
 }
 

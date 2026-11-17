@@ -83,6 +83,8 @@ to the TUI's own session, so their turns land in the transcript, mode and approv
 queue the human is looking at, and they are serialised with the human's turns rather
 than running beside them. A chat contact gets no session of its own, so it cannot
 switch cwd or mode.
+Changing mode, model or reasoning effort at the TUI is sent to the contacts, so the
+relay's pinned status (agent-relay with chat status) follows the host.
 
 A turn a chat started answers for its own approvals, and only its own: nothing a
 turn the human at the terminal started is ever offered to a chat contact, so chat
