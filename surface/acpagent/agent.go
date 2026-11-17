@@ -33,7 +33,7 @@ type chatSession struct {
 	turnMu    sync.Mutex
 	noticed   bool // the update notice was sent in this session; guarded by turnMu
 	modelsMu  sync.Mutex
-	models    []string // listed at session/new; a shared session's Changed reads it meanwhile
+	models    []string // listed at session/new
 }
 
 func (s *chatSession) listed() []string {

@@ -29,10 +29,7 @@ type Sharer struct {
 	asks     map[string][]context.CancelFunc
 }
 
-const (
-	chatPermissionWait = 10 * time.Minute
-	changedWait        = 5 * time.Second
-)
+const chatPermissionWait = 10 * time.Minute
 
 const (
 	// An accept failure that persists (descriptor limit, path gone) would
@@ -156,13 +153,16 @@ func (s *Sharer) Close() error { return s.socket.Close() }
 // Changed tells every contact the host's mode and options after the human
 // changed them at the panel, so a chat's status does not go stale.
 func (s *Sharer) Changed() {
+	if s == nil {
+		return
+	}
 	s.mu.Lock()
 	live := slices.Clone(s.live)
 	s.mu.Unlock()
 	id := acp.SessionID(s.bound.SessionID())
 	for _, agent := range live {
 		go func() { // off the TUI's event loop: a slow contact must not stall it
-			ctx, cancel := context.WithTimeout(context.Background(), changedWait)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			s.changeMu.Lock()
 			defer s.changeMu.Unlock()

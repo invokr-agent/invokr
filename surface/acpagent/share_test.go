@@ -329,11 +329,12 @@ func TestChangedTellsContactsTheHostState(t *testing.T) {
 		if !lines.Scan() {
 			t.Fatalf("no %s: %v", want, lines.Err())
 		}
-		if got := lines.Text(); !strings.Contains(got, want) || !strings.Contains(got, `"host-1"`) {
+		got := lines.Text()
+		if !strings.Contains(got, want) || !strings.Contains(got, `"host-1"`) {
 			t.Fatalf("update = %s, want %s for host-1", got, want)
 		}
-		if want == `"current_mode_update"` && !strings.Contains(lines.Text(), `"auto"`) {
-			t.Fatalf("mode update = %s, want auto", lines.Text())
+		if want == `"current_mode_update"` && !strings.Contains(got, `"auto"`) {
+			t.Fatalf("mode update = %s, want auto", got)
 		}
 	}
 }

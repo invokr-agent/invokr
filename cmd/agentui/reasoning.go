@@ -30,7 +30,7 @@ func reasoningFeedback(session turn.Session, args []string) string {
 		if err := rs.SetReasoningEffort(args[0]); err != nil {
 			return err.Error()
 		}
-		shareChanged()
+		share.Changed()
 	}
 	state := rs.ReasoningEffort()
 	var b strings.Builder
